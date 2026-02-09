@@ -1,0 +1,20 @@
+# Live Trading Environment Configuration
+# PRODUCTION - USE WITH EXTREME CAUTION
+
+system:
+  environment: live
+
+# Strict live trading risk limits
+risk:
+  max_daily_loss: 1000.00
+  max_position_size: 2.0  # lots
+  max_drawdown_pct: 0.10
+  require_manual_approval: true  # for large orders
+
+# Live trading monitoring (strict)
+monitoring:
+  log_level: INFO
+  enable_console_logging: false
+  enable_alerts: true
+  alert_on_trade: true
+  alert_on_error: true

@@ -1,0 +1,133 @@
+# Main Configuration File
+# Edit this for your trading setup
+
+environment: dev  # dev, paper, or live
+
+account:
+  initial_balance: 10000.0
+  currency: USD
+  leverage: 100
+
+symbols:
+  XAUUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 100.0
+    lot_step: 0.01
+    value_per_lot: 100  # 100 oz per lot
+    commission_per_lot: 0.0
+    
+  BTCUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+
+risk:
+  max_daily_loss_pct: 0.02        # 2%
+  max_drawdown_pct: 0.10          # 10%
+  risk_per_trade_pct: 0.0025      # 0.25%
+  max_positions: 3
+  max_exposure_per_symbol_pct: 0.30
+  
+  position_sizing:
+    method: kelly  # Options: fixed_fractional, kelly, volatility
+    kelly_fraction: 0.25
+    kelly_lookback_trades: 50
+    atr_period: 14
+    atr_multiplier: 2.0
+  
+  circuit_breaker:
+    enabled: true
+    max_consecutive_losses: 3
+    cooldown_minutes: 30
+  
+  correlation:
+    enabled: true
+    max_correlation: 0.70
+    lookback_days: 30
+
+strategies:
+  regime_filter:
+    enabled: true
+    adx_period: 14
+    adx_threshold: 25
+    atr_period: 14
+    atr_ma_period: 20
+  
+  breakout:
+    enabled: true
+    donchian_period: 20
+    confirmation_bars: 1
+    rr_ratio: 2.0
+    only_in_regime: TREND
+  
+  mean_reversion:
+    enabled: true
+    zscore_lookback: 20
+    entry_threshold: 2.0
+    exit_threshold: 0.5
+    stop_threshold: 3.0
+    only_in_regime: RANGE
+
+trading_hours:
+  enabled: true
+  timezone: UTC
+  sessions:
+    asian:
+      start: "01:00"
+      end: "09:00"
+      trade: true
+    london:
+      start: "08:00"
+      end: "16:00"
+      trade: true
+    new_york:
+      start: "13:00"
+      end: "21:00"
+      trade: true
+  trade_weekends: false
+  avoid_news: true  # Block trades 5 min before major news
+
+zmq:
+  req_port: 5555
+  push_port: 5556
+  sub_port: 5557
+  host: localhost
+  timeout_ms: 5000
+  heartbeat_interval_sec: 10
+
+data:
+  tick_buffer_size: 10000
+  bar_buffer_size: 5000
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+    - 4h
+    - 1d
+
+monitoring:
+  log_level: INFO
+  log_rotation_mb: 100
+  metrics_update_interval_sec: 60
+  state_save_interval_sec: 60
+  
+  alerts:
+    kill_switch: true
+    daily_loss_80pct: true
+    connection_lost: true
+    unusual_slippage: true
+    reconciliation_failure: true
+
+backtest:
+  start_date: "2026-01-01"
+  end_date: "2026-12-31"
+  initial_capital: 10000.0
+  commission_per_trade: 0.0
+  slippage_model: realistic  # fixed, realistic, aggressive

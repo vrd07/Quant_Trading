@@ -1,0 +1,16 @@
+# Development Environment Configuration
+# Overrides base config.yaml for development environment
+
+system:
+  environment: development
+
+# Development-specific risk limits (more lenient)
+risk:
+  max_daily_loss: 100.00
+  max_position_size: 0.1  # lots
+  max_drawdown_pct: 0.20
+
+# Development logging
+monitoring:
+  log_level: DEBUG
+  enable_console_logging: true

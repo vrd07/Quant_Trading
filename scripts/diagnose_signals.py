@@ -1,0 +1,153 @@
+#!/usr/bin/env python3
+"""
+Diagnose why no signals are being generated.
+"""
+
+import sys
+from pathlib import Path
+# Fix import path to project root
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from src.connectors.mt5_connector import MT5Connector
+from src.data.data_engine import DataEngine
+from src.strategies.breakout_strategy import BreakoutStrategy
+from src.strategies.regime_filter import RegimeFilter
+from src.core.types import Symbol
+from decimal import Decimal
+import time
+import yaml
+import pandas as pd
+
+# Load config
+try:
+    with open('config/config_paper.yaml') as f:
+        config = yaml.safe_load(f)
+    print("✓ Loaded config_paper.yaml")
+except FileNotFoundError:
+    with open('config/config.yaml') as f:
+        config = yaml.safe_load(f)
+    print("✓ Loaded config.yaml")
+
+# Connect to MT5
+print("Connecting to MT5...")
+connector = MT5Connector()
+connector.connect()
+print("✓ Connected")
+
+# Create symbol
+# Using BTCUSD as XAUUSD is closed on weekends
+symbol_ticker = "BTCUSD" 
+print(f"Diagnosing for: {symbol_ticker}")
+
+symbol = Symbol(
+    ticker=symbol_ticker,
+    pip_value=Decimal("0.1" if symbol_ticker == "BTCUSD" else "0.01"),
+    value_per_lot=Decimal("1" if symbol_ticker == "BTCUSD" else "100")
+)
+
+# Initialize data engine
+print("\nCollecting data (this takes 2 minutes)...")
+engine = DataEngine(
+    connector=connector,
+    symbols=[symbol],
+    timeframes=["1m", "5m"]
+)
+
+# Collect data for 2 minutes
+# Reduced slightly for faster feedback, but enough for 1m bars
+try:
+    for i in range(60):
+        engine.update_from_connector()
+        if i % 10 == 0:
+            print(f"  {i}/60 seconds...")
+        time.sleep(1)
+except KeyboardInterrupt:
+    print("\nStopping collection...")
+
+print("✓ Data collected")
+
+# Get bars
+bars = engine.get_bars(symbol_ticker, "1m")
+print(f"\n📊 Data Summary:")
+print(f"   Bars collected: {len(bars)}")
+if len(bars) > 0:
+    print(f"   Latest bar: {bars.index[-1]}")
+    print(f"   Close price: {bars['close'].iloc[-1]:.2f}")
+    print(f"   High: {bars['high'].iloc[-1]:.2f}")
+    print(f"   Low: {bars['low'].iloc[-1]:.2f}")
+    
+    # Calculate ADX manually if needed for debug
+    from src.data.indicators import Indicators
+    adx = Indicators.adx(bars, period=14)
+    print(f"   Current ADX (14): {adx.iloc[-1] if not adx.empty else 'NaN'}")
+
+if len(bars) < 25:
+    print(f"\n⚠️  Not enough data yet (need ~25 bars for indicators)")
+    print(f"   Current: {len(bars)} bars")
+    print(f"   Time needed: {(25 - len(bars))} minutes")
+    # Don't exit, still try to run what we can
+else:
+    # Check regime
+    print(f"\n🔍 Regime Analysis:")
+    regime_filter = RegimeFilter(
+        adx_trend_threshold=15, 
+        adx_range_threshold=10, 
+        adx_period=10,
+        use_hurst=False
+    )
+    regime = regime_filter.classify(bars)
+    metrics = regime_filter.get_regime_metrics(bars)
+
+    print(f"   Current Regime: {regime.value}")
+    print(f"   ADX: {metrics.get('adx', 0):.2f}")
+    print(f"   ATR: {metrics.get('atr', 0):.2f}")
+
+    if regime.value == "TREND":
+        print("   ✓ Market is TRENDING - breakout strategy should activate")
+    elif regime.value == "RANGE":
+        print("   ⚠️  Market is RANGING - breakout strategy disabled")
+    else:
+        print("   ⚠️  Market regime UNKNOWN - strategies disabled")
+
+    # Check breakout strategy
+    print(f"\n🎯 Breakout Strategy Analysis:")
+    upper, middle, lower = Indicators.donchian_channel(bars, period=20)
+
+    current_close = bars['close'].iloc[-1]
+    current_high = bars['high'].iloc[-1]
+    current_low = bars['low'].iloc[-1]
+    donchian_upper = upper.iloc[-2]  # Use previous for breakout level
+    donchian_lower = lower.iloc[-2]
+    
+    print(f"   Current High: ${current_high:.2f}")
+    print(f"   Current Low: ${current_low:.2f}")
+    print(f"   Breakout Level (Upper): ${donchian_upper:.2f}")
+    print(f"   Breakout Level (Lower): ${donchian_lower:.2f}")
+    
+    if current_high > donchian_upper:
+        print("   🚀 BREAKOUT ABOVE DETECTED!")
+    elif current_low < donchian_lower:
+        print("   🔻 BREAKOUT BELOW DETECTED!")
+    else:
+        print("   ⏸️  No breakout")
+        dist_up = (donchian_upper - current_high)
+        dist_down = (current_low - donchian_lower)
+        print(f"      Distance to breakout: Up +${dist_up:.2f} / Down -${dist_down:.2f}")
+
+    # Test strategy directly
+    print(f"\n🧪 Testing Strategy Directly:")
+    strategy_config = config.get('strategies', {}).get('breakout', {})
+    strategy = BreakoutStrategy(symbol, strategy_config)
+
+    signal = strategy.on_bar(bars)
+
+    if signal:
+        print("   ✅ SIGNAL GENERATED!")
+        print(f"      Side: {signal.side.value}")
+        print(f"      Entry: ${signal.entry_price}")
+        print(f"      Strength: {signal.strength}")
+    else:
+        print("   ❌ No signal generated by strategy logic")
+
+print("\n" + "="*60)
+# connector.disconnect() # Don't disconnect if we want to leave the file bridge running for the main app

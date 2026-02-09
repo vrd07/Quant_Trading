@@ -1,0 +1,364 @@
+"""
+MT5 Connector - Integration with MT5 File Bridge.
+
+This module wraps the existing file-based MT5 bridge and provides
+a clean interface that returns our system's data types.
+"""
+
+import sys
+import logging
+from pathlib import Path
+from decimal import Decimal
+from datetime import datetime, timezone
+from typing import Optional, List, Dict, Any
+import time
+
+# Add mt5_bridge to path
+sys.path.append(str(Path(__file__).parent.parent.parent / "mt5_bridge"))
+from mt5_file_client import MT5FileClient
+
+from ..core.types import Order, Position, Symbol, Tick
+from ..core.constants import OrderSide, OrderType, OrderStatus, PositionSide
+from ..core.exceptions import (
+    MT5ConnectionError,
+    OrderRejectedError,
+    OrderTimeoutError,
+    ConnectionLostError
+)
+
+logger = logging.getLogger(__name__)
+
+
+class MT5Connector:
+    """
+    Connector to MT5 via file-based bridge.
+    
+    This wraps the MT5FileClient and converts between file format
+    and our trading system types.
+    """
+    
+    def __init__(self, data_dir: Optional[str] = None):
+        """
+        Initialize MT5 connector.
+        
+        Args:
+            data_dir: MT5 Common/Files directory path
+                     If None, auto-detected from MT5FileClient
+        """
+        logger.info("Initializing MT5Connector with data_dir=%s", data_dir)
+        try:
+            self.client = MT5FileClient(data_dir=data_dir)
+            self.connected = False
+            self.last_heartbeat = None
+            self.symbols_cache: Dict[str, Symbol] = {}
+            logger.info("MT5Connector initialized successfully")
+            
+        except Exception as e:
+            logger.error("Failed to initialize MT5 client: %s", e, exc_info=True)
+            raise MT5ConnectionError(f"Failed to initialize MT5 client: {e}")
+    
+    def connect(self) -> bool:
+        """
+        Connect to MT5 and verify it's responding.
+        
+        Returns:
+            True if connected successfully
+            
+        Raises:
+            MT5ConnectionError if connection fails
+        """
+        logger.info("Attempting to connect to MT5...")
+        max_retries = 5
+        
+        for attempt in range(max_retries):
+            try:
+                # Test connection with heartbeat
+                response = self.client.heartbeat()
+                logger.debug("Heartbeat response: %s", response)
+                
+                if response.get("status") == "ALIVE":
+                    self.connected = True
+                    self.last_heartbeat = datetime.now(timezone.utc)
+                    logger.info("Successfully connected to MT5")
+                    return True
+                else:
+                    # Might be reading a response from a previous command on startup
+                    logger.warning("Unexpected heartbeat response (attempt %d/%d): %s", attempt+1, max_retries, response)
+                    time.sleep(1)
+                    
+            except Exception as e:
+                logger.warning("Connection attempt %d/%d failed: %s", attempt+1, max_retries, e)
+                time.sleep(1)
+
+        logger.error("Failed to connect to MT5 after %d attempts", max_retries)
+        raise MT5ConnectionError("Failed to connect to MT5 after multiple attempts")
+    
+    def disconnect(self) -> None:
+        """Clean disconnect."""
+        logger.info("Disconnecting from MT5")
+        self.connected = False
+        logger.debug("Disconnected successfully")
+    
+    def heartbeat(self) -> bool:
+        """
+        Send heartbeat to check if MT5 is alive.
+        
+        Returns:
+            True if MT5 responding
+        """
+        logger.debug("Sending heartbeat to MT5")
+        try:
+            response = self.client.heartbeat()
+            
+            if response.get("status") == "ALIVE":
+                self.last_heartbeat = datetime.now(timezone.utc)
+                logger.debug("Heartbeat successful, MT5 is alive")
+                return True
+            
+            logger.warning("Heartbeat failed: status=%s", response.get("status"))
+            return False
+            
+        except Exception as e:
+            logger.error("Heartbeat error: %s", e, exc_info=True)
+            return False
+    
+    def get_account_info(self) -> Dict[str, Decimal]:
+        """
+        Get account information from MT5.
+        
+        Returns:
+            {
+                'balance': Decimal,
+                'equity': Decimal,
+                'margin': Decimal,
+                'free_margin': Decimal,
+                'margin_level': Decimal
+            }
+        """
+        logger.debug("Requesting account info from MT5")
+        try:
+            response = self.client.get_account_info()
+            logger.debug("Account info response: %s", response)
+            
+            account_info = {
+                'balance': Decimal(str(response.get('balance', 0))),
+                'equity': Decimal(str(response.get('equity', 0))),
+                'margin': Decimal(str(response.get('margin', 0))),
+                'free_margin': Decimal(str(response.get('free_margin', 0))),
+                'margin_level': Decimal(str(response.get('margin_level', 0)))
+            }
+            
+            logger.info("Account info retrieved: balance=%s, equity=%s", 
+                       account_info['balance'], account_info['equity'])
+            return account_info
+            
+        except Exception as e:
+            logger.error("Failed to get account info: %s", e, exc_info=True)
+            raise MT5ConnectionError(f"Failed to get account info: {e}")
+    
+    def get_positions(self) -> Dict[str, Position]:
+        """
+        Get all open positions from MT5.
+        
+        Returns:
+            Dict mapping position_id (str) to Position object
+        """
+        logger.debug("Requesting positions from MT5")
+        try:
+            response = self.client.get_positions()
+            logger.debug("Positions response: %s", response)
+            
+            positions = {}
+            
+            for mt5_pos in response.get('positions', []):
+                position = self._convert_mt5_position(mt5_pos)
+                positions[str(position.position_id)] = position
+                logger.debug("Converted position: %s %s @ %s (PnL: %s)",
+                           position.symbol.ticker, position.side.value,
+                           position.entry_price, position.unrealized_pnl)
+            
+            logger.info("Retrieved %d positions from MT5", len(positions))
+            return positions
+            
+        except Exception as e:
+            logger.error("Failed to get positions: %s", e, exc_info=True)
+            raise MT5ConnectionError(f"Failed to get positions: {e}")
+    
+    def place_order(
+        self,
+        symbol: str,
+        side: OrderSide,
+        quantity: Decimal,
+        order_type: OrderType = OrderType.MARKET,
+        price: Optional[Decimal] = None,
+        stop_loss: Optional[Decimal] = None,
+        take_profit: Optional[Decimal] = None,
+        comment: str = ""
+    ) -> Order:
+        """
+        Place an order on MT5.
+        
+        Note: MT5FileClient only supports basic market orders.
+        SL/TP and price parameters are accepted but may not be applied.
+        """
+        logger.info("Placing order: %s %s %s", side.value, quantity, symbol)
+        
+        try:
+            response = self.client.place_order(
+                symbol=symbol,
+                order_type=side.value,
+                volume=float(quantity)
+            )
+            logger.debug("Order response: %s", response)
+            
+            if response.get("status") == "ERROR":
+                error_msg = response.get("message", "Order rejected")
+                logger.error("Order rejected: %s", error_msg)
+                raise OrderRejectedError(error_msg, symbol=symbol, side=side.value)
+            
+            order = Order(
+                symbol=self._get_or_create_symbol(symbol),
+                side=side,
+                order_type=order_type,
+                quantity=quantity,
+                price=Decimal(str(response.get('price', 0))) if response.get('price') else None,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
+                status=OrderStatus.SENT,
+                sent_at=datetime.now(timezone.utc),
+                metadata={
+                    'mt5_ticket': response.get('ticket'),
+                    'comment': comment
+                }
+            )
+            
+            logger.info("Order placed: ticket=%s", order.metadata.get('mt5_ticket'))
+            return order
+            
+        except OrderRejectedError:
+            raise
+        except Exception as e:
+            logger.error("Failed to place order: %s", e, exc_info=True)
+            raise OrderTimeoutError(f"Failed to place order: {e}", symbol=symbol)
+    
+    def close_position(self, position_id: str) -> Dict[str, Any]:
+        """Close a position on MT5."""
+        logger.info("Closing position: %s", position_id)
+        try:
+            response = self.client.close_position(position_id)
+            logger.debug("Close position response: %s", response)
+            
+            result = {
+                'status': response.get('status'),
+                'realized_pnl': Decimal(str(response.get('realized_pnl', 0)))
+            }
+            
+            logger.info("Position closed: %s", result['status'])
+            return result
+            
+        except Exception as e:
+            logger.error("Failed to close position: %s", e, exc_info=True)
+            raise MT5ConnectionError(f"Failed to close position: {e}")
+    
+    def modify_position(
+        self,
+        position_id: str,
+        stop_loss: Optional[Decimal] = None,
+        take_profit: Optional[Decimal] = None
+    ) -> bool:
+        """Modify position SL/TP (not supported by current file bridge)."""
+        logger.warning("Position modification not supported by file bridge")
+        return False
+    
+    def get_current_tick(self, symbol: str) -> Optional[Tick]:
+        """Get current tick for a symbol."""
+        logger.debug("Getting current tick for %s", symbol)
+        try:
+            status = self.client.get_status()
+            
+            if status.get('symbol') == symbol:
+                tick = Tick(
+                    symbol=self._get_or_create_symbol(symbol),
+                    timestamp=datetime.now(timezone.utc),
+                    bid=Decimal(str(status.get('bid', 0))),
+                    ask=Decimal(str(status.get('ask', 0))),
+                    last=Decimal(str((status.get('bid', 0) + status.get('ask', 0)) / 2)),
+                    volume=Decimal("0")
+                )
+                logger.debug("Tick: %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
+                return tick
+            
+            return None
+            
+        except Exception as e:
+            logger.error("Failed to get tick: %s", e, exc_info=True)
+            return None
+    
+    def _convert_mt5_position(self, mt5_pos: Dict) -> Position:
+        """Convert MT5 position dict to Position object."""
+        symbol = self._get_or_create_symbol(mt5_pos['symbol'])
+        
+        if mt5_pos['type'] == 'BUY' or mt5_pos.get('side') == 'LONG':
+            side = PositionSide.LONG
+        else:
+            side = PositionSide.SHORT
+        
+        position = Position(
+            symbol=symbol,
+            side=side,
+            quantity=Decimal(str(mt5_pos.get('volume', 0))),
+            entry_price=Decimal(str(mt5_pos.get('price_open', 0))),
+            current_price=Decimal(str(mt5_pos.get('price_current', 0))),
+            stop_loss=Decimal(str(mt5_pos['sl'])) if mt5_pos.get('sl') else None,
+            take_profit=Decimal(str(mt5_pos['tp'])) if mt5_pos.get('tp') else None,
+            unrealized_pnl=Decimal(str(mt5_pos.get('profit', 0))),
+            metadata={
+                'mt5_ticket': mt5_pos.get('ticket'),
+                'mt5_magic': mt5_pos.get('magic'),
+                'mt5_comment': mt5_pos.get('comment')
+            }
+        )
+        
+        return position
+    
+    def _get_or_create_symbol(self, ticker: str) -> Symbol:
+        """Get symbol from cache or create new one."""
+        if ticker not in self.symbols_cache:
+            self.symbols_cache[ticker] = Symbol(
+                ticker=ticker,
+                exchange="MT5",
+                pip_value=Decimal("0.01"),
+                min_lot=Decimal("0.01"),
+                max_lot=Decimal("100.0"),
+                lot_step=Decimal("0.01")
+            )
+        
+        return self.symbols_cache[ticker]
+    
+    def check_connection_health(self) -> bool:
+        """Check if connection is healthy."""
+        if not self.connected:
+            return False
+        
+        if self.last_heartbeat is None:
+            return False
+        
+        age = (datetime.now(timezone.utc) - self.last_heartbeat).total_seconds()
+        
+        if age > 30:
+            raise ConnectionLostError(f"Heartbeat stale: {age:.0f} seconds")
+        
+        return True
+
+
+# Singleton instance
+_mt5_connector_instance: Optional[MT5Connector] = None
+
+def get_mt5_connector(data_dir: Optional[str] = None) -> MT5Connector:
+    """Get or create singleton MT5Connector instance."""
+    global _mt5_connector_instance
+    
+    if _mt5_connector_instance is None:
+        _mt5_connector_instance = MT5Connector(data_dir=data_dir)
+    
+    return _mt5_connector_instance

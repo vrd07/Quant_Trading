@@ -1,0 +1,167 @@
+# Paper Trading Environment Configuration
+# Simulated trading with real market data - CONSERVATIVE SETTINGS
+
+environment: paper  # Paper trading mode
+
+account:
+  initial_balance: 10000.0  # Start conservative
+  currency: USD
+  leverage: 100
+
+symbols:
+  XAUUSD:
+    enabled: true  # Primary testing symbol
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 100.0
+    lot_step: 0.01
+    value_per_lot: 100
+    commission_per_lot: 0.0
+  
+  # Start with just XAUUSD, add BTCUSD later
+  BTCUSD:
+    enabled: true
+    pip_value: 0.1     # $0.10 per pip (tick size 0.1)
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1   # 1 BTC per lot
+    commission_per_lot: 0.0
+
+risk:
+  # Conservative settings for paper trading
+  max_daily_loss_pct: 0.02        # 2% daily max ($2 on $100)
+  max_drawdown_pct: 0.10          # 10% max drawdown ($10 on $100)
+  risk_per_trade_pct: 0.0025      # 0.25% per trade ($0.25 on $100)
+  max_positions: 2                # Max 2 positions
+  max_exposure_per_symbol_pct: 0.80  # 80% per symbol
+  
+  position_sizing:
+    method: fixed_fractional      # Simple and predictable
+  
+  circuit_breaker:
+    enabled: true
+    max_consecutive_losses: 3     # Pause after 3 losses
+    cooldown_minutes: 60          # Wait 1 hour
+  
+  correlation:
+    enabled: true
+    max_correlation: 0.70
+    lookback_days: 30
+
+strategies:
+  primary_timeframe: 1m  # Use 1m for faster testing (5m for production)
+  min_bars_required: 3   # Only need 3 bars to start generating signals
+  
+  regime_filter:
+    enabled: true
+    adx_period: 14
+    adx_threshold: 18  # Lowered for more signals (was 20)
+    atr_period: 14
+    atr_ma_period: 20
+    use_hurst: true      # NEW: Enable Hurst exponent for better regime detection
+    hurst_period: 100
+    hurst_trend_threshold: 0.55
+    hurst_range_threshold: 0.45
+  
+  breakout:
+    enabled: true
+    donchian_period: 20
+    confirmation_bars: 0  # No confirmation delay
+    rr_ratio: 2.0         # Reward/risk ratio (1:2 R:R)
+    only_in_regime: TREND
+    mtf_confirmation: true  # Require higher TF trend alignment
+  
+  mean_reversion:
+    enabled: true  # NOW ENABLED
+    zscore_lookback: 20
+    entry_threshold: 2.0  # Enter at ±2 std devs
+    exit_threshold: 0.5   # Exit when z-score returns near mean
+    stop_threshold: 3.0   # Stop at ±3 std devs
+    rr_ratio: 2.0         # 1:2 R:R
+    only_in_regime: RANGE
+    mtf_confirmation: false  # Disabled for ranging (counter-trend)
+  
+  # NEW: VWAP Deviation Strategy for intraday mean reversion
+  vwap:
+    enabled: true
+    atr_multiplier: 1.5       # Deviation bands = VWAP ± (ATR × multiplier)
+    stop_atr_multiplier: 2.0  # Stop loss distance
+    atr_period: 14
+    min_volume_ratio: 1.0     # Minimum volume vs average
+    only_in_regime: RANGE
+  
+  # NEW: Momentum Scalping Strategy for quick intraday trades
+  momentum:
+    enabled: true
+    rsi_period: 14
+    ema_period: 20
+    rr_ratio: 2.0         # 1:2 R:R
+    atr_stop_multiplier: 1.5
+    rsi_bull_threshold: 50
+    rsi_bear_threshold: 50
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    only_in_regime: TREND
+
+trading_hours:
+  # Forex market hours (UTC)
+  sessions:
+    - name: asian
+      start: "00:00"
+      end: "09:00"
+      enabled: true
+    - name: london
+      start: "07:00"
+      end: "16:00"
+      enabled: true
+    - name: new_york
+      start: "12:00"
+      end: "21:00"
+      enabled: true
+  
+  # Skip major news events
+  news_filter:
+    enabled: false  # Disable for paper testing
+
+monitoring:
+  log_level: INFO
+  state_save_interval_sec: 30  # Save more frequently for paper
+  enable_console_logging: true
+  
+  alerts:
+    kill_switch: true
+    daily_loss_80pct: true
+    connection_lost: true
+
+# Data settings
+data:
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  history_bars: 500
+  tick_buffer_size: 1000
+
+# File Bridge Connection (Mac/Wine compatible)
+file_bridge:
+  enabled: true
+  # Default path for Mac/Wine MT5
+  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  check_interval_ms: 100
+
+# ZMQ Connection (Disabled for Mac)
+zmq:
+  enabled: false
+  # req_port: 5555
+  # sub_port: 5557
+  # push_port: 5556
+  # timeout_ms: 5000
+  # heartbeat_interval_sec: 5
+
+# Shutdown behavior
+shutdown:
+  close_all_positions: false
+  save_state: true
