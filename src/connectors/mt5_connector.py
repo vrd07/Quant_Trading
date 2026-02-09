@@ -207,7 +207,11 @@ class MT5Connector:
             response = self.client.place_order(
                 symbol=symbol,
                 order_type=side.value,
-                volume=float(quantity)
+                volume=float(quantity),
+                price=float(price) if price else None,
+                sl=float(stop_loss) if stop_loss else None,
+                tp=float(take_profit) if take_profit else None,
+                comment=comment
             )
             logger.debug("Order response: %s", response)
             
@@ -269,6 +273,32 @@ class MT5Connector:
         """Modify position SL/TP (not supported by current file bridge)."""
         logger.warning("Position modification not supported by file bridge")
         return False
+
+    def get_closed_positions(self, minutes: int = 1440) -> List[Dict]:
+        """
+        Get recently closed positions (history).
+        
+        Args:
+            minutes: Lookback period in minutes
+            
+        Returns:
+            List of dicts with closed position details (ticket, profit, price)
+        """
+        logger.debug("Requesting history for last %d minutes", minutes)
+        try:
+            response = self.client.get_history(minutes=minutes)
+            
+            if response.get("status") == "ERROR":
+                logger.error("Failed to get history: %s", response.get("message"))
+                return []
+            
+            deals = response.get("deals", [])
+            logger.info("Retrieved %d historical deals", len(deals))
+            return deals
+            
+        except Exception as e:
+            logger.error("Error getting closed positions: %s", e, exc_info=True)
+            return []
     
     def get_current_tick(self, symbol: str) -> Optional[Tick]:
         """Get current tick for a symbol."""

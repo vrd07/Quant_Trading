@@ -144,24 +144,35 @@ class MT5FileClient:
         """
         return self._send_command({"command": "GET_POSITIONS"})
     
-    def place_order(self, symbol, order_type, volume):
+    def place_order(self, symbol, order_type, volume, sl=None, tp=None, price=None, comment=None):
         """
-        Place a market order.
+        Place a market order with SL/TP.
         
         Args:
             symbol: Trading symbol (e.g., "EURUSD")
             order_type: "BUY" or "SELL"
             volume: Lot size (e.g., 0.01)
+            sl: Stop Loss price (optional)
+            tp: Take Profit price (optional)
+            price: Execution price (ignored for market orders usually, but good for limit)
+            comment: Order comment
             
         Returns:
             dict: Order result with ticket number if successful
         """
-        return self._send_command({
+        command = {
             "command": "PLACE_ORDER",
             "symbol": symbol,
             "order_type": order_type.upper(),
             "volume": str(volume)
-        })
+        }
+        
+        if sl: command["sl"] = str(sl)
+        if tp: command["tp"] = str(tp)
+        if price: command["price"] = str(price)
+        if comment: command["comment"] = str(comment)
+        
+        return self._send_command(command)
     
     def close_position(self, ticket):
         """
@@ -176,6 +187,21 @@ class MT5FileClient:
         return self._send_command({
             "command": "CLOSE_POSITION",
             "ticket": str(ticket)
+        })
+
+    def get_history(self, minutes=1440):
+        """
+        Get trading history (deals) for the specified period.
+        
+        Args:
+            minutes: Number of minutes to look back (default 1440 = 24h)
+            
+        Returns:
+            dict: Histoy deals including profit
+        """
+        return self._send_command({
+            "command": "GET_HISTORY",
+            "minutes": str(minutes)
         })
 
 

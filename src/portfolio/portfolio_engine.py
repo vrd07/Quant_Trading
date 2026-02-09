@@ -283,7 +283,7 @@ class PortfolioEngine:
         Reconcile portfolio state with MT5.
         
         Compares positions in our system vs actual MT5 positions.
-        Logs discrepancies and optionally auto-corrects.
+        Logs discrepancies and auto-corrects by checking history for closed trades.
         
         Returns:
             (success, list_of_discrepancies)
@@ -299,7 +299,7 @@ class PortfolioEngine:
             for p in self.get_all_positions()
         }
         
-        # Perform reconciliation
+        # Perform initial reconciliation check
         success, discrepancies = self.reconciliation.reconcile(
             our_positions=our_positions,
             mt5_positions=mt5_positions
@@ -308,11 +308,66 @@ class PortfolioEngine:
         self.last_reconciliation = datetime.now(timezone.utc)
         
         if not success:
-            self.logger.error(
-                "Reconciliation found discrepancies",
-                count=len(discrepancies),
-                discrepancies=discrepancies
+            self.logger.warning(
+                "Reconciliation found discrepancies, attempting auto-correction",
+                count=len(discrepancies)
             )
+            
+            # Check for "Phantom Positions" (We have it, MT5 doesn't)
+            # This usually means the trade was closed (TP/SL hit)
+            phantom_positions = [
+                p for p in our_positions.values() 
+                if str(p.position_id) not in mt5_positions
+                and not any(mp.symbol.ticker == p.symbol.ticker for mp in mt5_positions.values())
+            ]
+            
+            if phantom_positions:
+                self.logger.info(f"Checking history for {len(phantom_positions)} potential closed positions")
+                
+                # Fetch recent history (last 24h)
+                history = self.connector.get_closed_positions(minutes=1440)
+                
+                for position in phantom_positions:
+                    # Find matching deal in history
+                    # Match by ticket if available, else by symbol + close time (approx)
+                    mt5_ticket = position.metadata.get('mt5_ticket')
+                    
+                    matching_deal = None
+                    if mt5_ticket:
+                        matching_deal = next((d for d in history if str(d.get('position_ticket')) == str(mt5_ticket)), None)
+                    
+                    if matching_deal:
+                        self.logger.info(
+                            "Found closure in history",
+                            position_id=str(position.position_id),
+                            profit=matching_deal.get('profit'),
+                            price=matching_deal.get('price')
+                        )
+                        
+                        # Close the position in our system
+                        self.close_position(
+                            position_id=position.position_id,
+                            exit_price=Decimal(str(matching_deal.get('price', 0))),
+                            exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc)
+                        )
+                        
+                        # Correct the P&L with exact realized amount
+                        # (Note: close_position calculates approx P&L, we overwrite with actual)
+                        realized_pnl = Decimal(str(matching_deal.get('profit', 0))) + Decimal(str(matching_deal.get('swap', 0))) + Decimal(str(matching_deal.get('commission', 0)))
+                        
+                        # Adjust totals
+                        diff = realized_pnl - position.realized_pnl
+                        self.total_realized_pnl += diff
+                        self.daily_realized_pnl += diff
+                        position.realized_pnl = realized_pnl # Update the closed position record
+                        
+                    else:
+                        self.logger.warning(
+                            "Position missing from MT5 but not found in history",
+                            position_id=str(position.position_id),
+                            ticket=mt5_ticket
+                        )
+            
         else:
             self.logger.info("Reconciliation successful - no discrepancies")
         
