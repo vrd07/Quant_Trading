@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-09T08:51:33.642292+00:00",
+  "timestamp": "2026-02-09T09:03:47.674324+00:00",
   "positions": {},
   "open_orders": {
     "54314048-17a3-451b-998f-a6a0010b7ad3": {
@@ -1384,6 +1384,44 @@
         "signal_id": "29c6324e-c534-41ec-88b9-168453eebdfd",
         "strategy": "donchian_breakout",
         "regime": "TREND",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": null
+      }
+    },
+    "d306f950-1c6b-4b0c-a50c-3d030f9140e8": {
+      "symbol": "BTCUSD",
+      "side": "BUY",
+      "order_type": "MARKET",
+      "quantity": "0.07",
+      "price": "69999.095",
+      "stop_loss": "69660.89",
+      "take_profit": "70675.505",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-09T08:56:23.430157+00:00",
+      "metadata": {
+        "signal_id": "2b3aa81f-682b-47c5-8ecf-5d050a7c26da",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": null
+      }
+    },
+    "1a1b75f1-0426-4a68-8511-b11fa185c70a": {
+      "symbol": "BTCUSD",
+      "side": "BUY",
+      "order_type": "MARKET",
+      "quantity": "0.07",
+      "price": "69999.095",
+      "stop_loss": "69660.89",
+      "take_profit": "70675.505",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-09T08:57:04.134438+00:00",
+      "metadata": {
+        "signal_id": "fc95186c-78a5-4d34-9ce0-9b54bc3c8c2d",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
         "signal_strength": 0.8,
         "mt5_order_id": null,
         "mt5_ticket": null
