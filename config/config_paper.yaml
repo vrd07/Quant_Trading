@@ -32,8 +32,9 @@ risk:
   # Conservative settings for paper trading
   max_daily_loss_pct: 0.50        # Increased to 50% to force run
   max_drawdown_pct: 0.50          # 50% max drawdown
-  risk_per_trade_pct: 0.0025      # 0.25% per trade ($0.25 on $100)
-  max_positions: 40               # Increased to accommodate strategy (User Request)
+  risk_per_trade_pct: 0.02        # 2% per trade (User Request for "Big Lot Size")
+  max_positions: 10               # Reduced to 10 (User Request)
+  max_daily_trades: 50            # Limit to 50 trades/day (User Request)
   max_exposure_per_symbol_pct: 0.80  # 80% per symbol
   
   position_sizing:
@@ -56,13 +57,15 @@ strategies:
   regime_filter:
     enabled: true
     adx_period: 3      # Reduced for testing
-    adx_threshold: 18  # Lowered for more signals (was 20)
+    adx_threshold: 20  # Legacy param, kept for compatibility
+    adx_trend_threshold: 20  # Lowered to capture weaker trends
+    adx_range_threshold: 25  # Raised to capture choppy ranges
     atr_period: 3      # Reduced for testing
     atr_ma_period: 3   # Reduced for testing
     use_hurst: true      # NEW: Enable Hurst exponent for better regime detection
     hurst_period: 10   # Reduced for testing
-    hurst_trend_threshold: 0.55
-    hurst_range_threshold: 0.45
+    hurst_trend_threshold: 0.50 # Lowered
+    hurst_range_threshold: 0.50 # Raised
   
   breakout:
     enabled: true
@@ -126,7 +129,7 @@ trading_hours:
     enabled: false  # Disable for paper testing
 
 monitoring:
-  log_level: DEBUG
+  log_level: INFO
   state_save_interval_sec: 30  # Save more frequently for paper
   enable_console_logging: true
   

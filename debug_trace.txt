@@ -1,0 +1,14 @@
+2026-02-11 16:16:52.807630: Entering main()
+2026-02-11 16:16:52.810874: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-11 16:16:52.810952: Using config file: config/config_paper.yaml
+2026-02-11 16:16:52.918918: TradingSystem initialized
+2026-02-11 16:23:57.151888: TradingSystem.run() finished
+2026-02-11 16:24:27.268236: Entering main()
+2026-02-11 16:24:27.271295: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-11 16:24:27.271387: Using config file: config/config_paper.yaml
+2026-02-11 16:24:27.292562: TradingSystem initialized
+2026-02-11 16:39:49.499417: TradingSystem.run() finished
+2026-02-11 16:40:25.721829: Entering main()
+2026-02-11 16:40:25.724821: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-11 16:40:25.724899: Using config file: config/config_paper.yaml
+2026-02-11 16:40:25.745613: TradingSystem initialized

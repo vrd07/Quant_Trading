@@ -599,8 +599,14 @@ class TradingSystem:
             self.logger.error("Error during shutdown", error=str(e), exc_info=True)
 
 
+
+def log_trace(msg):
+    with open("debug_trace.txt", "a") as f:
+        f.write(f"{datetime.now()}: {msg}\n")
+
 def main():
     """Main entry point."""
+    log_trace("Entering main()")
     import argparse
     
     parser = argparse.ArgumentParser(description="Algorithmic Trading System")
@@ -617,6 +623,7 @@ def main():
     )
     
     args = parser.parse_args()
+    log_trace(f"Parsed args: {args}")
     
     # Determine config file based on environment
     config_files = {
@@ -626,10 +633,18 @@ def main():
     }
     
     config_file = config_files.get(args.env, args.config)
+    log_trace(f"Using config file: {config_file}")
     
     # Create and run system
-    system = TradingSystem(config_file=config_file)
-    system.run()
+    try:
+        system = TradingSystem(config_file=config_file)
+        log_trace("TradingSystem initialized")
+        system.run()
+        log_trace("TradingSystem.run() finished")
+    except Exception as e:
+        log_trace(f"Error in main: {e}")
+        import traceback
+        log_trace(traceback.format_exc())
 
 
 if __name__ == "__main__":

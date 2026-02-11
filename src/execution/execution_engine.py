@@ -251,6 +251,9 @@ class ExecutionEngine:
             order.metadata['mt5_ticket'] = result.metadata.get('mt5_ticket')
             self.order_manager.update_order(order)
             
+            # Increment daily trade count
+            self.risk_engine.increment_daily_trade_count()
+            
             self.logger.info(
                 "Order accepted by MT5",
                 order_id=str(order.order_id),

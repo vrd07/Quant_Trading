@@ -24,14 +24,32 @@ class TradingLogger:
         
         # Add handler if not already configured
         if not self.logger.handlers:
-            handler = logging.StreamHandler(sys.stdout)
-            handler.setLevel(level)
+            # Console Handler
+            console_handler = logging.StreamHandler(sys.stdout)
+            console_handler.setLevel(level)
             formatter = logging.Formatter(
                 '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
                 datefmt='%Y-%m-%d %H:%M:%S'
             )
-            handler.setFormatter(formatter)
-            self.logger.addHandler(handler)
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
+            
+            # File Handler
+            import os
+            from logging.handlers import RotatingFileHandler
+            
+            log_dir = "data/logs"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir)
+                
+            file_handler = RotatingFileHandler(
+                f"{log_dir}/trading_system.log",
+                maxBytes=10*1024*1024, # 10MB
+                backupCount=5
+            )
+            file_handler.setLevel(level)
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
     
     def _format_message(self, msg: str, **kwargs) -> str:
         """Format message with keyword arguments."""

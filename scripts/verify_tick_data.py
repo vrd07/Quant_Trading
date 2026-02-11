@@ -1,37 +1,42 @@
 import sys
 from pathlib import Path
+import time
 sys.path.append(str(Path(__file__).parent.parent))
 
 from src.connectors.mt5_connector import get_mt5_connector
 
 def verify_ticks():
-    print("Initializing MT5 Connector...")
-    connector = get_mt5_connector()
-    
-    try:
-        if not connector.connect():
-            print("Failed to connect to MT5")
-            return
+    output_path = Path("scripts/verify_tick_data_output.txt")
+    with open(output_path, "w") as f:
+        f.write("Initializing MT5 Connector...\n")
+        try:
+            connector = get_mt5_connector()
             
-        print("Connected. Checking ticks...")
-        
-        symbols = ["XAUUSD", "BTCUSD", "EURUSD"]
-        
-        for i in range(5):
-            print(f"\nIteration {i+1}:")
-            for symbol in symbols:
-                tick = connector.get_current_tick(symbol)
-                if tick:
-                    print(f"  {symbol}: {tick.bid} / {tick.ask}")
-                else:
-                    print(f"  {symbol}: NO DATA")
+            if not connector.connect():
+                f.write("Failed to connect to MT5\n")
+                return
+                
+            f.write("Connected. Checking ticks...\n")
             
-            time.sleep(1)
+            symbols = ["XAUUSD", "BTCUSD", "EURUSD"]
             
-    except Exception as e:
-        print(f"Error: {e}")
-    finally:
-        connector.disconnect()
+            for i in range(5):
+                f.write(f"\nIteration {i+1}:\n")
+                for symbol in symbols:
+                    tick = connector.get_current_tick(symbol)
+                    if tick:
+                        f.write(f"  {symbol}: {tick.bid} / {tick.ask}\n")
+                    else:
+                        f.write(f"  {symbol}: NO DATA\n")
+                
+                f.flush()
+                time.sleep(1)
+                
+        except Exception as e:
+            f.write(f"Error: {e}\n")
+        finally:
+            if 'connector' in locals():
+                connector.disconnect()
 
 if __name__ == "__main__":
     verify_ticks()

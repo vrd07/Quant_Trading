@@ -70,6 +70,7 @@ class RiskEngine:
         self.risk_per_trade_pct = Decimal(str(risk_config.get('risk_per_trade_pct', DEFAULT_RISK_PER_TRADE_PCT)))
         self.max_positions = risk_config.get('max_positions', DEFAULT_MAX_POSITIONS)
         self.max_exposure_per_symbol_pct = Decimal(str(risk_config.get('max_exposure_per_symbol_pct', 0.30)))
+        self.max_daily_trades = risk_config.get('max_daily_trades', 50)
         
         # Initialize sub-components
         self.position_sizer = PositionSizer(config)
@@ -84,6 +85,7 @@ class RiskEngine:
         # State tracking
         self.daily_start_equity = Decimal("0")
         self.equity_high_water_mark = Decimal("0")
+        self.daily_trades_count = 0
         
         # Logging
         from ..monitoring.logger import get_logger
@@ -202,7 +204,17 @@ class RiskEngine:
                     limit=self.max_drawdown_pct
                 )
             
-            # CHECK 5: Position count limit
+            # CHECK 5: Max daily trades limit
+            if self.daily_trades_count >= self.max_daily_trades:
+                reason = f"Max daily trades reached: {self.daily_trades_count} >= {self.max_daily_trades}"
+                self.logger.warning(
+                    "Order rejected - max daily trades",
+                    count=self.daily_trades_count,
+                    limit=self.max_daily_trades
+                )
+                return False, reason
+
+            # CHECK 6: Position count limit
             if len(current_positions) >= self.max_positions:
                 reason = f"Max positions reached: {len(current_positions)} >= {self.max_positions}"
                 self.logger.warning(
@@ -379,6 +391,15 @@ class RiskEngine:
                 old_hwm=float(old_hwm),
                 new_hwm=float(current_equity)
             )
+
+    def increment_daily_trade_count(self) -> None:
+        """Increment the counter for daily trades."""
+        self.daily_trades_count += 1
+        self.logger.info(
+            "Daily trade count incremented",
+            count=self.daily_trades_count,
+            limit=self.max_daily_trades
+        )
     
     def reset_daily_metrics(self, starting_equity: Decimal) -> None:
         """
@@ -388,10 +409,12 @@ class RiskEngine:
             starting_equity: Equity at start of day
         """
         self.daily_start_equity = starting_equity
+        self.daily_trades_count = 0
         
         self.logger.info(
             "Daily metrics reset",
             starting_equity=float(starting_equity),
+            daily_trades_count=0,
             date=datetime.now(timezone.utc).date().isoformat()
         )
     
