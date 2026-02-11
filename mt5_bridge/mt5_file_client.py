@@ -34,7 +34,7 @@ class MT5FileClient:
             # Use MT5 Common Files directory (Wine/Mac path)
             self.data_dir = Path.home() / "Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
         else:
-            self.data_dir = Path(data_dir)
+            self.data_dir = Path(data_dir).expanduser()
         
         self.command_file = self.data_dir / "mt5_commands.json"
         self.status_file = self.data_dir / "mt5_status.json"

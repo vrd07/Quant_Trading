@@ -368,6 +368,25 @@ class PortfolioEngine:
                             ticket=mt5_ticket
                         )
             
+            # Check for "Unknown Positions" (MT5 has it, we don't)
+            # Adopt them into our portfolio (resilience against restart/missed fills)
+            unknown_positions = [
+                (pid, p) for pid, p in mt5_positions.items()
+                if pid not in our_positions
+            ]
+            
+            if unknown_positions:
+                self.logger.info(f"Found {len(unknown_positions)} unknown positions in MT5 - adopting them")
+                
+                for pid, mt5_pos in unknown_positions:
+                    self.add_position(mt5_pos)
+                    self.logger.info(
+                        "Adopted position from MT5",
+                        position_id=pid,
+                        symbol=mt5_pos.symbol.ticker,
+                        volume=float(mt5_pos.quantity)
+                    )
+            
         else:
             self.logger.info("Reconciliation successful - no discrepancies")
         

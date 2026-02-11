@@ -96,7 +96,8 @@ class TradingSystem:
         # State
         self.running = False
         self.last_state_save = datetime.now(timezone.utc)
-        self.last_reconciliation = datetime.now(timezone.utc)
+        # Initialize to min time to force immediate reconciliation on startup
+        self.last_reconciliation = datetime.min.replace(tzinfo=timezone.utc)
         self.loop_iteration = 0
         
         # Shutdown handler
@@ -445,7 +446,8 @@ class TradingSystem:
     
     def _should_reconcile(self) -> bool:
         """Check if portfolio should be reconciled."""
-        interval = 300  # 5 minutes
+        # Default to 60s if not specified (more frequent than before)
+        interval = self.config.get('portfolio', {}).get('reconciliation_interval_sec', 60)
         elapsed = (datetime.now(timezone.utc) - self.last_reconciliation).total_seconds()
         return elapsed >= interval
     

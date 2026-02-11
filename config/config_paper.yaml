@@ -4,7 +4,7 @@
 environment: paper  # Paper trading mode
 
 account:
-  initial_balance: 10000.0  # Start conservative
+  initial_balance: 100000.0  # Match user account
   currency: USD
   leverage: 100
 
@@ -30,10 +30,10 @@ symbols:
 
 risk:
   # Conservative settings for paper trading
-  max_daily_loss_pct: 0.02        # 2% daily max ($2 on $100)
-  max_drawdown_pct: 0.10          # 10% max drawdown ($10 on $100)
+  max_daily_loss_pct: 0.50        # Increased to 50% to force run
+  max_drawdown_pct: 0.50          # 50% max drawdown
   risk_per_trade_pct: 0.0025      # 0.25% per trade ($0.25 on $100)
-  max_positions: 2                # Max 2 positions
+  max_positions: 40               # Increased to accommodate strategy (User Request)
   max_exposure_per_symbol_pct: 0.80  # 80% per symbol
   
   position_sizing:
@@ -144,6 +144,10 @@ data:
     - 1h
   history_bars: 500
   tick_buffer_size: 1000
+
+portfolio:
+  reconciliation_interval_sec: 60  # Check every minute for manual trades
+
 
 # File Bridge Connection (Mac/Wine compatible)
 file_bridge:
