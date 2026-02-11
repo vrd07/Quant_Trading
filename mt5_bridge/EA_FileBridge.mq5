@@ -377,6 +377,9 @@ bool ValidateOrder(string symbol, double volume)
 //+------------------------------------------------------------------+
 //| Write current status to file                                     |
 //+------------------------------------------------------------------+
+//+------------------------------------------------------------------+
+//| Write current status to file                                     |
+//+------------------------------------------------------------------+
 void WriteStatus()
 {
    int handle = INVALID_HANDLE;
@@ -419,7 +422,35 @@ void WriteStatus()
    json += "\"daily_trades\":" + IntegerToString(dailyTradeCount) + ",";
    json += "\"open_positions\":" + IntegerToString(CountOpenPositions()) + ",";
    json += "\"total_exposure\":" + DoubleToString(GetTotalExposure(), 2) + ",";
-   json += "\"server_time\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\"";
+   json += "\"server_time\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\",";
+   
+   // === NEW: Multi-Symbol Support ===
+   // Broadcast prices for ALL symbols in Market Watch
+   json += "\"quotes\":{";
+   int total = SymbolsTotal(true); // true = selected in Market Watch
+   int added = 0;
+   
+   for(int i=0; i<total; i++)
+   {
+      string symbol = SymbolName(i, true);
+      MqlTick tick;
+      
+      if(SymbolInfoTick(symbol, tick))
+      {
+         int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+         
+         if(added > 0) json += ",";
+         json += "\"" + symbol + "\":{";
+         json += "\"bid\":" + DoubleToString(tick.bid, digits) + ",";
+         json += "\"ask\":" + DoubleToString(tick.ask, digits) + ",";
+         json += "\"time\":" + IntegerToString(tick.time);
+         json += "}";
+         added++;
+      }
+   }
+   json += "}";
+   // ================================
+   
    json += "}";
    
    FileWriteString(handle, json);

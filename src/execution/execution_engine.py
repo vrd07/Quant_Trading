@@ -124,7 +124,9 @@ class ExecutionEngine:
                 account_balance=account_balance,
                 entry_price=signal.entry_price,
                 stop_loss=signal.stop_loss,
-                side=signal.side
+                side=signal.side,
+                current_positions=current_positions,
+                account_equity=account_equity
             )
             
             if position_size <= 0:

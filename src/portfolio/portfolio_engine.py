@@ -370,10 +370,33 @@ class PortfolioEngine:
             
             # Check for "Unknown Positions" (MT5 has it, we don't)
             # Adopt them into our portfolio (resilience against restart/missed fills)
-            unknown_positions = [
-                (pid, p) for pid, p in mt5_positions.items()
-                if pid not in our_positions
-            ]
+            unknown_positions = []
+            
+            for pid, mt5_pos in mt5_positions.items():
+                # Check if this position already exists in our portfolio (by ticket or fuzzy match)
+                exists = False
+                mt5_ticket = mt5_pos.metadata.get('mt5_ticket')
+                
+                for our_pos in our_positions.values():
+                    # Match by Ticket (Primary)
+                    if mt5_ticket and str(our_pos.metadata.get('mt5_ticket')) == str(mt5_ticket):
+                        exists = True
+                        break
+                    
+                    # Match by Fuzzy Logic (Secondary - for untracked manual trades)
+                    # Same symbol, side, active status, and similar entry price
+                    if (our_pos.symbol.ticker == mt5_pos.symbol.ticker and
+                        our_pos.side == mt5_pos.side and
+                        abs(our_pos.entry_price - mt5_pos.entry_price) < (mt5_pos.current_price * Decimal("0.001"))): # 0.1% tolerance
+                        exists = True
+                        # Update metadata with ticket if missing
+                        if not our_pos.metadata.get('mt5_ticket') and mt5_ticket:
+                            our_pos.metadata['mt5_ticket'] = mt5_ticket
+                            self.logger.info(f"Linked existing position {our_pos.position_id} to MT5 ticket {mt5_ticket}")
+                        break
+                
+                if not exists:
+                    unknown_positions.append((pid, mt5_pos))
             
             if unknown_positions:
                 self.logger.info(f"Found {len(unknown_positions)} unknown positions in MT5 - adopting them")

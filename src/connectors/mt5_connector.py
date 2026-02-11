@@ -306,6 +306,22 @@ class MT5Connector:
         try:
             status = self.client.get_status()
             
+            # 1. Check for quotes object (Multi-Symbol Support)
+            quotes = status.get('quotes', {})
+            if symbol in quotes:
+                quote = quotes[symbol]
+                tick = Tick(
+                    symbol=self._get_or_create_symbol(symbol),
+                    timestamp=datetime.now(timezone.utc),
+                    bid=Decimal(str(quote.get('bid', 0))),
+                    ask=Decimal(str(quote.get('ask', 0))),
+                    last=Decimal(str((quote.get('bid', 0) + quote.get('ask', 0)) / 2)),
+                    volume=Decimal("0")
+                )
+                logger.debug("Tick (Multi): %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
+                return tick
+
+            # 2. Fallback to single symbol check (Backward Compatibility)
             if status.get('symbol') == symbol:
                 tick = Tick(
                     symbol=self._get_or_create_symbol(symbol),
@@ -315,7 +331,7 @@ class MT5Connector:
                     last=Decimal(str((status.get('bid', 0) + status.get('ask', 0)) / 2)),
                     volume=Decimal("0")
                 )
-                logger.debug("Tick: %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
+                logger.debug("Tick (Single): %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
                 return tick
             
             return None

@@ -1,6 +1,6 @@
 """Exposure management for per-symbol concentration limits."""
 
-from decimal import Decimal
+from decimal import Decimal, ROUND_DOWN
 from typing import Dict, Tuple
 
 from ..core.types import Order, Position, Symbol
@@ -68,17 +68,6 @@ class ExposureManager:
             # For market orders, estimate using a reasonable price
             # In production, get current market price
             # For now, skip exposure check for market orders without price
-            # Use print or pass if logger not available in this scope yet, 
-            # OR better, since I can't easily add logger here without seeing __init__, 
-            # I see the user's code uses self.logger. 
-            # The original file does NOT have self.logger in __init__. 
-            # I must check if I need to add logger to __init__ or if I should remove the logging lines.
-            # The original file shows `class ExposureManager:` lines 9-21. No logger init. 
-            # I should probably add the logger to __init__ as well or remove logging. 
-            # Given the user provided code with logging, I should probably add the logger.
-            
-            # Let's check imports. `import logging` is not in the file.
-            # I will modify the whole file to be safe.
             pass
             return True, "OK"
     
@@ -102,3 +91,51 @@ class ExposureManager:
             return False, f"Exposure limit exceeded for {symbol.ticker}: {exposure_pct:.1f}% > {max_pct:.1f}%"
         
         return True, "OK"
+        
+    def get_max_position_size(
+        self,
+        symbol: Symbol,
+        current_positions: Dict[str, Position],
+        account_equity: Decimal,
+        entry_price: Decimal
+    ) -> Decimal:
+        """
+        Calculate maximum position size allowed by exposure limit.
+        
+        Args:
+            symbol: Trading symbol
+            current_positions: Current open positions
+            account_equity: Current account equity
+            entry_price: Intended entry price
+            
+        Returns:
+            Max allowable position size in lots
+        """
+        if account_equity <= 0 or entry_price <= 0:
+            return Decimal("0")
+            
+        # Calculate current exposure
+        current_exposure = self._calculate_symbol_exposure(symbol, current_positions)
+        
+        # Calculate max allowed total exposure
+        max_total_exposure = account_equity * self.max_exposure_pct
+        
+        # Calculate remaining exposure allowed
+        remaining_exposure = max_total_exposure - current_exposure
+        
+        if remaining_exposure <= 0:
+            return Decimal("0")
+            
+        # Convert exposure to lots
+        # Exposure = Lots * Price * ValuePerLot
+        # Lots = Exposure / (Price * ValuePerLot)
+        contract_value = entry_price * symbol.value_per_lot
+        if contract_value == 0:
+            return Decimal("0")
+            
+        max_lots_raw = remaining_exposure / contract_value
+        
+        # Round down to lot step
+        max_lots = (max_lots_raw / symbol.lot_step).quantize(Decimal("1"), rounding=ROUND_DOWN) * symbol.lot_step
+        
+        return max(Decimal("0"), max_lots)

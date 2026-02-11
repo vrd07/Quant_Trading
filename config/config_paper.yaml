@@ -51,22 +51,22 @@ risk:
 
 strategies:
   primary_timeframe: 1m  # Use 1m for faster testing (5m for production)
-  min_bars_required: 3   # Only need 3 bars to start generating signals
+  min_bars_required: 2   # Only need 2 bars to start generating signals
   
   regime_filter:
     enabled: true
-    adx_period: 14
+    adx_period: 3      # Reduced for testing
     adx_threshold: 18  # Lowered for more signals (was 20)
-    atr_period: 14
-    atr_ma_period: 20
+    atr_period: 3      # Reduced for testing
+    atr_ma_period: 3   # Reduced for testing
     use_hurst: true      # NEW: Enable Hurst exponent for better regime detection
-    hurst_period: 100
+    hurst_period: 10   # Reduced for testing
     hurst_trend_threshold: 0.55
     hurst_range_threshold: 0.45
   
   breakout:
     enabled: true
-    donchian_period: 20
+    donchian_period: 3    # Reduced for testing
     confirmation_bars: 0  # No confirmation delay
     rr_ratio: 2.0         # Reward/risk ratio (1:2 R:R)
     only_in_regime: TREND
@@ -74,8 +74,8 @@ strategies:
   
   mean_reversion:
     enabled: true  # NOW ENABLED
-    zscore_lookback: 20
-    entry_threshold: 2.0  # Enter at ±2 std devs
+    zscore_lookback: 3    # Reduced for testing
+    entry_threshold: 1.0  # Lowered for testing
     exit_threshold: 0.5   # Exit when z-score returns near mean
     stop_threshold: 3.0   # Stop at ±3 std devs
     rr_ratio: 2.0         # 1:2 R:R
@@ -126,7 +126,7 @@ trading_hours:
     enabled: false  # Disable for paper testing
 
 monitoring:
-  log_level: INFO
+  log_level: DEBUG
   state_save_interval_sec: 30  # Save more frequently for paper
   enable_console_logging: true
   

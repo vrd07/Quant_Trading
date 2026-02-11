@@ -287,12 +287,15 @@ class RiskEngine:
         account_balance: Decimal,
         entry_price: Decimal,
         stop_loss: Decimal,
-        side: OrderSide
+        side: OrderSide,
+        current_positions: Optional[Dict[str, Position]] = None,
+        account_equity: Optional[Decimal] = None
     ) -> Decimal:
         """
         Calculate optimal position size.
         
         Uses configured position sizing method (Kelly, fixed fractional, volatility-based).
+        Does NOT exceed exposure limits if context (positions/equity) is provided.
         
         Args:
             symbol: Trading symbol
@@ -300,17 +303,44 @@ class RiskEngine:
             entry_price: Intended entry price
             stop_loss: Stop loss price
             side: Order side (BUY/SELL)
+            current_positions: Optional dict of open positions (for exposure check)
+            account_equity: Optional current account equity (for exposure check)
         
         Returns:
             Position size in lots, rounded to symbol lot step
         """
-        return self.position_sizer.calculate_position_size(
+        # 1. Calculate risk-based size (Stop Loss distance)
+        risk_size = self.position_sizer.calculate_position_size(
             symbol=symbol,
             account_balance=account_balance,
             entry_price=entry_price,
             stop_loss=stop_loss,
             risk_pct=self.risk_per_trade_pct
         )
+        
+        # 2. Apply exposure limit if context provided
+        if current_positions is not None and account_equity is not None:
+            max_exposure_size = self.exposure_manager.get_max_position_size(
+                symbol=symbol,
+                current_positions=current_positions,
+                account_equity=account_equity,
+                entry_price=entry_price
+            )
+            
+            if risk_size > max_exposure_size:
+                # User request: Limit to 0.1 lots max when exposure limit is hit
+                capped_size = min(max_exposure_size, Decimal("0.1"))
+                
+                self.logger.info(
+                    "Position size capped by exposure limit (and user 0.1 cap)",
+                    risk_size=float(risk_size),
+                    exposure_limit=float(max_exposure_size),
+                    final_size=float(capped_size),
+                    symbol=symbol.ticker
+                )
+                return capped_size
+                
+        return risk_size
     
     def record_trade_result(self, pnl: Decimal) -> None:
         """
