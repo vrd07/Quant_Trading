@@ -435,6 +435,8 @@ class TradingSystem:
                 equity_high_water_mark=self.risk_engine.equity_high_water_mark,
                 daily_start_equity=self.risk_engine.daily_start_equity,
                 daily_pnl=self.portfolio_engine.daily_realized_pnl,
+                consecutive_losses=self.risk_engine.circuit_breaker.consecutive_losses,
+                daily_trades_count=self.risk_engine.daily_trades_count,
                 kill_switch_active=self.risk_engine.kill_switch.is_active()
             )
             
@@ -485,6 +487,8 @@ class TradingSystem:
             # Restore risk engine state
             self.risk_engine.equity_high_water_mark = state.equity_high_water_mark
             self.risk_engine.daily_start_equity = state.daily_start_equity
+            self.risk_engine.daily_trades_count = state.daily_trades_count
+            self.risk_engine.circuit_breaker.consecutive_losses = state.consecutive_losses
             
             # Restore portfolio totals
             self.portfolio_engine.daily_realized_pnl = state.daily_pnl

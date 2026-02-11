@@ -332,6 +332,8 @@ class SystemState:
     daily_start_equity: Decimal = Decimal("0")
     daily_pnl: Decimal = Decimal("0")
     total_pnl: Decimal = Decimal("0")
+    consecutive_losses: int = 0
+    daily_trades_count: int = 0
     kill_switch_active: bool = False
     circuit_breaker_active: bool = False
     last_trade_time: Optional[datetime] = None
@@ -378,6 +380,8 @@ class SystemState:
             'daily_start_equity': str(self.daily_start_equity),
             'daily_pnl': str(self.daily_pnl),
             'total_pnl': str(self.total_pnl),
+            'consecutive_losses': self.consecutive_losses,
+            'daily_trades_count': self.daily_trades_count,
             'kill_switch_active': self.kill_switch_active,
             'circuit_breaker_active': self.circuit_breaker_active,
             'last_trade_time': self.last_trade_time.isoformat() if self.last_trade_time else None,

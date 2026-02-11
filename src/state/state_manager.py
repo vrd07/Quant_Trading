@@ -476,6 +476,8 @@ class StateManager:
             daily_start_equity=Decimal(state_dict.get('daily_start_equity', 0)),
             daily_pnl=Decimal(state_dict['daily_pnl']),
             total_pnl=Decimal(state_dict.get('total_pnl', 0)),
+            consecutive_losses=state_dict.get('consecutive_losses', 0),
+            daily_trades_count=state_dict.get('daily_trades_count', 0),
             kill_switch_active=state_dict['kill_switch_active'],
             circuit_breaker_active=state_dict.get('circuit_breaker_active', False),
             last_trade_time=last_trade_time,
