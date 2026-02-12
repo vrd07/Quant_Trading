@@ -13247,3 +13247,7 @@ src.core.exceptions.OrderRejectedError: Request rejected due to absence of netwo
 2026-02-12 21:21:53 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
 2026-02-12 21:22:00 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
 2026-02-12 21:22:10 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:22:21 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:22:24 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:22:24 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:22:31 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
