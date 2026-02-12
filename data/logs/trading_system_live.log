@@ -16824,3 +16824,15 @@ src.core.exceptions.OrderRejectedError: Request rejected due to absence of netwo
 2026-02-12 21:21:28 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
 2026-02-12 21:21:39 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
 2026-02-12 21:21:39 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:45 | INFO     | __main__ | System metrics | iteration=1680 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:21:49 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:21:49 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:53 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:21:53 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:21:53 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:22:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5071.14 H=5074.18 L=5071.125 C=5073.625 [29 bars in store]
+2026-02-12 21:22:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67364.995 H=67468.80 L=67322.365 C=67455.81 [31 bars in store]
+2026-02-12 21:22:00 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:22:00 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:22:10 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:22:10 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
