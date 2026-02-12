@@ -1,33 +1,33 @@
 {
-  "timestamp": "2026-02-11T11:22:17.596351+00:00",
-  "initial_capital": 100000.0,
-  "current_equity": 98662.748,
-  "total_return": -1337.252,
-  "total_return_pct": -1.337252,
-  "open_positions": 40,
+  "timestamp": "2026-02-12T15:43:22.862687+00:00",
+  "initial_capital": 4000.0,
+  "current_equity": 4000.0,
+  "total_return": 0.0,
+  "total_return_pct": 0.0,
+  "open_positions": 0,
   "long_positions": 0,
-  "short_positions": 40,
-  "unrealized_pnl": -1337.252,
+  "short_positions": 0,
+  "unrealized_pnl": 0.0,
   "realized_pnl": 0.0,
   "daily_realized_pnl": 0.0,
-  "total_exposure": 255711.288,
-  "net_exposure": -255711.288,
+  "total_exposure": 0.0,
+  "net_exposure": 0.0,
   "total_trades": 0,
   "win_rate": 0,
   "profit_factor": 0,
   "bar_counts": {
     "XAUUSD": {
-      "1m": 8,
-      "5m": 2,
-      "15m": 1,
+      "1m": 20,
+      "5m": 5,
+      "15m": 2,
       "1h": 0
     },
     "BTCUSD": {
-      "1m": 12,
-      "5m": 2,
-      "15m": 1,
+      "1m": 22,
+      "5m": 5,
+      "15m": 2,
       "1h": 0
     }
   },
-  "last_reconciliation": "2026-02-11T11:21:50.710451+00:00"
+  "last_reconciliation": "2026-02-12T15:43:06.404198+00:00"
 }

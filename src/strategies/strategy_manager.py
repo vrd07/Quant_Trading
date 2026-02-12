@@ -12,6 +12,7 @@ Responsibilities:
 
 from typing import List, Dict, Optional
 import pandas as pd
+from datetime import datetime, timezone, timedelta
 
 from .base_strategy import BaseStrategy
 from .breakout_strategy import BreakoutStrategy
@@ -71,6 +72,13 @@ class StrategyManager:
         
         from ..monitoring.logger import get_logger
         self.logger = get_logger(__name__)
+        
+        # Signal cooldown tracking: prevents same strategy firing too often
+        # Key: (symbol, strategy_name) -> last signal datetime
+        self._last_signal_time: Dict[tuple, datetime] = {}
+        self._signal_cooldown_minutes = config.get('strategies', {}).get(
+            'signal_cooldown_minutes', 30
+        )
     
     def set_higher_tf_bars(
         self,
@@ -122,6 +130,23 @@ class StrategyManager:
                 signal = strategy.on_bar(bars)
                 
                 if signal:
+                    # Check cooldown before accepting signal
+                    cooldown_key = (symbol, strategy_name)
+                    now = datetime.now(timezone.utc)
+                    last_signal = self._last_signal_time.get(cooldown_key)
+                    
+                    if last_signal and (now - last_signal) < timedelta(minutes=self._signal_cooldown_minutes):
+                        remaining = self._signal_cooldown_minutes - (now - last_signal).total_seconds() / 60
+                        self.logger.info(
+                            f"Signal suppressed (cooldown)",
+                            strategy=strategy_name,
+                            symbol=symbol,
+                            remaining_min=f"{remaining:.1f}"
+                        )
+                        continue
+                    
+                    # Accept signal and update cooldown
+                    self._last_signal_time[cooldown_key] = now
                     signals.append(signal)
                     self.logger.info(
                         f"Signal generated",

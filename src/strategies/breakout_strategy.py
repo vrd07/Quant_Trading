@@ -88,12 +88,12 @@ class BreakoutStrategy(BaseStrategy):
             self._log_no_signal("Insufficient data")
             return None
         
-        # Check regime
+        # Check regime - MUST be TREND for breakouts (re-enabled for live trading)
         regime = self.regime_filter.classify(bars)
         
-        # if regime != self.only_in_regime:
-        #     self._log_no_signal(f"Regime is {regime.value}, need {self.only_in_regime.value}")
-        #     return None
+        if regime != self.only_in_regime:
+            self._log_no_signal(f"Regime is {regime.value}, need {self.only_in_regime.value}")
+            return None
         
         # Calculate Donchian channels
         upper, middle, lower = Indicators.donchian_channel(bars, period=self.donchian_period)

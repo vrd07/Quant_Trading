@@ -363,12 +363,14 @@ class PortfolioEngine:
                         
                     else:
                         self.logger.warning(
-                            "Position missing from MT5 but not found in history",
+                            "Position missing from MT5 and not found in recent history - PRUNING",
                             position_id=str(position.position_id),
-                            ticket=mt5_ticket
+                            ticker=mt5_ticket
                         )
+                        # Purge stale entry to prevent "Max positions reached" blockage
+                        self.position_tracker.remove_position(position.position_id)
             
-            # Check for "Unknown Positions" (MT5 has it, we don't)
+            # 2. Check for "Unknown Positions" (MT5 has it, we don't)
             # Adopt them into our portfolio (resilience against restart/missed fills)
             unknown_positions = []
             

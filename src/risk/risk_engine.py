@@ -82,6 +82,10 @@ class RiskEngine:
         self.drawdown_tracker = DrawdownTracker(max_drawdown_pct=self.max_drawdown_pct)
         self.exposure_manager = ExposureManager(max_exposure_pct=self.max_exposure_per_symbol_pct)
         
+        # Absolute dollar loss limit (GFT account protection)
+        self.absolute_max_loss_usd = Decimal(str(risk_config.get('absolute_max_loss_usd', 0)))
+        self.initial_balance = Decimal(str(config.get('account', {}).get('initial_balance', 0)))
+        
         # State tracking
         self.daily_start_equity = Decimal("0")
         self.equity_high_water_mark = Decimal("0")
@@ -148,6 +152,34 @@ class RiskEngine:
                     order_id=str(order.order_id)
                 )
                 return False, reason
+
+            # CHECK 3b: Absolute dollar loss limit (GFT account protection)
+            if self.absolute_max_loss_usd > 0 and self.initial_balance > 0:
+                total_loss = self.initial_balance - account_equity
+                if total_loss >= self.absolute_max_loss_usd:
+                    reason = f"ABSOLUTE LOSS LIMIT BREACHED: ${total_loss:.2f} >= ${self.absolute_max_loss_usd} (initial: ${self.initial_balance})"
+                    self.logger.critical(
+                        "🚨 ABSOLUTE DOLLAR LOSS LIMIT HIT - GFT PROTECTION 🚨",
+                        total_loss=float(total_loss),
+                        limit=float(self.absolute_max_loss_usd),
+                        initial_balance=float(self.initial_balance),
+                        current_equity=float(account_equity),
+                        order_id=str(order.order_id)
+                    )
+                    self._trigger_kill_switch(reason)
+                    raise DrawdownLimitError(
+                        reason,
+                        drawdown=total_loss / self.initial_balance,
+                        limit=self.absolute_max_loss_usd / self.initial_balance
+                    )
+                # Warn if approaching limit (80%)
+                elif total_loss >= self.absolute_max_loss_usd * Decimal("0.8"):
+                    self.logger.warning(
+                        "⚠️ Approaching ABSOLUTE LOSS LIMIT",
+                        total_loss=float(total_loss),
+                        limit=float(self.absolute_max_loss_usd),
+                        pct_used=float(total_loss / self.absolute_max_loss_usd * 100)
+                    )
 
             # CHECK 4: Daily loss limit
             daily_loss = -daily_pnl if daily_pnl < 0 else Decimal("0")
@@ -470,6 +502,44 @@ class RiskEngine:
             circuit_breaker_active=not self.circuit_breaker.is_trading_allowed()[0]
         )
     
+    def validate_account_balance(self, reported_balance: Decimal, mt5_balance: Decimal) -> bool:
+        """
+        Verify that reported balance matches reality from MT5.
+        
+        This prevents trading with stale/corrupted state information.
+        A tolerance of 0.1% is allowed for minor rounding differences.
+        
+        Args:
+            reported_balance: Balance from system state
+            mt5_balance: Balance from MT5 connector
+            
+        Returns:
+            True if within tolerance
+        """
+        if mt5_balance <= 0:
+            self.logger.critical("MT5 balance is zero or negative - safety halt")
+            return False
+            
+        difference = abs(reported_balance - mt5_balance)
+        tolerance = mt5_balance * Decimal("0.001") # 0.1% tolerance
+        
+        if difference > tolerance:
+            self.logger.error(
+                "BALANCE DISCREPANCY - safety check failed",
+                reported=float(reported_balance),
+                actual=float(mt5_balance),
+                difference=float(difference),
+                tolerance=float(tolerance)
+            )
+            return False
+            
+        self.logger.info(
+            "Balance verification successful",
+            reported=float(reported_balance),
+            actual=float(mt5_balance)
+        )
+        return True
+
     def _trigger_kill_switch(self, reason: str) -> None:
         """
         EMERGENCY STOP - Halt all trading immediately.

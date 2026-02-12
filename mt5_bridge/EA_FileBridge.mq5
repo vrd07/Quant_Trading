@@ -21,14 +21,14 @@ input bool EnableTrading = true;                    // MASTER KILL SWITCH - Set 
 input bool PanicCloseAll = false;                   // Set to TRUE to close all positions immediately
 
 input group "=== POSITION LIMITS ==="
-input int MaxOpenPositions = 40;                    // Maximum simultaneous positions
-input double MaxPositionSizePercent = 2.0;          // Max risk per trade (% of balance)
-input double MaxTotalExposureLots = 10.0;           // Max total lots across all positions
+input int MaxOpenPositions = 10;                    // Maximum simultaneous positions
+input double MaxPositionSizePercent = 1.0;          // Max risk per trade (% of balance)
+input double MaxTotalExposureLots = 5.0;            // Max total lots across all positions
 
 input group "=== DAILY LIMITS ==="
-input double MaxDailyLossPercent = 5.0;             // Stop trading if daily loss exceeds this %
+input double MaxDailyLossPercent = 3.0;             // Stop trading if daily loss exceeds this % (matches Python config)
 input double MaxDailyProfitPercent = 10.0;          // Stop trading if daily profit exceeds this % (take profits)
-input int MaxTradesPerDay = 20;                     // Maximum trades allowed per day
+input int MaxTradesPerDay = 50;                     // Maximum trades allowed per day (matches Python config)
 
 input group "=== TRADING HOURS ==="
 input bool UseTradingHours = false;                 // Enable/disable trading hours restriction

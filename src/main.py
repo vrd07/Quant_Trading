@@ -76,7 +76,13 @@ class TradingSystem:
         with open(config_file, 'r') as f:
             self.config = yaml.safe_load(f)
         
+        # Environment-specific paths
+        self.env = self.config.get('environment', 'dev')
+        
         # Logging
+        from src.monitoring.logger import setup_logger
+        log_file = f"data/logs/trading_system_{self.env}.log"
+        setup_logger(log_file=log_file, level=self.config.get('monitoring', {}).get('log_level', 'INFO'))
         self.logger = get_logger(__name__)
         
         # Components (initialized in setup)
@@ -165,8 +171,9 @@ class TradingSystem:
             
             # 8. Initialize state manager
             self.logger.info("8. Initializing state manager...")
-            self.state_manager = StateManager()
-            self.logger.info("✓ State manager ready")
+            state_dir = f"data/state/{self.env}"
+            self.state_manager = StateManager(state_dir=state_dir)
+            self.logger.info(f"✓ State manager ready (env: {self.env})")
             
             # 7b. Initialize metrics tracker
             self.logger.info("7b. Initializing metrics tracker...")
@@ -480,6 +487,16 @@ class TradingSystem:
                 mt5_account_info=mt5_account
             )
             
+            # 9b. Balance Sanity Check
+            if not self.risk_engine.validate_account_balance(
+                reported_balance=state.account_balance,
+                mt5_balance=mt5_account.get('balance', Decimal("0"))
+            ):
+                self.logger.critical("CRITICAL: Internal balance does not match MT5 account!")
+                self.logger.critical("This usually happens when switching accounts without cleaning state.")
+                self.logger.critical("Please check your environment and cleanup stale state files.")
+                sys.exit(1)
+            
             # Restore positions to portfolio
             for position in state.positions.values():
                 self.portfolio_engine.add_position(position)
@@ -585,10 +602,33 @@ class TradingSystem:
             self.logger.info("Saving final state...")
             self._save_state()
             
-            # Close positions if configured
+            # Close positions if configured (CRITICAL for live trading)
             if self.config.get('shutdown', {}).get('close_all_positions', False):
-                self.logger.info("Closing all positions...")
-                # Implementation depends on requirements
+                self.logger.info("Closing all positions on shutdown...")
+                try:
+                    positions = self.connector.get_positions()
+                    if positions:
+                        self.logger.info(f"Found {len(positions)} positions to close")
+                        for pos_id, pos in positions.items():
+                            try:
+                                ticket = pos.metadata.get('mt5_ticket', pos_id) if hasattr(pos, 'metadata') else pos_id
+                                result = self.connector.close_position(str(ticket))
+                                self.logger.info(
+                                    f"Closed position",
+                                    ticket=str(ticket),
+                                    symbol=pos.symbol.ticker if pos.symbol else '?',
+                                    result=result.get('status', '?')
+                                )
+                            except Exception as e:
+                                self.logger.error(
+                                    f"Failed to close position",
+                                    ticket=str(pos_id),
+                                    error=str(e)
+                                )
+                    else:
+                        self.logger.info("No open positions to close")
+                except Exception as e:
+                    self.logger.error("Error closing positions on shutdown", error=str(e))
             
             # Disconnect from MT5
             if self.connector:
@@ -625,6 +665,11 @@ def main():
         default='dev',
         help='Trading environment'
     )
+    parser.add_argument(
+        '--force-live',
+        action='store_true',
+        help='Skip live mode confirmation prompt (for automated restarts)'
+    )
     
     args = parser.parse_args()
     log_trace(f"Parsed args: {args}")
@@ -638,6 +683,42 @@ def main():
     
     config_file = config_files.get(args.env, args.config)
     log_trace(f"Using config file: {config_file}")
+    
+    # === LIVE MODE SAFETY GATE ===
+    if args.env == 'live' and not args.force_live:
+        # Load config to display details
+        import yaml as _yaml
+        with open(config_file, 'r') as _f:
+            _live_cfg = _yaml.safe_load(_f)
+        
+        _balance = _live_cfg.get('account', {}).get('initial_balance', '?')
+        _max_dd = _live_cfg.get('risk', {}).get('max_drawdown_pct', '?')
+        _abs_limit = _live_cfg.get('risk', {}).get('absolute_max_loss_usd', '?')
+        _max_pos = _live_cfg.get('risk', {}).get('max_positions', '?')
+        _risk_pt = _live_cfg.get('risk', {}).get('risk_per_trade_pct', '?')
+        
+        print("\n" + "=" * 60)
+        print("\033[91m" + "  ⚠️  LIVE TRADING MODE  ⚠️" + "\033[0m")
+        print("=" * 60)
+        print(f"  Account Balance:     ${_balance}")
+        print(f"  Max Drawdown:        {float(_max_dd)*100:.1f}% (${float(_balance)*float(_max_dd):.0f})")
+        print(f"  Absolute Loss Limit: ${_abs_limit}")
+        print(f"  Risk Per Trade:      {float(_risk_pt)*100:.2f}% (${float(_balance)*float(_risk_pt):.0f})")
+        print(f"  Max Positions:       {_max_pos}")
+        print("=" * 60)
+        print("\033[93m  This will trade REAL MONEY on your GFT account.\033[0m")
+        print("  Type 'CONFIRM LIVE' to proceed, or Ctrl+C to abort.")
+        print("=" * 60)
+        
+        try:
+            user_input = input("\n  > ").strip()
+            if user_input != "CONFIRM LIVE":
+                print("\n  Aborted. Use --env paper for paper trading.")
+                return
+            print("\n  ✓ Live trading confirmed. Starting system...\n")
+        except (KeyboardInterrupt, EOFError):
+            print("\n  Aborted.")
+            return
     
     # Create and run system
     try:

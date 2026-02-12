@@ -1,0 +1,17 @@
+{
+  "timestamp": "2026-02-12T15:44:50.713063+00:00",
+  "positions": {},
+  "open_orders": {},
+  "account_balance": "4635.62",
+  "account_equity": "4635.62",
+  "equity_high_water_mark": "0",
+  "daily_start_equity": "0",
+  "daily_pnl": "0",
+  "total_pnl": "0",
+  "consecutive_losses": 0,
+  "daily_trades_count": 0,
+  "kill_switch_active": false,
+  "circuit_breaker_active": false,
+  "last_trade_time": null,
+  "metadata": {}
+}

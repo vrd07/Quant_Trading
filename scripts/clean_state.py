@@ -1,67 +1,49 @@
-
 import json
-import shutil
 import os
-from datetime import datetime
+import sys
+from pathlib import Path
 
-STATE_FILE = "data/state/system_state.json"
-BACKUP_FILE = f"data/state/system_state.backup.{datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
 
 def clean_state():
-    if not os.path.exists(STATE_FILE):
-        print(f"State file {STATE_FILE} not found.")
+    state_file = PROJECT_ROOT / "data/state/system_state.json"
+    
+    if not state_file.exists():
+        print(f"State file not found at {state_file}")
         return
 
-    # Backup first
-    shutil.copy(STATE_FILE, BACKUP_FILE)
-    print(f"Backed up state to {BACKUP_FILE}")
-
-    with open(STATE_FILE, "r") as f:
+    print(f"Backing up and cleaning {state_file}...")
+    
+    # Backup
+    backup_file = state_file.with_suffix(".json.bak")
+    with open(state_file, 'r') as f:
         state = json.load(f)
-
-    positions = state.get("positions", {})
-    print(f"Current positions: {len(positions)}")
-
-    # Group by (Symbol, Side, Entry Price) to find duplicates
-    unique_positions = {}
-    duplicates_removed = 0
-    
-    # We want to keep the OLDEST position (first opened)
-    # Sort positions by opened_at
-    sorted_positions = sorted(
-        positions.items(),
-        key=lambda x: x[1].get('opened_at', '')
-    )
-    
-    cleaned_positions = {}
-    
-    for pid, pos in sorted_positions:
-        symbol = pos.get("symbol", {}).get("ticker", "UNKNOWN") if isinstance(pos.get("symbol"), dict) else str(pos.get("symbol"))
-        side = pos.get("side")
-        entry_price = float(pos.get("entry_price", 0))
-        quantity = float(pos.get("quantity", 0))
         
-        # Key for uniqueness: Symbol + Side + Approx Entry Price + Quantity
-        # Round entry price to 2 decimal places for grouping
-        key = (symbol, side, round(entry_price, 2), quantity)
-        
-        if key not in unique_positions:
-            unique_positions[key] = pid
-            cleaned_positions[pid] = pos
-        else:
-            duplicates_removed += 1
-            # print(f"Removing duplicate: {symbol} {side} @ {entry_price}")
-
-    print(f"Removed {duplicates_removed} duplicate positions.")
-    print(f"Remaining positions: {len(cleaned_positions)}")
-    
-    state["positions"] = cleaned_positions
-    state["metadata"]["cleaned_at"] = datetime.now().isoformat()
-    
-    with open(STATE_FILE, "w") as f:
+    with open(backup_file, 'w') as f:
         json.dump(state, f, indent=2)
-        
-    print("State cleaned successfully.")
+    
+    print(f"Backup created at {backup_file}")
+    
+    # Clean positions and orders
+    old_pos_count = len(state.get('positions', {}))
+    old_order_count = len(state.get('open_orders', {}))
+    
+    state['positions'] = {}
+    state['open_orders'] = {}
+    state['daily_pnl'] = "0"
+    state['total_pnl'] = "0"
+    state['daily_trades_count'] = 0
+    state['consecutive_losses'] = 0
+    state['kill_switch_active'] = False
+    state['circuit_breaker_active'] = False
+    
+    with open(state_file, 'w') as f:
+        json.dump(state, f, indent=2)
+    
+    print(f"Cleaned {old_pos_count} phantom positions and {old_order_count} orders.")
+    print("System will now reload actual positions from MT5 on next restart.")
 
 if __name__ == "__main__":
     clean_state()

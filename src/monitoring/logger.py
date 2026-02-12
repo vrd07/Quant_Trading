@@ -80,6 +80,50 @@ class TradingLogger:
 
 
 _loggers = {}
+_setup_done = False
+
+
+def setup_logger(log_file: str = None, level: str = 'INFO') -> None:
+    """
+    Configure global logging settings.
+    
+    Args:
+        log_file: Path to environment-specific log file (e.g., 'data/logs/trading_system_live.log')
+        level: Logging level string (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    global _setup_done
+    if _setup_done:
+        return
+    
+    import os
+    from logging.handlers import RotatingFileHandler
+    
+    log_level = getattr(logging, level.upper(), logging.INFO)
+    
+    # Configure root logger
+    root = logging.getLogger()
+    root.setLevel(log_level)
+    
+    # Add environment-specific file handler if specified
+    if log_file:
+        log_dir = os.path.dirname(log_file)
+        if log_dir and not os.path.exists(log_dir):
+            os.makedirs(log_dir, exist_ok=True)
+        
+        file_handler = RotatingFileHandler(
+            log_file,
+            maxBytes=10*1024*1024,  # 10MB
+            backupCount=5
+        )
+        file_handler.setLevel(log_level)
+        formatter = logging.Formatter(
+            '%(asctime)s | %(levelname)-8s | %(name)s | %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
+        )
+        file_handler.setFormatter(formatter)
+        root.addHandler(file_handler)
+    
+    _setup_done = True
 
 
 def get_logger(name: str) -> TradingLogger:

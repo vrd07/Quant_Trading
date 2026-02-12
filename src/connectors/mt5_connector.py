@@ -51,6 +51,7 @@ class MT5Connector:
             self.connected = False
             self.last_heartbeat = None
             self.symbols_cache: Dict[str, Symbol] = {}
+            self._symbol_map: Dict[str, str] = {}
             logger.info("MT5Connector initialized successfully")
             
         except Exception as e:
@@ -203,9 +204,14 @@ class MT5Connector:
         """
         logger.info("Placing order: %s %s %s", side.value, quantity, symbol)
         
+        # Use mapped symbol if available (e.g. BTCUSD -> BTCUSD.x)
+        mapped_symbol = self._symbol_map.get(symbol, symbol)
+        if mapped_symbol != symbol:
+             logger.info("Using mapped symbol for order: %s -> %s", symbol, mapped_symbol)
+        
         try:
             response = self.client.place_order(
-                symbol=symbol,
+                symbol=mapped_symbol,
                 order_type=side.value,
                 volume=float(quantity),
                 price=float(price) if price else None,
@@ -308,8 +314,37 @@ class MT5Connector:
             
             # 1. Check for quotes object (Multi-Symbol Support)
             quotes = status.get('quotes', {})
+            
+            # Log available symbols on first encounter for debugging
+            if not hasattr(self, '_logged_quotes_keys'):
+                self._logged_quotes_keys = True
+                if quotes:
+                    logger.info("Available quote symbols from EA: %s", list(quotes.keys()))
+                else:
+                    logger.warning("No quotes in status file. Keys: %s", list(status.keys()))
+            
+            # Try exact match first, then fuzzy match for broker suffixes
+            quote = None
+            matched_symbol = None
+            
             if symbol in quotes:
                 quote = quotes[symbol]
+                matched_symbol = symbol
+            else:
+                # Fuzzy match: find any quote symbol that starts with our symbol
+                # (handles suffixes like BTCUSDi, BTCUSD.i, BTCUSD.raw, etc.)
+                for broker_sym in quotes:
+                    if broker_sym.startswith(symbol) or symbol.startswith(broker_sym):
+                        quote = quotes[broker_sym]
+                        matched_symbol = broker_sym
+                        if not hasattr(self, '_symbol_map'):
+                            self._symbol_map = {}
+                        if symbol not in self._symbol_map:
+                            self._symbol_map[symbol] = matched_symbol
+                            logger.info("Symbol mapped: %s -> %s (broker name)", symbol, matched_symbol)
+                        break
+            
+            if quote:
                 tick = Tick(
                     symbol=self._get_or_create_symbol(symbol),
                     timestamp=datetime.now(timezone.utc),
@@ -322,7 +357,8 @@ class MT5Connector:
                 return tick
 
             # 2. Fallback to single symbol check (Backward Compatibility)
-            if status.get('symbol') == symbol:
+            status_sym = status.get('symbol', '')
+            if status_sym == symbol or status_sym.startswith(symbol) or symbol.startswith(status_sym):
                 tick = Tick(
                     symbol=self._get_or_create_symbol(symbol),
                     timestamp=datetime.now(timezone.utc),

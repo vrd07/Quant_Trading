@@ -12,3 +12,89 @@
 2026-02-11 16:40:25.724821: Parsed args: Namespace(config='config/config.yaml', env='paper')
 2026-02-11 16:40:25.724899: Using config file: config/config_paper.yaml
 2026-02-11 16:40:25.745613: TradingSystem initialized
+2026-02-11 17:02:06.072591: Entering main()
+2026-02-11 17:02:06.076288: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-11 17:02:06.076397: Using config file: config/config_paper.yaml
+2026-02-11 17:02:06.097606: TradingSystem initialized
+2026-02-11 17:07:32.492603: TradingSystem.run() finished
+2026-02-11 17:08:37.412091: Entering main()
+2026-02-11 17:08:37.415189: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-11 17:08:37.415263: Using config file: config/config_paper.yaml
+2026-02-11 17:08:37.435550: TradingSystem initialized
+2026-02-11 17:29:16.852649: TradingSystem.run() finished
+2026-02-12 11:04:01.583714: Entering main()
+2026-02-12 11:04:01.586954: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-12 11:04:01.587032: Using config file: config/config_paper.yaml
+2026-02-12 11:04:01.607306: TradingSystem initialized
+2026-02-12 11:26:09.006899: TradingSystem.run() finished
+2026-02-12 11:42:18.284472: Entering main()
+2026-02-12 11:42:18.287785: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-12 11:42:18.287939: Using config file: config/config_paper.yaml
+2026-02-12 11:42:18.309136: TradingSystem initialized
+2026-02-12 11:47:13.813579: TradingSystem.run() finished
+2026-02-12 11:48:17.165931: Entering main()
+2026-02-12 11:48:17.169882: Parsed args: Namespace(config='config/config.yaml', env='paper')
+2026-02-12 11:48:17.169973: Using config file: config/config_paper.yaml
+2026-02-12 11:48:17.191558: TradingSystem initialized
+2026-02-12 11:54:40.831587: TradingSystem.run() finished
+2026-02-12 13:25:27.359087: TradingSystem.run() finished
+2026-02-12 13:48:46.869082: Entering main()
+2026-02-12 13:48:46.876374: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-12 13:48:46.876471: Using config file: config/config_live.yaml
+2026-02-12 13:48:46.881339: Error in main: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+2026-02-12 13:48:46.882213: Traceback (most recent call last):
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 725, in main
+    system = TradingSystem(config_file=config_file)
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 83, in __init__
+    from src.monitoring.logger import setup_logger
+ImportError: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+
+2026-02-12 13:51:00.601435: Entering main()
+2026-02-12 13:51:00.603766: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 13:51:00.603824: Using config file: config/config_live.yaml
+2026-02-12 13:51:16.129813: Error in main: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+2026-02-12 13:51:16.131203: Traceback (most recent call last):
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 725, in main
+    system = TradingSystem(config_file=config_file)
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 83, in __init__
+    from src.monitoring.logger import setup_logger
+ImportError: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+
+2026-02-12 13:51:43.003165: Entering main()
+2026-02-12 13:51:43.006024: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 13:51:43.006101: Using config file: config/config_live.yaml
+2026-02-12 13:51:51.891664: Error in main: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+2026-02-12 13:51:51.892486: Traceback (most recent call last):
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 725, in main
+    system = TradingSystem(config_file=config_file)
+  File "/Users/varadbandekar/Documents/Quant_trading/src/main.py", line 83, in __init__
+    from src.monitoring.logger import setup_logger
+ImportError: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Users/varadbandekar/Documents/Quant_trading/src/monitoring/logger.py)
+
+2026-02-12 13:56:54.162388: Entering main()
+2026-02-12 13:56:54.165010: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 13:56:54.165193: Using config file: config/config_live.yaml
+2026-02-12 13:57:04.496247: TradingSystem initialized
+2026-02-12 14:17:28.522214: TradingSystem.run() finished
+2026-02-12 14:27:47.390675: Entering main()
+2026-02-12 14:27:47.393196: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 14:27:47.393265: Using config file: config/config_live.yaml
+2026-02-12 14:27:52.033233: Entering main()
+2026-02-12 14:27:52.035181: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 14:27:52.035291: Using config file: config/config_live.yaml
+2026-02-12 14:28:05.602886: TradingSystem initialized
+2026-02-12 15:10:24.585463: TradingSystem.run() finished
+2026-02-12 15:13:18.643220: Entering main()
+2026-02-12 15:13:18.645583: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=False)
+2026-02-12 15:13:18.645637: Using config file: config/config_live.yaml
+2026-02-12 15:13:30.624752: TradingSystem initialized
+2026-02-12 16:25:56.940645: TradingSystem.run() finished
+2026-02-12 16:26:14.471008: Entering main()
+2026-02-12 16:26:14.473809: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-12 16:26:14.473870: Using config file: config/config_live.yaml
+2026-02-12 16:26:14.487489: TradingSystem initialized
+2026-02-12 20:43:06.590071: TradingSystem.run() finished
+2026-02-12 20:43:09.869254: Entering main()
+2026-02-12 20:43:09.871623: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-12 20:43:09.871688: Using config file: config/config_live.yaml
+2026-02-12 20:43:09.888402: TradingSystem initialized

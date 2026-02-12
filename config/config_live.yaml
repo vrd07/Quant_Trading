@@ -1,20 +1,156 @@
 # Live Trading Environment Configuration
-# PRODUCTION - USE WITH EXTREME CAUTION
+# PRODUCTION ACCOUNT - $4,000 Balance
+# MAX LOSS LIMIT: $250 (Account Breach Threshold)
 
-system:
-  environment: live
+environment: live
 
-# Strict live trading risk limits
+account:
+  initial_balance: 4000.0
+  currency: USD
+  leverage: 100
+
+symbols:
+  XAUUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 100
+    commission_per_lot: 0.0
+  
+  BTCUSD:
+    enabled: true
+    pip_value: 0.1
+    min_lot: 0.01
+    max_lot: 2.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+
 risk:
-  max_daily_loss: 1000.00
-  max_position_size: 2.0  # lots
-  max_drawdown_pct: 0.10
-  require_manual_approval: true  # for large orders
+  # STRICT LIVE RISK LIMITS
+  # 5% Max Drawdown ($200) to stop before the $250 breach
+  max_drawdown_pct: 0.05          
+  max_daily_loss_pct: 0.03        # 3% ($120) Daily limit
+  
+  # 0.5% risk per trade ($20) to survive losing streaks
+  risk_per_trade_pct: 0.005       
+  
+  # ABSOLUTE DOLLAR LOSS LIMIT (GFT account protection)
+  # Kill switch triggers at $240 loss, leaving $10 buffer before $250 breach
+  absolute_max_loss_usd: 240
+  
+  max_positions: 10               # Match EA setting for live
+  max_daily_trades: 50
+  max_exposure_per_symbol_pct: 2.0    # Increased to 2.0 (200%) to allow XAUUSD min lot (0.01 lot = ~$5k notional > $4k equity)
+  
+  position_sizing:
+    method: fixed_fractional
+  
+  circuit_breaker:
+    enabled: true
+    max_consecutive_losses: 3
+    cooldown_minutes: 60
 
-# Live trading monitoring (strict)
+strategies:
+  signal_cooldown_minutes: 10  # Reduced to 10m as requested (was 30m)
+  primary_timeframe: 1m  # Keeping 1m as per user's success
+  min_bars_required: 10  # Slightly more data for live stability
+  
+  regime_filter:
+    enabled: true
+    adx_period: 14       # Normalized for live
+    adx_trend_threshold: 25
+    adx_range_threshold: 20
+    atr_period: 14
+    atr_ma_period: 20
+    use_hurst: true
+    hurst_period: 100
+    hurst_trend_threshold: 0.55
+    hurst_range_threshold: 0.45
+  
+  breakout:
+    enabled: true
+    donchian_period: 20  # Use standard period for live
+    confirmation_bars: 1 # Require 1 bar confirmation for safety
+    rr_ratio: 2.0
+    only_in_regime: TREND
+    mtf_confirmation: true
+  
+  mean_reversion:
+    enabled: true
+    zscore_lookback: 20
+    entry_threshold: 2.0
+    exit_threshold: 0.5
+    stop_threshold: 3.0
+    rr_ratio: 2.0
+    only_in_regime: RANGE
+    mtf_confirmation: false
+  
+  # VWAP Deviation Strategy (proven in paper trading)
+  vwap:
+    enabled: true
+    atr_multiplier: 1.5
+    stop_atr_multiplier: 2.0
+    atr_period: 14
+    min_volume_ratio: 1.0
+    only_in_regime: RANGE
+  
+  # Momentum Scalping Strategy (proven in paper trading)
+  momentum:
+    enabled: true
+    rsi_period: 14
+    ema_period: 20
+    rr_ratio: 2.0
+    atr_stop_multiplier: 1.5
+    rsi_bull_threshold: 50
+    rsi_bear_threshold: 50
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    only_in_regime: TREND
+
+trading_hours:
+  sessions:
+    - name: london
+      start: "07:00"
+      end: "16:00"
+      enabled: true
+    - name: new_york
+      start: "12:00"
+      end: "21:00"
+      enabled: true
+  
+  news_filter:
+    enabled: true  # ALWAYS ON FOR LIVE
+
 monitoring:
   log_level: INFO
-  enable_console_logging: false
-  enable_alerts: true
-  alert_on_trade: true
-  alert_on_error: true
+  state_save_interval_sec: 10 # Very frequent for live
+  enable_console_logging: true
+  
+  alerts:
+    kill_switch: true
+    daily_loss_pct: 0.02 # Alert at 2% loss
+
+data:
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  history_bars: 1000
+  tick_buffer_size: 5000
+
+portfolio:
+  reconciliation_interval_sec: 30 # Check MT5 every 30s
+
+file_bridge:
+  enabled: true
+  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  check_interval_ms: 100
+
+shutdown:
+  close_all_positions: true # Safety first in live
+  save_state: true

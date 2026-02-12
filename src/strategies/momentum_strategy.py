@@ -101,12 +101,12 @@ class MomentumStrategy(BaseStrategy):
             return None
         
         # Check for bullish momentum confluence
+        # LIVE SAFETY: Require actual MACD crossover, not just histogram increasing
         rsi_bullish = current_rsi > self.rsi_bull_threshold
-        macd_turning_positive = current_histogram > 0 and prev_histogram <= 0
-        macd_bullish = current_histogram > prev_histogram  # Histogram increasing
+        macd_turning_positive = current_histogram > 0 and prev_histogram <= 0  # Zero-line crossover only
         price_above_ema = current_close > current_ema
         
-        if rsi_bullish and (macd_turning_positive or macd_bullish) and price_above_ema:
+        if rsi_bullish and macd_turning_positive and price_above_ema:
             stop_loss = current_close - (self.atr_stop_multiplier * current_atr)
             risk = current_close - stop_loss
             take_profit = current_close + (risk * self.rr_ratio)
@@ -130,12 +130,12 @@ class MomentumStrategy(BaseStrategy):
             )
         
         # Check for bearish momentum confluence
+        # LIVE SAFETY: Require actual MACD crossover, not just histogram decreasing
         rsi_bearish = current_rsi < self.rsi_bear_threshold
-        macd_turning_negative = current_histogram < 0 and prev_histogram >= 0
-        macd_bearish = current_histogram < prev_histogram  # Histogram decreasing
+        macd_turning_negative = current_histogram < 0 and prev_histogram >= 0  # Zero-line crossover only
         price_below_ema = current_close < current_ema
         
-        if rsi_bearish and (macd_turning_negative or macd_bearish) and price_below_ema:
+        if rsi_bearish and macd_turning_negative and price_below_ema:
             stop_loss = current_close + (self.atr_stop_multiplier * current_atr)
             risk = stop_loss - current_close
             take_profit = current_close - (risk * self.rr_ratio)

@@ -64,12 +64,12 @@ class VWAPStrategy(BaseStrategy):
             self._log_no_signal("Insufficient data")
             return None
         
-        # Check regime
+        # Check regime - restrict to RANGE only for live safety
+        # In trends, price stays above/below VWAP causing repeated stop-outs
         regime = self.regime_filter.classify(bars)
         
-        # VWAP works in any regime but best in RANGE
-        if regime == MarketRegime.UNKNOWN:
-            self._log_no_signal("Regime unknown")
+        if regime != self.only_in_regime:
+            self._log_no_signal(f"Regime is {regime.value}, need {self.only_in_regime.value}")
             return None
         
         # Calculate VWAP and deviation bands

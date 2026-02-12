@@ -1,0 +1,2726 @@
+{
+  "timestamp": "2026-02-12T07:51:05.234607+00:00",
+  "positions": {
+    "6983eedb-073a-4da7-8ce7-81daeb79f589": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66665.57",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.8080",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745417+00:00",
+      "metadata": {
+        "mt5_ticket": 808968930,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "a4e81fd9-04d0-4914-b770-1767c8fdcd2c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66665.57",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.8080",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745483+00:00",
+      "metadata": {
+        "mt5_ticket": 808968931,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "0dd2ccec-e880-46c9-8d1b-055c470290b8": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66667.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.6090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745522+00:00",
+      "metadata": {
+        "mt5_ticket": 808969262,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "cc66cc81-93b2-4735-b695-354eb101d4ee": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66667.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.6090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745560+00:00",
+      "metadata": {
+        "mt5_ticket": 808969263,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "13bd868d-4295-4921-81c6-e63a15fa1b57": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66667.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.6090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745592+00:00",
+      "metadata": {
+        "mt5_ticket": 808969617,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "26ed273c-a4ef-49cb-9556-78d758d8a27b": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66667.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.6090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745622+00:00",
+      "metadata": {
+        "mt5_ticket": 808969618,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b0c56911-9578-4b6d-b718-6b47b3c1ae7c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66675.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745652+00:00",
+      "metadata": {
+        "mt5_ticket": 808969766,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e155e8aa-99d7-4c5d-91c7-8cb7703acba4": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66675.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745681+00:00",
+      "metadata": {
+        "mt5_ticket": 808969769,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "5c2e14a4-cfb2-4a91-8bc1-471a91c9b9ee": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66676.82",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.6830",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745710+00:00",
+      "metadata": {
+        "mt5_ticket": 808969908,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "d0ae09cb-0bba-4e8d-8bb1-43977e3d2234": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66676.82",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.6830",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745739+00:00",
+      "metadata": {
+        "mt5_ticket": 808969913,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e30badc8-a227-499e-b4cb-372cc0cb3e8d": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66678.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.5090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745774+00:00",
+      "metadata": {
+        "mt5_ticket": 808970067,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "375ebbb4-2989-48c5-a3c2-79ad84bd7524": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66678.56",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.5090",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745805+00:00",
+      "metadata": {
+        "mt5_ticket": 808970068,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e04c6781-8e10-4c98-bb33-aad7a6251116": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66669.13",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.4520",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745834+00:00",
+      "metadata": {
+        "mt5_ticket": 808970167,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e192adc2-bf81-4a29-b3af-22aa846d12af": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66669.13",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.4520",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745863+00:00",
+      "metadata": {
+        "mt5_ticket": 808970170,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "8af38c8c-5413-4dd1-b854-4e9cb88bfb5f": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66670.03",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3620",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745892+00:00",
+      "metadata": {
+        "mt5_ticket": 808970246,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "a7a4d109-8ad5-4c44-ba9d-4b25e7b60eb5": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66670.03",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3620",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745921+00:00",
+      "metadata": {
+        "mt5_ticket": 808970247,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "39ce7b03-97fc-4d66-b46a-ac26e89b43df": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66669.95",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3700",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745950+00:00",
+      "metadata": {
+        "mt5_ticket": 808970306,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "d10a1316-a611-46ad-842b-2cfa66e84c8b": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66669.95",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3700",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.745980+00:00",
+      "metadata": {
+        "mt5_ticket": 808970307,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "5c784eda-e290-48a1-bfc2-d0afe3eb22e1": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66670.0",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3650",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746010+00:00",
+      "metadata": {
+        "mt5_ticket": 808970379,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "6bf11bb1-84d7-48df-8c85-8856461312e4": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66670.0",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.3650",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746038+00:00",
+      "metadata": {
+        "mt5_ticket": 808970380,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b5ad7bf8-76b0-4bad-aa8a-8c6e4d50f85a": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66674.78",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8870",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746067+00:00",
+      "metadata": {
+        "mt5_ticket": 808970425,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "04822b6c-5b4b-41e1-a3fe-5294994c7640": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66674.78",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8870",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746095+00:00",
+      "metadata": {
+        "mt5_ticket": 808970428,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "f270ef7c-0b57-45ee-b31d-292358623898": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66672.86",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0790",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746133+00:00",
+      "metadata": {
+        "mt5_ticket": 808970484,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "97c88d66-673a-41b1-be04-10db79dbcc11": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66672.86",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0790",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746163+00:00",
+      "metadata": {
+        "mt5_ticket": 808970485,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "05824943-449d-4614-8381-7648f999fc87": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66672.8",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746198+00:00",
+      "metadata": {
+        "mt5_ticket": 808970617,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "c71c18cc-d7e3-4c5f-acb5-d8e62f5cfe0d": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66672.8",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746229+00:00",
+      "metadata": {
+        "mt5_ticket": 808970618,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "c9cdfa3c-67af-4011-93cf-412e109874d3": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746259+00:00",
+      "metadata": {
+        "mt5_ticket": 808970652,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e7999192-8d9a-4493-b439-2d63b0e2c623": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746288+00:00",
+      "metadata": {
+        "mt5_ticket": 808970655,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "33a90e43-5ba6-4154-a193-38e6b7cff316": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746322+00:00",
+      "metadata": {
+        "mt5_ticket": 808970685,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "aaa31791-0ea5-4fce-8c23-50ad85e668cd": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746351+00:00",
+      "metadata": {
+        "mt5_ticket": 808970687,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "1bcbb8c4-3617-43e7-8b09-4b2458def7fa": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746379+00:00",
+      "metadata": {
+        "mt5_ticket": 808970805,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "416f6807-9522-4b89-af3f-b787f43328da": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.49",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-51.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746407+00:00",
+      "metadata": {
+        "mt5_ticket": 808970817,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "5516f455-729e-45c6-8857-6ca5d4c5896b": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.74",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.9910",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746436+00:00",
+      "metadata": {
+        "mt5_ticket": 808970901,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b74d4072-4834-40f1-a6a9-71ea16747ec9": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.74",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.9910",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746464+00:00",
+      "metadata": {
+        "mt5_ticket": 808970906,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "7e582b4d-884a-4e6f-af6b-c62bcb89e8a6": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.74",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.9910",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746493+00:00",
+      "metadata": {
+        "mt5_ticket": 808970944,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "29fbaba6-a70a-4faf-a08e-4e41ebdeec3f": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66673.74",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.9910",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746521+00:00",
+      "metadata": {
+        "mt5_ticket": 808970946,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b7d37899-9534-477e-ae13-72279e2c0c62": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66675.19",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8460",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746549+00:00",
+      "metadata": {
+        "mt5_ticket": 808970959,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "613456d5-81be-4060-9a17-83d61d705f36": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66675.19",
+      "current_price": "67183.65",
+      "stop_loss": "66713.62",
+      "take_profit": "66581.92",
+      "unrealized_pnl": "-50.8460",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:16:32.746577+00:00",
+      "metadata": {
+        "mt5_ticket": 808970960,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "549e831c-cdd7-4d89-a683-19fa42f57cbc": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5095.86",
+      "current_price": "5060.87",
+      "stop_loss": "5094.08",
+      "take_profit": "5099.09",
+      "unrealized_pnl": "3.4990",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:19:39.566543+00:00",
+      "metadata": {
+        "mt5_ticket": 808979879,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "1b7efc57-4907-42e7-8cba-44c8c4362140": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5095.86",
+      "current_price": "5060.87",
+      "stop_loss": "5094.08",
+      "take_profit": "5099.09",
+      "unrealized_pnl": "3.4990",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:19:39.566610+00:00",
+      "metadata": {
+        "mt5_ticket": 808979880,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "f01556b9-6b4c-4908-8ca1-b58c0f829105": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.42",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5550",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043617+00:00",
+      "metadata": {
+        "mt5_ticket": 809084078,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "83c3fc17-5093-4518-9d0a-503c11ab3017": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.42",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5550",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043696+00:00",
+      "metadata": {
+        "mt5_ticket": 809084079,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "4f158a4e-7d48-4b49-8efd-f9c32eb5c7bb": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.17",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5300",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043741+00:00",
+      "metadata": {
+        "mt5_ticket": 809084441,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "65ca3fc9-7de5-4c42-b048-f259c42c4795": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.17",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5300",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043784+00:00",
+      "metadata": {
+        "mt5_ticket": 809084443,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "be939e97-dd44-4488-926f-7c7d451c72f6": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.11",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5240",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043824+00:00",
+      "metadata": {
+        "mt5_ticket": 809084538,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "017b6a86-487f-49ac-8ed5-c51bfe3a6cd4": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.1",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5230",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043864+00:00",
+      "metadata": {
+        "mt5_ticket": 809084541,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "402ff8b9-1a8a-4029-9e83-ec742918c169": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.05",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5180",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043906+00:00",
+      "metadata": {
+        "mt5_ticket": 809084648,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "dfd9f48a-d7d4-49b2-9bf7-0191fa537509": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5106.04",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.5170",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043946+00:00",
+      "metadata": {
+        "mt5_ticket": 809084649,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "a55a0f92-6860-41ce-b218-445b194a2451": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.85",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4980",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.043988+00:00",
+      "metadata": {
+        "mt5_ticket": 809084725,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "1e23f209-dd6f-4deb-a884-2edec1616497": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.85",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4980",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044027+00:00",
+      "metadata": {
+        "mt5_ticket": 809084728,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "c6664b0a-d368-41fe-a512-86dc1eb79f1f": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.49",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4620",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044067+00:00",
+      "metadata": {
+        "mt5_ticket": 809084987,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "09408834-e145-456f-b62a-2995f6ec301f": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.49",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4620",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044107+00:00",
+      "metadata": {
+        "mt5_ticket": 809084988,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "100661e1-3181-49b8-8067-fc85634930eb": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.3",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4430",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044146+00:00",
+      "metadata": {
+        "mt5_ticket": 809085115,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b3b47346-e5e4-4fb2-b91f-5a0274a7be7e": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.3",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4430",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044185+00:00",
+      "metadata": {
+        "mt5_ticket": 809085120,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "72a16e05-84d9-40bc-a7b4-28a207c84201": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.28",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4410",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044223+00:00",
+      "metadata": {
+        "mt5_ticket": 809085198,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "273c1dea-7849-4a0a-982d-958575223663": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.28",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4410",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044261+00:00",
+      "metadata": {
+        "mt5_ticket": 809085208,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "9e724a4b-0e25-4c17-b181-c89976d61e0a": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.2",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4330",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044299+00:00",
+      "metadata": {
+        "mt5_ticket": 809085456,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "6a0470e4-3132-4a10-971c-a36efda3edc3": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5105.2",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4330",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044340+00:00",
+      "metadata": {
+        "mt5_ticket": 809085459,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e3c759c8-1994-42b3-9720-e930902a74b4": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.76",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3890",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044379+00:00",
+      "metadata": {
+        "mt5_ticket": 809085610,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "4dbb45d3-11a6-49da-80f0-4929bc2a8288": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.76",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3890",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044417+00:00",
+      "metadata": {
+        "mt5_ticket": 809085612,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "2018461c-1311-4b86-a2dd-8163767444b3": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.92",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4050",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044455+00:00",
+      "metadata": {
+        "mt5_ticket": 809085824,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "14569814-2997-452e-a56f-1530628797b7": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.92",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4050",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044514+00:00",
+      "metadata": {
+        "mt5_ticket": 809085826,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "47b28c70-5aaa-4ff8-aa24-e97fa2e28850": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.94",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4070",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044557+00:00",
+      "metadata": {
+        "mt5_ticket": 809085896,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "0f7267e7-8fee-4bca-8aaf-38671bbd59a4": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.94",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4070",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044595+00:00",
+      "metadata": {
+        "mt5_ticket": 809085897,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "60403ab3-e44d-4a40-8432-2d1617e9bd40": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.95",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4080",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044633+00:00",
+      "metadata": {
+        "mt5_ticket": 809085943,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "201c1fab-4b00-4892-ad4c-22813471bb16": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.95",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4080",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044662+00:00",
+      "metadata": {
+        "mt5_ticket": 809085944,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "db757d97-cf9f-44df-9bca-a7295f8ab57a": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.91",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4040",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044689+00:00",
+      "metadata": {
+        "mt5_ticket": 809085993,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "7a708a7b-ab02-4713-b636-3e77678514c7": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.91",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.4040",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044725+00:00",
+      "metadata": {
+        "mt5_ticket": 809085994,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "356c4c71-3d28-48f9-ab7e-6b4411e2badc": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.72",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044755+00:00",
+      "metadata": {
+        "mt5_ticket": 809086048,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "155d0495-8940-48d0-b2db-ad840b527277": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.72",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044784+00:00",
+      "metadata": {
+        "mt5_ticket": 809086049,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "85303a12-aa79-48ed-81f9-8a27d3ec1325": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.74",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3870",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044812+00:00",
+      "metadata": {
+        "mt5_ticket": 809086088,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "5650bd18-5225-4b90-8e57-15f469b43968": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.74",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3870",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044840+00:00",
+      "metadata": {
+        "mt5_ticket": 809086089,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "f6d34a7c-df4f-4e74-885b-9cee36195939": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.72",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044868+00:00",
+      "metadata": {
+        "mt5_ticket": 809086191,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b1fbd34b-9fd1-48f0-906c-bd3c7dfd0158": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.72",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3850",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044896+00:00",
+      "metadata": {
+        "mt5_ticket": 809086192,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "6b2f3d4e-85ce-4b23-99da-1b7bf4fd504f": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.23",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3360",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044923+00:00",
+      "metadata": {
+        "mt5_ticket": 809086437,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "6380cdb0-9b99-4395-b65c-3688017493ec": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5104.23",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3360",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044951+00:00",
+      "metadata": {
+        "mt5_ticket": 809086438,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "ad1a110c-5941-4c45-9b2c-d37e8aea890f": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5103.86",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.2990",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.044979+00:00",
+      "metadata": {
+        "mt5_ticket": 809086549,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "483dee1a-4d8a-4747-9374-987986a6ea02": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5103.86",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.2990",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.045006+00:00",
+      "metadata": {
+        "mt5_ticket": 809086550,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "042c59c9-7b0e-4aa4-ba16-9a4d2985d7ff": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5103.88",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3010",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.045036+00:00",
+      "metadata": {
+        "mt5_ticket": 809086688,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "8090701f-e14a-460d-b59f-5a2efa582c6f": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5103.88",
+      "current_price": "5060.87",
+      "stop_loss": "5101.97",
+      "take_profit": "5116.83",
+      "unrealized_pnl": "4.3010",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-11T11:44:42.045063+00:00",
+      "metadata": {
+        "mt5_ticket": 809086693,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "0bdc4b59-609c-49b6-858b-481a6e9a772c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66953.47",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.0180",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232529+00:00",
+      "metadata": {
+        "mt5_ticket": 813881035,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "2fa72697-f5c6-4a02-85ad-60866399f428": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66953.49",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.0160",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232570+00:00",
+      "metadata": {
+        "mt5_ticket": 813881036,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e3ab9ac6-b803-4657-9700-c4ae105ae451": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66946.04",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.7610",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232592+00:00",
+      "metadata": {
+        "mt5_ticket": 813881146,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "054e8753-106e-4ca6-84cc-0979c75f75fa": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66946.04",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.7610",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232613+00:00",
+      "metadata": {
+        "mt5_ticket": 813881155,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b7c1086b-12a3-443d-9a7d-96ac5c4fd887": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66941.5",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-24.2150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232634+00:00",
+      "metadata": {
+        "mt5_ticket": 813881265,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "cde599de-e55c-4d24-a764-bbe58403ccd3": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66941.5",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-24.2150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232653+00:00",
+      "metadata": {
+        "mt5_ticket": 813881266,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "cba54627-90e0-4d5b-95fe-5b05866a54f7": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66943.67",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.9980",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232673+00:00",
+      "metadata": {
+        "mt5_ticket": 813881284,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "21de3e5d-fa4e-4c21-82c3-b223c5ce16d8": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66943.67",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.9980",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232692+00:00",
+      "metadata": {
+        "mt5_ticket": 813881285,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "dea41e58-be20-462c-ae7b-0eb1f7752a2a": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66951.81",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.1840",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232712+00:00",
+      "metadata": {
+        "mt5_ticket": 813881317,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "93f540cc-1107-4853-b8b3-d041a3242009": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66951.81",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.1840",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232733+00:00",
+      "metadata": {
+        "mt5_ticket": 813881318,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b022d69c-6ed1-4944-9286-a84a1257faea": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66951.81",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-23.1840",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232752+00:00",
+      "metadata": {
+        "mt5_ticket": 813881370,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "04ac220a-f083-45b0-9b7e-aeafcae5f6c7": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66960.26",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-22.3390",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232771+00:00",
+      "metadata": {
+        "mt5_ticket": 813881381,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "c975f933-60cf-432a-9a2a-a647111adf6c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66954.24",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-22.9410",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232791+00:00",
+      "metadata": {
+        "mt5_ticket": 813881419,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b2e0f6d3-064d-4594-ba2a-7f0919c92cd5": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66954.24",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-22.9410",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232810+00:00",
+      "metadata": {
+        "mt5_ticket": 813881420,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "5cb7dced-5b42-4489-bb58-22628cb1ecf7": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66960.55",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-22.3100",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232829+00:00",
+      "metadata": {
+        "mt5_ticket": 813881478,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "64b20fdd-ddfc-4436-b5c2-de4fa9d12f9b": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "66960.55",
+      "current_price": "67183.65",
+      "stop_loss": "67081.95",
+      "take_profit": "66731.6",
+      "unrealized_pnl": "-22.3100",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:39:37.232866+00:00",
+      "metadata": {
+        "mt5_ticket": 813881479,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b9cc6d78-b0a1-40b0-918e-6f3154896d25": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5067.4",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.6530",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618588+00:00",
+      "metadata": {
+        "mt5_ticket": 813886303,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "0513031b-3ec4-4ac1-bd78-ec4a64932e97": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5067.4",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.6530",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618638+00:00",
+      "metadata": {
+        "mt5_ticket": 813886304,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "0d2af9b5-12e0-466b-b55a-b8d2b66104ca": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67060.01",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.3640",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618667+00:00",
+      "metadata": {
+        "mt5_ticket": 813886316,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "f3e96fa7-ffd8-4e52-b3d8-50ef005f4eb3": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67060.01",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.3640",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618692+00:00",
+      "metadata": {
+        "mt5_ticket": 813886317,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "474c3f94-b44d-4178-bc99-9bf46e1f6b2e": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.11",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7240",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618716+00:00",
+      "metadata": {
+        "mt5_ticket": 813886366,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "117fec56-c938-456e-8b64-acad41e054da": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.11",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7240",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618739+00:00",
+      "metadata": {
+        "mt5_ticket": 813886367,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b68aa459-e386-43ae-b799-c16fc6a5d445": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67059.33",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.4320",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618762+00:00",
+      "metadata": {
+        "mt5_ticket": 813886383,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b864459f-fddc-4092-9c1f-ac89cb63cdfe": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67059.33",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.4320",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618789+00:00",
+      "metadata": {
+        "mt5_ticket": 813886384,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "ea72b20d-0f9b-46cc-95f8-216c858b37c9": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.02",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618814+00:00",
+      "metadata": {
+        "mt5_ticket": 813886522,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "8267dabb-a613-4a77-8fc5-a88d465872d2": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.02",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618837+00:00",
+      "metadata": {
+        "mt5_ticket": 813886523,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "006c64d2-861c-491a-8c99-8d5ad22774f3": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67058.36",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.5290",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618868+00:00",
+      "metadata": {
+        "mt5_ticket": 813886551,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "375e5521-93d4-454a-a7f4-cac2befa9d66": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67058.36",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-12.5290",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618892+00:00",
+      "metadata": {
+        "mt5_ticket": 813886552,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "18d50e21-6690-42e9-b2da-4c23aebe554b": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.18",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7310",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618915+00:00",
+      "metadata": {
+        "mt5_ticket": 813886758,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "fbd879d3-6c67-4157-881c-9d86ecb9b059": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.18",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7310",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618938+00:00",
+      "metadata": {
+        "mt5_ticket": 813886759,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "874f1df5-7cfa-4005-8142-474397a6c008": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67045.14",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8510",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618963+00:00",
+      "metadata": {
+        "mt5_ticket": 813886850,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "481995fd-6977-4774-bd0c-a9a211a90778": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67045.14",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8510",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.618987+00:00",
+      "metadata": {
+        "mt5_ticket": 813886852,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "7f141ecf-d4c7-4d4e-aeea-a6a0b3783e75": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.09",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7220",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619032+00:00",
+      "metadata": {
+        "mt5_ticket": 813886889,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "b465976d-d387-4b7a-a088-b8b0b8ec930a": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.09",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7220",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619067+00:00",
+      "metadata": {
+        "mt5_ticket": 813886890,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "d57c15af-6808-4b16-99ee-7ef49ba2b82e": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67044.94",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8710",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619113+00:00",
+      "metadata": {
+        "mt5_ticket": 813886905,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "8f0ba92d-9315-4697-8fb7-27556f61b1f0": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67044.94",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8710",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619137+00:00",
+      "metadata": {
+        "mt5_ticket": 813886906,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "f92b8af1-db29-4db9-9497-2303a6e4c9a2": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.04",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7170",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619159+00:00",
+      "metadata": {
+        "mt5_ticket": 813886934,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "01dd4178-859b-485e-98b2-659e942bd43a": {
+      "symbol": "XAUUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "5068.04",
+      "current_price": "5060.87",
+      "stop_loss": "5065.16",
+      "take_profit": "5072.03",
+      "unrealized_pnl": "0.7170",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619181+00:00",
+      "metadata": {
+        "mt5_ticket": 813886935,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "d1edec77-3878-4e29-a242-8ddfee4b9685": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67045.14",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8510",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619214+00:00",
+      "metadata": {
+        "mt5_ticket": 813886947,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "18bc6e6c-8312-4f0b-8889-baad8def07a4": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67045.14",
+      "current_price": "67183.65",
+      "stop_loss": "66950.63",
+      "take_profit": "67231.3",
+      "unrealized_pnl": "-13.8510",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T05:41:40.619238+00:00",
+      "metadata": {
+        "mt5_ticket": 813886948,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "7f9548dd-31aa-48e8-adbd-a13ac738ca71": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67184.1",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "0.0450",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560712+00:00",
+      "metadata": {
+        "mt5_ticket": 814030256,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "adf64fb5-d916-487a-929e-a20af8adec6c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67184.1",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "0.0450",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560732+00:00",
+      "metadata": {
+        "mt5_ticket": 814030260,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "4c1e6f44-3beb-499a-ad4f-bf06b9a8098c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67183.51",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0140",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560792+00:00",
+      "metadata": {
+        "mt5_ticket": 814030500,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e8076759-1a29-4f66-bb95-07cdaba3eefc": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67183.51",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0140",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560811+00:00",
+      "metadata": {
+        "mt5_ticket": 814030501,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "572bf032-3f53-4b05-bf73-676b9e453d3a": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67182.72",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0930",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560879+00:00",
+      "metadata": {
+        "mt5_ticket": 814030599,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "48974a69-2e94-48ce-9e14-605de6f31364": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67182.72",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0930",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560899+00:00",
+      "metadata": {
+        "mt5_ticket": 814030600,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "02d1fddc-2663-4a9d-84bf-fcb67fa4b09c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67182.69",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0960",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560956+00:00",
+      "metadata": {
+        "mt5_ticket": 814030698,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "83914f83-a662-4fea-a5b4-c5ed155f81d7": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67182.69",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "-0.0960",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.560983+00:00",
+      "metadata": {
+        "mt5_ticket": 814030700,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "7e1f0c0d-f0d5-4815-934c-8c16b59fe4aa": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67192.63",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "0.8980",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561041+00:00",
+      "metadata": {
+        "mt5_ticket": 814030787,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "18db5e58-d4a1-4e34-8cbb-d3209b75baf8": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67194.39",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.0740",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561070+00:00",
+      "metadata": {
+        "mt5_ticket": 814030788,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e9938fc6-1cec-48c0-90ea-85eff2aad91f": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67189.35",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "0.5700",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561138+00:00",
+      "metadata": {
+        "mt5_ticket": 814030933,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "44ce39a0-d0a2-4031-8b80-3aa56deae996": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67189.35",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "0.5700",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561157+00:00",
+      "metadata": {
+        "mt5_ticket": 814030935,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "80051044-420a-4020-9fdc-f89158a2a532": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67194.8",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.1150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561219+00:00",
+      "metadata": {
+        "mt5_ticket": 814030979,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "cf5d348a-59f2-44b9-aa23-698623aea48d": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67194.8",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.1150",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561239+00:00",
+      "metadata": {
+        "mt5_ticket": 814030981,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "2eb14a6d-727a-46cd-99eb-d72fe704261c": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67198.99",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.5340",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561295+00:00",
+      "metadata": {
+        "mt5_ticket": 814031025,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "e4cafb4d-6985-4027-bc2c-6fd43e8479ee": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67198.99",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.5340",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561314+00:00",
+      "metadata": {
+        "mt5_ticket": 814031027,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    },
+    "1894f9b1-d9fa-4c48-a5ec-d79a257c2ae0": {
+      "symbol": "BTCUSD",
+      "side": "SHORT",
+      "quantity": "0.1",
+      "entry_price": "67201.77",
+      "current_price": "67183.65",
+      "stop_loss": "67094.92",
+      "take_profit": "67350.91",
+      "unrealized_pnl": "1.8120",
+      "realized_pnl": "0",
+      "opened_at": "2026-02-12T06:23:21.561381+00:00",
+      "metadata": {
+        "mt5_ticket": 814031063,
+        "mt5_magic": null,
+        "mt5_comment": "PythonBridge"
+      }
+    }
+  },
+  "open_orders": {
+    "0cb5e481-865a-4ac0-afa9-13bf53f21195": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:00.761287+00:00",
+      "metadata": {
+        "signal_id": "0b65fbde-e892-436e-a5cc-b193c8fc6139",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808968931
+      }
+    },
+    "e951ea9b-8699-458b-9b3a-216b667354ed": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:02.745806+00:00",
+      "metadata": {
+        "signal_id": "d85ca65c-6da6-43ce-8b17-c726f70c0f4d",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808969263
+      }
+    },
+    "93e6863b-162d-4c7b-8d94-cdce65759ef6": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:04.712088+00:00",
+      "metadata": {
+        "signal_id": "6d186ec0-e561-473a-b280-4b18ade627d9",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808969618
+      }
+    },
+    "913155c7-0233-47f4-b744-c6009e6b1cd5": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:06.460800+00:00",
+      "metadata": {
+        "signal_id": "42236ae4-b31e-494d-8904-ed948f446f9a",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808969769
+      }
+    },
+    "e1ac6274-d41f-4dc8-9f38-6b1a00a318d7": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:08.324339+00:00",
+      "metadata": {
+        "signal_id": "d8775d0e-7351-49e1-bb32-dcd3ba5a7b6c",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808969913
+      }
+    },
+    "ccc172ce-1ddc-48b4-b530-7acebfed53c9": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:10.007114+00:00",
+      "metadata": {
+        "signal_id": "ebc067fb-2489-4a60-960f-b4925be3d44d",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970068
+      }
+    },
+    "bb2d8dee-5d12-42b2-92e0-454cd2c00f92": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:11.769798+00:00",
+      "metadata": {
+        "signal_id": "f5a3eec7-9551-49c4-bc46-bace05d0d0e5",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970170
+      }
+    },
+    "39219237-a1c3-44cf-94ff-66e2364f4b3e": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:13.550400+00:00",
+      "metadata": {
+        "signal_id": "c31dcd31-3e4e-4a8f-978d-d52be1f4d5b5",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970247
+      }
+    },
+    "f4e32d2c-e99d-4cf4-b821-5466dc4de830": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:15.321754+00:00",
+      "metadata": {
+        "signal_id": "ac8152c7-3152-46ba-80ee-34dd0c8a8460",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970307
+      }
+    },
+    "5c34c450-6ac0-4e9a-819d-aef279c3ed6d": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:17.090813+00:00",
+      "metadata": {
+        "signal_id": "e354b853-a828-412a-8efc-26a824c2790e",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970380
+      }
+    },
+    "7e1c4e34-b326-4355-9d09-967abf4a72a7": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:18.834975+00:00",
+      "metadata": {
+        "signal_id": "8a97398e-667e-4c50-92f5-c9dbf0f15c11",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970428
+      }
+    },
+    "516d9de1-e696-4b14-ad9c-9e4580669046": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:20.469152+00:00",
+      "metadata": {
+        "signal_id": "9cee60b0-e5bc-418f-b263-785ca9291866",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970485
+      }
+    },
+    "c559ad6a-07f2-45e4-a4af-41df561469fa": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:22.203805+00:00",
+      "metadata": {
+        "signal_id": "64ebba36-2e71-4401-a44d-fcd4109afede",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970617
+      }
+    },
+    "36d221d1-3c5d-40cf-813c-ca3db07abe2d": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:23.832567+00:00",
+      "metadata": {
+        "signal_id": "94d78d24-e0cf-488f-8cdf-ef991c6bfbdc",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970655
+      }
+    },
+    "3036fd29-3234-452d-9d82-e63d43927e16": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:25.572902+00:00",
+      "metadata": {
+        "signal_id": "d1cbfbf7-1db2-437d-b78a-39e9c2900ac6",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970687
+      }
+    },
+    "5f889811-25c6-49a3-9ad1-8efb047545e5": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:27.314981+00:00",
+      "metadata": {
+        "signal_id": "9f8072d8-efbd-40ae-8349-cc836d260f2a",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970817
+      }
+    },
+    "8e2a6ffc-ba3e-449a-9c20-4d2c43880edd": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:28.945777+00:00",
+      "metadata": {
+        "signal_id": "e492bd4a-19d1-435a-aaf9-f3cc8a0f4e1f",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970906
+      }
+    },
+    "356ccbeb-1e4a-440f-8dbd-6b497e192cd0": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:30.579146+00:00",
+      "metadata": {
+        "signal_id": "f1085b69-7fa6-479b-a2ec-17cd2fd5d04f",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": null
+      }
+    },
+    "2ca11801-9f8a-40ef-b65f-02e8ae8f1c66": {
+      "symbol": "BTCUSD",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "66669.715",
+      "stop_loss": "66713.615",
+      "take_profit": "66581.91499999998",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:16:31.907059+00:00",
+      "metadata": {
+        "signal_id": "e3965fc4-addd-4028-b990-4189b74574cb",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808970960
+      }
+    },
+    "efe4fdb2-f3d5-466c-baca-21dd4527a3d8": {
+      "symbol": "XAUUSD",
+      "side": "BUY",
+      "order_type": "MARKET",
+      "quantity": "0.1",
+      "price": "5095.75",
+      "stop_loss": "5094.08",
+      "take_profit": "5099.09",
+      "status": "ACCEPTED",
+      "created_at": "2026-02-11T11:19:00.507542+00:00",
+      "metadata": {
+        "signal_id": "b3543ca2-6d79-4066-a520-12fe831bf573",
+        "strategy": "donchian_breakout",
+        "regime": "UNKNOWN",
+        "signal_strength": 0.8,
+        "mt5_order_id": null,
+        "mt5_ticket": 808979880
+      }
+    }
+  },
+  "account_balance": "100000.0",
+  "account_equity": "100000.00",
+  "equity_high_water_mark": "0",
+  "daily_start_equity": "0",
+  "daily_pnl": "0",
+  "total_pnl": "0",
+  "kill_switch_active": false,
+  "circuit_breaker_active": false,
+  "last_trade_time": null,
+  "metadata": {}
+}
