@@ -16693,3 +16693,134 @@ src.core.exceptions.OrderRejectedError: Request rejected due to absence of netwo
 2026-02-12 21:15:11 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
 2026-02-12 21:15:11 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
 2026-02-12 21:15:11 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:15:22 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:15:22 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:28 | INFO     | __main__ | System metrics | iteration=1320 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:15:32 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:15:32 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:42 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:15:42 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:42 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:15:42 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:15:42 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:15:53 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:15:53 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5070.90 H=5074.395 L=5070.90 C=5074.395 [23 bars in store]
+2026-02-12 21:16:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67389.0 H=67486.345 L=67295.97 C=67486.345 [25 bars in store]
+2026-02-12 21:16:03 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:03 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:14 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:14 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:14 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:16:14 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:16:14 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:16:24 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:24 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:30 | INFO     | __main__ | System metrics | iteration=1380 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:16:35 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:35 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:45 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:45 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:45 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:16:45 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:16:45 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:16:56 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:16:56 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5074.355 H=5074.825 L=5073.595 C=5074.43 [24 bars in store]
+2026-02-12 21:17:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67485.835 H=67506.155 L=67372.545 C=67384.895 [26 bars in store]
+2026-02-12 21:17:06 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:06 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:17 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:17 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:17 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:17:17 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:17:17 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:17:27 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:27 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:33 | INFO     | __main__ | System metrics | iteration=1440 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:17:38 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:38 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:48 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:48 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:48 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:17:48 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:17:48 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:17:59 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:17:59 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5074.615 H=5074.875 L=5073.465 C=5073.52 [25 bars in store]
+2026-02-12 21:18:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67385.73 H=67434.175 L=67358.12 C=67359.92 [27 bars in store]
+2026-02-12 21:18:09 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:18:09 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:19 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:18:19 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:19 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:18:20 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:18:20 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:18:30 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:18:30 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:36 | INFO     | __main__ | System metrics | iteration=1500 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:18:36 | INFO     | src.monitoring.performance_dashboard | Dashboard snapshot saved to data/metrics/dashboard_snapshot.json
+2026-02-12 21:18:40 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:18:40 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:51 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:18:51 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:51 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:18:51 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:18:51 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5073.705 H=5074.80 L=5073.33 C=5073.93 [26 bars in store]
+2026-02-12 21:19:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67361.41 H=67435.865 L=67289.005 C=67329.93 [28 bars in store]
+2026-02-12 21:19:01 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:01 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:12 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:12 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:21 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:19:21 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:19:21 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:22 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:22 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:33 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:33 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:39 | INFO     | __main__ | System metrics | iteration=1560 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:19:43 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:43 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:51 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:19:52 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:19:52 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:54 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:19:54 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5073.945 H=5074.035 L=5072.935 C=5073.60 [27 bars in store]
+2026-02-12 21:20:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 5m O=5070.90 H=5074.875 L=5070.90 C=5073.60 [7 bars in store]
+2026-02-12 21:20:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67328.26 H=67487.57 L=67320.18 C=67443.175 [29 bars in store]
+2026-02-12 21:20:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 5m O=67389.0 H=67506.155 L=67289.005 C=67443.175 [7 bars in store]
+2026-02-12 21:20:04 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:04 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:15 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:15 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:22 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:20:22 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:20:22 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:20:25 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:25 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:36 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:36 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:42 | INFO     | __main__ | System metrics | iteration=1620 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:20:46 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:46 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:52 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:20:53 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:20:53 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:20:57 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:20:57 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:00 | INFO     | src.data.data_engine | Bar completed: XAUUSD 1m O=5073.435 H=5073.435 L=5070.475 C=5070.825 [28 bars in store]
+2026-02-12 21:21:00 | INFO     | src.data.data_engine | Bar completed: BTCUSD 1m O=67443.835 H=67484.135 L=67360.26 C=67360.26 [30 bars in store]
+2026-02-12 21:21:07 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:21:07 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:18 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:21:18 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:23 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:21:23 | INFO     | src.connectors.mt5_connector | Retrieved 0 positions from MT5
+2026-02-12 21:21:23 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:21:28 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:21:28 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:39 | INFO     | src.connectors.mt5_connector | Account info retrieved: balance=4635.62, equity=4635.62
+2026-02-12 21:21:39 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62

@@ -13173,3 +13173,71 @@ src.core.exceptions.OrderRejectedError: Request rejected due to absence of netwo
 2026-02-12 21:15:11 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
 2026-02-12 21:15:11 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
 2026-02-12 21:15:11 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:15:22 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:28 | INFO     | __main__ | System metrics | iteration=1320 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:15:32 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:42 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:15:42 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:15:42 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:15:53 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:03 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:14 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:14 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:16:14 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:16:24 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:30 | INFO     | __main__ | System metrics | iteration=1380 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:16:35 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:45 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:16:45 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:16:45 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:16:56 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:06 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:17 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:17 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:17:17 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:17:27 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:33 | INFO     | __main__ | System metrics | iteration=1440 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:17:38 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:48 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:17:48 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:17:48 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:17:59 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:09 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:19 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:19 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:18:20 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:18:30 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:36 | INFO     | __main__ | System metrics | iteration=1500 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:18:36 | INFO     | src.monitoring.performance_dashboard | Dashboard snapshot saved to data/metrics/dashboard_snapshot.json
+2026-02-12 21:18:40 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:51 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:18:51 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:18:51 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:01 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:12 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:21 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:19:21 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:22 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:33 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:39 | INFO     | __main__ | System metrics | iteration=1560 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:19:43 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:19:51 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:19:52 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:19:54 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:04 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:15 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:22 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:20:22 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:20:25 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:36 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:42 | INFO     | __main__ | System metrics | iteration=1620 | positions=0 | daily_pnl=0.0 | total_pnl=0.0 | kill_switch=False
+2026-02-12 21:20:46 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:20:52 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:20:53 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:20:57 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:07 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:18 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:23 | INFO     | src.portfolio.portfolio_engine | Starting MT5 reconciliation
+2026-02-12 21:21:23 | INFO     | src.portfolio.portfolio_engine | Reconciliation successful - no discrepancies
+2026-02-12 21:21:28 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
+2026-02-12 21:21:39 | INFO     | src.state.state_manager | State saved successfully | positions=0 | orders=0 | balance=4635.62 | equity=4635.62
