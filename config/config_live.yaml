@@ -32,7 +32,7 @@ risk:
   # STRICT LIVE RISK LIMITS
   # 5% Max Drawdown ($200) to stop before the $250 breach
   max_drawdown_pct: 0.05          
-  max_daily_loss_pct: 0.03        # 3% ($120) Daily limit
+  max_daily_loss_pct: 0.05        # 5% ($200) Daily limit
   
   # 0.5% risk per trade ($20) to survive losing streaks
   risk_per_trade_pct: 0.005       
