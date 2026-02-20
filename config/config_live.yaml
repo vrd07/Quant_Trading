@@ -20,7 +20,7 @@ symbols:
     commission_per_lot: 0.0
   
   BTCUSD:
-    enabled: true
+    enabled: false
     pip_value: 0.1
     min_lot: 0.01
     max_lot: 2.0

@@ -593,6 +593,62 @@ class Indicators:
         oscillator = fast_ema - slow_ema
         
         return oscillator
+    
+    @staticmethod
+    def half_life(df: pd.DataFrame, period: int = 100, price_col: str = 'close') -> pd.Series:
+        """
+        Calculate Half-Life of mean reversion.
+        
+        Uses simplified Ornstein-Uhlenbeck process estimation via lag-1 autocorrelation.
+        Half-Life = -ln(2) / ln(correlation)
+        
+        Args:
+            df: DataFrame with price column
+            period: Lookback period for correlation
+            price_col: Column name for price
+        
+        Returns:
+            Series with half-life values
+        """
+        price = df[price_col]
+        lag_price = price.shift(1)
+        
+        # Calculate price changes
+        delta_price = price - lag_price
+        
+        # Lag-1 correlation (calculating rolling correlation of price vs lagged price)
+        # However, for OU process we need correlation of (price(t) - mean) vs (price(t-1) - mean)
+        # A simpler proxy for half-life is based on the autoregressive coefficient of lag 1.
+        
+        # We will use a rolling correlation as a proxy for the autoregressive coefficient
+        rho = price.rolling(window=period).corr(lag_price)
+        
+        # Half-life formula: -ln(2) / ln(abs(rho))
+        # Clip rho to avoid log(0) or log(1) issues
+        rho = rho.clip(lower=0.01, upper=0.99)
+        
+        half_life = -np.log(2) / np.log(rho)
+        return half_life
+
+    @staticmethod
+    def zscore_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
+        """
+        Z-Score based on VWAP.
+        
+        Z = (Price - VWAP) / StdDev(Price)
+        
+        Args:
+            df: DataFrame with price and volume
+            period: Lookback period for standard deviation
+        
+        Returns:
+            Series with VWAP Z-score
+        """
+        vwap = Indicators.vwap(df)
+        std = df['close'].rolling(window=period).std()
+        
+        zscore = (df['close'] - vwap) / std
+        return zscore
 
 
 # Convenience function for getting multiple indicators at once

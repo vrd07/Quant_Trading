@@ -108,3 +108,18 @@ ImportError: cannot import name 'setup_logger' from 'src.monitoring.logger' (/Us
 2026-02-17 14:52:41.445203: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
 2026-02-17 14:52:41.445562: Using config file: config/config_live.yaml
 2026-02-17 14:52:41.535653: TradingSystem initialized
+2026-02-17 17:03:28.548565: TradingSystem.run() finished
+2026-02-17 23:37:33.321396: Entering main()
+2026-02-17 23:37:33.334011: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-17 23:37:33.334162: Using config file: config/config_live.yaml
+2026-02-17 23:37:33.390908: TradingSystem initialized
+2026-02-18 00:03:45.340362: TradingSystem.run() finished
+2026-02-18 00:04:25.598489: Entering main()
+2026-02-18 00:04:25.602221: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-18 00:04:25.602387: Using config file: config/config_live.yaml
+2026-02-18 00:04:25.622981: TradingSystem initialized
+2026-02-18 02:14:02.279092: TradingSystem.run() finished
+2026-02-20 15:35:24.874764: Entering main()
+2026-02-20 15:35:24.878976: Parsed args: Namespace(config='config/config.yaml', env='live', force_live=True)
+2026-02-20 15:35:24.879065: Using config file: config/config_live.yaml
+2026-02-20 15:35:24.899859: TradingSystem initialized

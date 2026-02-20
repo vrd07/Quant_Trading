@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-02-17T09:33:24.858900+00:00",
+  "timestamp": "2026-02-20T10:26:24.876192+00:00",
   "initial_capital": 4000.0,
   "current_equity": 4000.0,
   "total_return": 0.0,
@@ -17,17 +17,11 @@
   "profit_factor": 0,
   "bar_counts": {
     "XAUUSD": {
-      "1m": 10,
-      "5m": 2,
+      "1m": 17,
+      "5m": 4,
       "15m": 1,
-      "1h": 0
-    },
-    "BTCUSD": {
-      "1m": 0,
-      "5m": 0,
-      "15m": 0,
       "1h": 0
     }
   },
-  "last_reconciliation": "2026-02-17T09:33:06.303266+00:00"
+  "last_reconciliation": "2026-02-20T10:26:17.815377+00:00"
 }

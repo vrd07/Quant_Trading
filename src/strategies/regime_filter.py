@@ -97,6 +97,13 @@ class RegimeFilter:
         # Check if ATR is rising (volatility increasing)
         atr_rising = current_atr > current_atr_ma
         
+        # Determine ADX trend status
+        adx_trend = False
+        adx_range = False
+        if not pd.isna(current_adx):
+            adx_trend = current_adx > self.adx_trend_threshold
+            adx_range = current_adx < self.adx_range_threshold
+        
         # Calculate Hurst exponent if enabled and enough data
         current_hurst = None
         hurst_trend = None
@@ -111,38 +118,55 @@ class RegimeFilter:
                 hurst_range = current_hurst < self.hurst_range_threshold
         
         # Classification logic
-        if pd.isna(current_adx) or pd.isna(current_atr):
-            regime = MarketRegime.UNKNOWN
-        else:
-            adx_trend = current_adx > self.adx_trend_threshold
-            adx_range = current_adx < self.adx_range_threshold
-            
-            if self.use_hurst and current_hurst is not None:
-                # Enhanced classification with Hurst confirmation
-                if adx_trend and atr_rising and hurst_trend:
-                    regime = MarketRegime.TREND
-                elif adx_range and not atr_rising and hurst_range:
-                    regime = MarketRegime.RANGE
-                elif adx_trend and hurst_trend:
-                    # ADX + Hurst agree on trend
-                    regime = MarketRegime.TREND
-                elif adx_range and hurst_range:
-                    # ADX + Hurst agree on range
-                    regime = MarketRegime.RANGE
-                else:
-                    regime = MarketRegime.UNKNOWN
+        if self.use_hurst and current_hurst is not None:
+            if current_hurst > self.hurst_trend_threshold:
+                hurst_score = 2
+            elif current_hurst < self.hurst_range_threshold:
+                hurst_score = -2
             else:
-                # Original logic without Hurst
-                if adx_trend and atr_rising:
-                    regime = MarketRegime.TREND
-                elif adx_range and not atr_rising:
-                    regime = MarketRegime.RANGE
-                else:
-                    regime = MarketRegime.UNKNOWN
+                hurst_score = 0
+        else:
+            hurst_score = 0
+            
+        # Scoring System
+        # Trend signals: ADX > threshold (+1), ATR Rising (+1), Hurst > 0.55 (+2)
+        # Range signals: ADX < threshold (-1), ATR Falling (-1), Hurst < 0.45 (-2)
+        
+        score = 0
+        
+        # ADX contribution
+        if adx_trend:
+            score += 1
+        elif adx_range:
+            score -= 1
+            
+        # ATR contribution
+        if atr_rising:
+            score += 1
+        else:
+            score -= 1
+            
+        # Hurst contribution
+        score += hurst_score
+        
+        # Classification
+        if score >= 1:
+            regime = MarketRegime.TREND
+        elif score <= -1:
+            regime = MarketRegime.RANGE
+        else:
+            # If score is 0, check ADX as tie-breaker
+            if adx_trend:
+                regime = MarketRegime.TREND
+            elif adx_range:
+                regime = MarketRegime.RANGE
+            else:
+                regime = MarketRegime.UNKNOWN
         
         self.logger.debug(
             f"Regime classified",
             regime=regime.value,
+            score=score,
             adx=float(current_adx) if not pd.isna(current_adx) else None,
             atr=float(current_atr) if not pd.isna(current_atr) else None,
             hurst=float(current_hurst) if current_hurst is not None else None,
