@@ -172,12 +172,8 @@ class PortfolioEngine:
         self.total_realized_pnl += realized_pnl
         self.daily_realized_pnl += realized_pnl
         
-        # Mark position as closed
-        position.realized_pnl = realized_pnl
-        position.side = PositionSide.FLAT
-        position.quantity = Decimal("0")
-        
-        # Record to trade journal
+        # Record to trade journal BEFORE mutating position fields
+        # (record_trade needs original quantity and side to compute pnl_pct)
         if self.trade_journal:
             if exit_time is None:
                 exit_time = datetime.now(timezone.utc)
@@ -189,6 +185,11 @@ class PortfolioEngine:
                 realized_pnl=realized_pnl,
                 exit_reason=position.metadata.get('exit_reason', 'manual') if hasattr(position, 'metadata') and position.metadata else 'manual'
             )
+        
+        # Mark position as closed (after journal recording)
+        position.realized_pnl = realized_pnl
+        position.side = PositionSide.FLAT
+        position.quantity = Decimal("0")
         
         # Remove from active positions
         self.position_tracker.remove_position(position_id)

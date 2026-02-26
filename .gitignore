@@ -1,0 +1,70 @@
+# ============================================
+# Python
+# ============================================
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# ============================================
+# Testing
+# ============================================
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# ============================================
+# Runtime Data & Logs (generated at runtime)
+# ============================================
+data/logs/
+data/state/
+data/metrics/
+data/backtests/
+
+# ============================================
+# Debug & Temporary Files
+# ============================================
+debug_trace.txt
+live_output.log
+paper_trading.log
+trading_system.pid
+syntax_result.txt
+test_output_tool.txt
+*.log
+
+# ============================================
+# OS Files
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# ============================================
+# IDE / Editor Files
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ============================================
+# Environment / Secrets
+# ============================================
+*.env
+.env.*
+!.env.example

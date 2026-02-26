@@ -1,1 +1,0 @@
-trade_id,symbol,strategy,side,entry_time,entry_price,quantity,exit_time,exit_price,exit_reason,realized_pnl,pnl_pct,stop_loss,take_profit,initial_risk,duration_seconds,regime,signal_strength

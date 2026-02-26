@@ -1,0 +1,10 @@
+# Quant Trading System - Core Dependencies
+pyyaml>=6.0
+pandas>=2.0.0
+numpy>=1.24.0
+
+# MT5 Bridge - ZeroMQ (optional, only needed for ZMQ bridge mode)
+pyzmq>=25.0.0
+
+# Technical Analysis
+ta>=0.10.0
