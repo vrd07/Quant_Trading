@@ -316,10 +316,16 @@ class PortfolioEngine:
             
             # Check for "Phantom Positions" (We have it, MT5 doesn't)
             # This usually means the trade was closed (TP/SL hit)
+            # Match by mt5_ticket to correctly handle multiple positions on same symbol
+            mt5_tickets_in_broker = {
+                str(mp.metadata.get('mt5_ticket')) 
+                for mp in mt5_positions.values() 
+                if mp.metadata.get('mt5_ticket')
+            }
+            
             phantom_positions = [
-                p for p in our_positions.values() 
-                if str(p.position_id) not in mt5_positions
-                and not any(mp.symbol.ticker == p.symbol.ticker for mp in mt5_positions.values())
+                p for p in our_positions.values()
+                if p.metadata.get('mt5_ticket') and str(p.metadata.get('mt5_ticket')) not in mt5_tickets_in_broker
             ]
             
             if phantom_positions:

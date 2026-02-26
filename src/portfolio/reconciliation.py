@@ -31,42 +31,50 @@ class Reconciliation:
         1. Positions in our system but not in MT5 (phantom positions)
         2. Positions in MT5 but not in our system (unknown positions)
         3. Quantity mismatches
-        4. Price mismatches
+        
+        Matching is done by mt5_ticket (broker identity), NOT by Python UUID.
         
         Args:
-            our_positions: Dict of our positions
-            mt5_positions: Dict of MT5 positions
+            our_positions: Dict of our positions (keyed by Python UUID)
+            mt5_positions: Dict of MT5 positions (keyed by generated UUID)
         
         Returns:
             (all_match, list_of_discrepancies)
         """
         discrepancies = []
         
-        # Check for phantom positions (in our system, not in MT5)
-        for pos_id, our_pos in our_positions.items():
-            if pos_id not in mt5_positions:
-                # Check if any MT5 position matches by symbol
-                matching = [
-                    p for p in mt5_positions.values()
-                    if p.symbol.ticker == our_pos.symbol.ticker
-                ]
-                
-                if not matching:
-                    discrepancy = f"Phantom position: {our_pos.symbol.ticker} not in MT5"
-                    discrepancies.append(discrepancy)
-                    self.logger.warning(discrepancy, position_id=pos_id)
-        
-        # Check for unknown positions (in MT5, not in our system)
+        # Build ticket-based lookup for MT5 positions
+        mt5_by_ticket = {}
         for pos_id, mt5_pos in mt5_positions.items():
-            if pos_id not in our_positions:
-                discrepancy = f"Unknown position in MT5: {mt5_pos.symbol.ticker}"
-                discrepancies.append(discrepancy)
-                self.logger.warning(discrepancy, mt5_position_id=pos_id)
+            ticket = str(mt5_pos.metadata.get('mt5_ticket', ''))
+            if ticket:
+                mt5_by_ticket[ticket] = mt5_pos
         
-        # Check for quantity/price mismatches
-        for pos_id in set(our_positions.keys()) & set(mt5_positions.keys()):
-            our_pos = our_positions[pos_id]
-            mt5_pos = mt5_positions[pos_id]
+        # Build ticket-based lookup for our positions
+        our_by_ticket = {}
+        for pos_id, our_pos in our_positions.items():
+            ticket = str(our_pos.metadata.get('mt5_ticket', ''))
+            if ticket:
+                our_by_ticket[ticket] = our_pos
+        
+        # 1. Check for phantom positions (in our system, not in MT5) - by ticket
+        for ticket, our_pos in our_by_ticket.items():
+            if ticket and ticket not in mt5_by_ticket:
+                discrepancy = f"Phantom position: {our_pos.symbol.ticker} (ticket {ticket}) not in MT5"
+                discrepancies.append(discrepancy)
+                self.logger.warning(discrepancy, position_id=str(our_pos.position_id))
+        
+        # 2. Check for unknown positions (in MT5, not in our system) - by ticket
+        for ticket, mt5_pos in mt5_by_ticket.items():
+            if ticket and ticket not in our_by_ticket:
+                discrepancy = f"Unknown position in MT5: {mt5_pos.symbol.ticker} (ticket {ticket})"
+                discrepancies.append(discrepancy)
+                self.logger.warning(discrepancy, mt5_ticket=ticket)
+        
+        # 3. Check for quantity mismatches on matched positions
+        for ticket in set(our_by_ticket.keys()) & set(mt5_by_ticket.keys()):
+            our_pos = our_by_ticket[ticket]
+            mt5_pos = mt5_by_ticket[ticket]
             
             if our_pos.quantity != mt5_pos.quantity:
                 discrepancy = (
@@ -74,7 +82,7 @@ class Reconciliation:
                     f"ours={our_pos.quantity}, MT5={mt5_pos.quantity}"
                 )
                 discrepancies.append(discrepancy)
-                self.logger.warning(discrepancy, position_id=pos_id)
+                self.logger.warning(discrepancy, mt5_ticket=ticket)
         
         success = len(discrepancies) == 0
         
