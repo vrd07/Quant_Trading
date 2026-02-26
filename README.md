@@ -1,500 +1,353 @@
-# MT5 Python Trading Bridge
+# 🖥️ Windows Setup Guide — Step-by-Step
 
-A cross-platform communication bridge between **Python** and **MetaTrader 5** for algorithmic trading of XAUUSD (Gold) and BTC.
-
-Two bridge modes are available:
-
-| Mode | File | Communication | Platform | Dependencies |
-|------|------|---------------|----------|-------------|
-| **File Bridge** (Recommended) | `EA_FileBridge.mq5` | Shared JSON files | ✅ Windows + macOS | None |
-| ZeroMQ Bridge | `EA_ZeroMQ_Bridge.mq5` | TCP sockets | ⚠️ Windows only | ZeroMQ, JAson.mqh |
-
-> **The File Bridge is the recommended mode** — it works on both Windows and macOS (via Wine/CrossOver), requires zero external libraries, and is production-tested.
+This guide is written for **complete beginners**. Follow every step exactly as written.
 
 ---
 
-## Architecture
+## What You Need
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                     MetaTrader 5 (EA_FileBridge.mq5)         │
-│                                                              │
-│  Reads: mt5_commands.json    Writes: mt5_status.json         │
-│                                      mt5_responses.json      │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  Risk Management Layer                                 │  │
-│  │  • Max positions, daily loss/profit limits              │  │
-│  │  • Kill switch, panic close, trading hours              │  │
-│  │  • Order validation, exposure limits                    │  │
-│  └────────────────────────────────────────────────────────┘  │
-└─────────────────────────┬────────────────────────────────────┘
-                          │
-              Shared JSON Files (MT5 Common Files Directory)
-                          │
-┌─────────────────────────┴────────────────────────────────────┐
-│                  Python (mt5_file_client.py)                  │
-│                                                              │
-│  Writes: mt5_commands.json   Reads: mt5_status.json          │
-│                                     mt5_responses.json       │
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐  │
-│  │  Trading Engine                                        │  │
-│  │  • Strategy Engine (Breakout + Mean Reversion)          │  │
-│  │  • Risk Engine, Portfolio Engine, Data Engine            │  │
-│  │  • State Management, Monitoring & Logging               │  │
-│  └────────────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────────────┘
-```
+- A **Windows 10 or 11** computer
+- An **internet connection**
+- A **broker account** that supports MetaTrader 5 (demo account is fine to start)
 
-### How the File Bridge Works
-
-1. **Python** writes a command to `mt5_commands.json` in the MT5 Common Files directory
-2. **EA** polls the file every 100ms, detects new commands, and executes them
-3. **EA** writes the result to `mt5_responses.json`
-4. **Python** reads the response file
-5. **EA** also writes a live status file (`mt5_status.json`) every 1 second with account info, prices, and all Market Watch quotes
+You will install two things:
+1. **Python** — the programming language that runs the trading brain
+2. **MetaTrader 5** — the trading platform that connects to your broker
 
 ---
 
-## Setup — Windows
+## Part 1: Install Python
 
-### 1. Install MetaTrader 5
+### Step 1.1 — Download Python
 
-1. Download and install [MetaTrader 5](https://www.metatrader5.com/en/download) from the official site
-2. Log in to your broker account (demo or live)
+1. Open your web browser
+2. Go to: **https://www.python.org/downloads/**
+3. Click the big yellow button that says **"Download Python 3.x.x"**
+4. A file will download (something like `python-3.x.x-amd64.exe`)
 
-### 2. Deploy the EA
+### Step 1.2 — Install Python
+
+1. Double-click the downloaded file to open the installer
+2. **⚠️ IMPORTANT: Check the box at the bottom that says "Add Python to PATH"** — this is critical!
+3. Click **"Install Now"**
+4. Wait for it to finish
+5. Click **"Close"**
+
+### Step 1.3 — Verify Python Works
+
+1. Press `Win + R` on your keyboard (the Windows key + the letter R)
+2. Type `cmd` and press Enter — a black window (Command Prompt) opens
+3. Type this and press Enter:
+   ```
+   python --version
+   ```
+4. You should see something like: `Python 3.12.5`
+5. If you see an error, restart your computer and try again
+
+---
+
+## Part 2: Install MetaTrader 5
+
+### Step 2.1 — Download MT5
+
+1. Go to: **https://www.metatrader5.com/en/download**
+2. Click **"Download MetaTrader 5"**
+3. Run the downloaded installer
+4. Follow the installation wizard (click Next, Next, Finish)
+
+### Step 2.2 — Log In to Your Broker
 
 1. Open MetaTrader 5
-2. Press `F4` to open **MetaEditor**
-3. Copy `EA_FileBridge.mq5` into your `MQL5/Experts/` folder
-   - To find this folder: **File → Open Data Folder** in MT5, then navigate to `MQL5/Experts/`
-4. In MetaEditor, open the file and press `F7` to compile
-5. Verify: **0 errors, 0 warnings** in the output panel
+2. Your broker should appear in the server list
+3. Enter your **login**, **password**, and select your **server**
+4. Click **OK**
+5. You should see your account balance in the bottom-left area
 
-### 3. Enable Automated Trading
-
-1. In MT5, go to **Tools → Options → Expert Advisors**
-2. Check **Allow automated trading**
-3. Click the **Algo Trading** button in the toolbar (it should turn green)
-
-### 4. Attach EA to Chart
-
-1. Open the **Navigator** panel (`Ctrl+N`)
-2. Find **EA_FileBridge** under Expert Advisors
-3. Drag it onto any open chart (e.g., XAUUSD)
-4. In the popup dialog, go to the **Inputs** tab to configure risk parameters (see [EA Configuration](#ea-configuration))
-5. Click **OK**
-6. Verify the EA is running: check the **Experts** tab in the Toolbox (`Ctrl+T`) for `EA_FileBridge v3.0 PRODUCTION` messages
-
-### 5. Install Python Dependencies
-
-```bash
-python -m venv venv
-venv\Scripts\activate
-pip install -r requirements.txt
-```
-
-### 6. Common Files Directory (Windows)
-
-The File Bridge communicates through the MT5 **Common Files** directory:
-
-```
-C:\Users\<YourUser>\AppData\Roaming\MetaQuotes\Terminal\Common\Files\
-```
-
-The Python client auto-detects this on Windows.
+> 💡 **Tip:** If you don't have a broker yet, many brokers offer free **demo accounts** with virtual money. This is perfect for testing.
 
 ---
 
-## Setup — macOS
+## Part 3: Download This Project
 
-MT5 does not have a native macOS client. You can run it via **Wine** or **CrossOver**.
+### Step 3.1 — Download from GitHub
 
-### 1. Install MT5 via Wine/CrossOver
+1. Go to: **https://github.com/vrd07/Quant_Trading**
+2. Click the green **"Code"** button
+3. Click **"Download ZIP"**
+4. Save the ZIP file to your computer
 
-#### Option A: CrossOver (Recommended — easiest)
+### Step 3.2 — Extract the ZIP
 
-1. Download [CrossOver](https://www.codeweavers.com/crossover) (paid, free trial available)
-2. Install MetaTrader 5 as a Windows application inside a CrossOver bottle
-3. Log in to your broker account
+1. Find the downloaded ZIP file (usually in your **Downloads** folder)
+2. Right-click it → **"Extract All..."**
+3. Choose where to extract it (e.g., `C:\Users\YourName\Documents\`)
+4. Click **"Extract"**
+5. You should now have a folder called `Quant_Trading-main`
+6. **Rename** it to `Quant_Trading` (remove the `-main` part) for simplicity
 
-#### Option B: Wine (Free)
+---
 
-1. Install Wine via Homebrew:
-   ```bash
-   brew install --cask wine-stable
+## Part 4: Install Python Dependencies
+
+### Step 4.1 — Open Command Prompt in Project Folder
+
+1. Open the `Quant_Trading` folder in File Explorer
+2. Click on the **address bar** at the top (where it shows the folder path)
+3. Type `cmd` and press **Enter** — a Command Prompt opens in this folder
+
+> 💡 **Alternative:** Press `Win + R`, type `cmd`, press Enter. Then type:
+> ```
+> cd C:\Users\YourName\Documents\Quant_Trading
+> ```
+> (Replace `YourName` with your actual Windows username)
+
+### Step 4.2 — Install Required Packages
+
+Type this command and press Enter:
+```
+pip install -r requirements.txt
+```
+
+Wait for it to finish. You'll see a lot of text scrolling — that's normal. It should end with `Successfully installed ...`.
+
+> ⚠️ **If you see "pip is not recognized":** Python wasn't added to PATH. Uninstall Python and reinstall it, making sure to check **"Add Python to PATH"** in Step 1.2.
+
+---
+
+## Part 5: Set Up the Expert Advisor (EA) in MT5
+
+The EA is the "robot" inside MetaTrader that receives commands from Python.
+
+### Step 5.1 — Find Your MT5 Data Folder
+
+1. Open MetaTrader 5
+2. Click **File** (top-left menu) → **Open Data Folder**
+3. A Windows Explorer window opens — this is your MT5 data folder
+4. Navigate into: `MQL5` → `Experts`
+5. **Keep this folder open** — you'll need it in the next step
+
+### Step 5.2 — Copy the EA File
+
+1. Open the `Quant_Trading` project folder
+2. Go into `mt5_bridge`
+3. Find the file called **`EA_FileBridge.mq5`**
+4. **Copy** this file (`Ctrl + C`)
+5. **Paste** it into the `MQL5/Experts` folder you opened in Step 5.1 (`Ctrl + V`)
+
+### Step 5.3 — Compile the EA
+
+1. Go back to MetaTrader 5
+2. Press **F4** on your keyboard — this opens **MetaEditor** (the code editor)
+3. In MetaEditor, on the left panel, find: `Experts` → `EA_FileBridge.mq5`
+4. Double-click to open it
+5. Press **F7** to compile (or click the **Compile** button)
+6. Look at the bottom panel — it should say:
    ```
-2. Download the MT5 installer `.exe`
-3. Run: `wine mt5setup.exe`
-4. Follow the installation wizard
+   0 errors, 0 warnings
+   ```
+7. ✅ If you see 0 errors, the EA is ready!
+8. Close MetaEditor (click the X)
 
-### 2. Deploy the EA
+> ⚠️ **If you see errors:** Make sure you copied `EA_FileBridge.mq5` (NOT `EA_ZeroMQ_Bridge.mq5`). The File Bridge has zero external dependencies and should compile without any issues.
 
-1. Open MT5 inside Wine/CrossOver
-2. Press `F4` to open MetaEditor
-3. Copy `EA_FileBridge.mq5` into the `MQL5/Experts/` folder
-   - **Finding the folder**: In MT5, go to **File → Open Data Folder**, then `MQL5/Experts/`
-   - The Wine path is typically:
-     ```
-     ~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/
-     Program Files/MetaTrader 5/MQL5/Experts/
-     ```
-4. Compile with `F7` — should show **0 errors** (no external dependencies needed!)
+### Step 5.4 — Enable Automated Trading
 
-### 3. Enable Automated Trading
+1. In MetaTrader 5, click **Tools** (top menu) → **Options**
+2. Click the **Expert Advisors** tab
+3. Check ✅ **Allow automated trading**
+4. Click **OK**
+5. In the main toolbar, find the **Algo Trading** button and click it
+6. The button should turn **green** ✅ — this means automated trading is enabled
 
-Same as Windows — enable in **Tools → Options → Expert Advisors** and click **Algo Trading**.
+### Step 5.5 — Attach the EA to a Chart
 
-### 4. Attach EA to Chart
+1. Press **Ctrl + N** to open the **Navigator** panel (left side)
+2. Expand **Expert Advisors**
+3. Find **EA_FileBridge**
+4. **Drag and drop** it onto any open chart (e.g., XAUUSD chart)
+5. A settings window appears:
+   - Go to the **Inputs** tab
+   - You can adjust settings here (see table below), or leave defaults
+   - Click **OK**
+6. In the **top-right corner** of the chart, you should see the EA name — this means it's running!
 
-Same as Windows steps 4.1–4.6 above.
+### Step 5.6 — Verify the EA is Working
 
-### 5. Install Python Dependencies
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install -r requirements.txt
-```
-
-### 6. Common Files Directory (macOS/Wine)
-
-The MT5 Common Files directory under Wine is at:
-
-```
-~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files/
-```
-
-The Python `MT5FileClient` auto-detects this path on macOS. If your Wine prefix is different, pass the path manually:
-
-```python
-client = MT5FileClient(data_dir="/path/to/your/Common/Files")
-```
+1. Press **Ctrl + T** to open the **Toolbox** at the bottom
+2. Click the **Experts** tab
+3. You should see messages like:
+   ```
+   ========================================
+   === EA_FileBridge v3.0 PRODUCTION ===
+   ========================================
+   ```
+4. ✅ The EA is running and ready to receive commands from Python!
 
 ---
 
-## EA Configuration
+## Part 6: Run the Trading System
 
-The EA has extensive input parameters organized by category:
+### Step 6.1 — Open Command Prompt
 
-### Emergency Controls
+1. Open the `Quant_Trading` folder
+2. Click the address bar, type `cmd`, press Enter
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `EnableTrading` | `true` | **Master kill switch** — set to `false` to stop all trading |
-| `PanicCloseAll` | `false` | Set to `true` to immediately close all positions |
+### Step 6.2 — Start the Bot
 
-### Position Limits
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `MaxOpenPositions` | `10` | Maximum simultaneous open positions |
-| `MaxPositionSizePercent` | `1.0` | Maximum risk per trade (% of balance) |
-| `MaxTotalExposureLots` | `5.0` | Maximum total lots across all positions |
-
-### Daily Limits
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `MaxDailyLossPercent` | `3.0` | Stop trading if daily loss exceeds this % |
-| `MaxDailyProfitPercent` | `10.0` | Stop trading if daily profit exceeds this % |
-| `MaxTradesPerDay` | `50` | Maximum number of trades allowed per day |
-
-### Trading Hours
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `UseTradingHours` | `false` | Enable/disable trading hours restriction |
-| `TradingStartHour` | `9` | Trading start hour (broker time) |
-| `TradingEndHour` | `17` | Trading end hour (broker time) |
-| `AvoidFridayClose` | `true` | Stop trading 2 hours before Friday market close |
-
-### Execution
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `MaxSlippagePips` | `5` | Alert if slippage exceeds this value |
-| `MaxRetries` | `3` | Maximum order retry attempts |
-| `CommandCheckIntervalMs` | `100` | Poll for Python commands every N ms |
-| `StatusUpdateIntervalMs` | `1000` | Write status file every N ms |
-
----
-
-## Python Client Usage
-
-### Basic Connection Test
-
-```python
-from mt5_bridge.mt5_file_client import MT5FileClient
-
-client = MT5FileClient()
-
-# Check if EA is alive
-status = client.get_status()
-print(f"Status: {status['status']}")
-print(f"Balance: ${status['balance']}")
-print(f"Symbol: {status['symbol']}")
-print(f"Bid: {status['bid']}, Ask: {status['ask']}")
+Type this command and press Enter:
 ```
-
-### Heartbeat
-
-```python
-response = client.heartbeat()
-print(f"EA Status: {response['status']}")  # "ALIVE"
-```
-
-### Account Info
-
-```python
-account = client.get_account_info()
-print(f"Balance:     ${account['balance']}")
-print(f"Equity:      ${account['equity']}")
-print(f"Free Margin: ${account['free_margin']}")
-print(f"Daily P&L:   ${account['daily_pnl']}")
-```
-
-### Place an Order
-
-```python
-result = client.place_order(
-    symbol="XAUUSD",
-    order_type="BUY",
-    volume=0.01,
-    sl=1990.0,   # Stop Loss price
-    tp=2010.0    # Take Profit price
-)
-
-if result.get("status") == "SUCCESS":
-    print(f"Order placed! Ticket: {result['ticket']}")
-    print(f"Fill price: {result['price']}")
-    print(f"Slippage: {result['slippage_pips']} pips")
-else:
-    print(f"Order failed: {result.get('message')}")
-```
-
-### Close a Position
-
-```python
-result = client.close_position(ticket=123456)
-
-if result.get("status") == "SUCCESS":
-    print(f"Closed with P&L: ${result['pnl']}")
-```
-
-### Get Open Positions
-
-```python
-positions = client.get_positions()
-for pos in positions.get("positions", []):
-    print(f"#{pos['ticket']} | {pos['symbol']} | "
-          f"{'BUY' if pos['type'] == 0 else 'SELL'} | "
-          f"{pos['volume']} lots | P&L: ${pos['profit']}")
-```
-
-### Multi-Symbol Quotes
-
-The status file includes live quotes for **all symbols in your Market Watch**:
-
-```python
-status = client.get_status()
-quotes = status.get("quotes", {})
-
-for symbol, data in quotes.items():
-    print(f"{symbol}: Bid={data['bid']} Ask={data['ask']}")
-```
-
----
-
-## API Reference
-
-### Commands (Python → EA)
-
-| Command | Parameters | Response |
-|---------|------------|----------|
-| `HEARTBEAT` | — | `{"status": "ALIVE", "server_time": "..."}` |
-| `GET_ACCOUNT_INFO` | — | `{balance, equity, margin, free_margin, currency, leverage, daily_pnl, daily_trades}` |
-| `GET_POSITIONS` | — | `{"positions": [{ticket, symbol, type, volume, price_open, price_current, profit, sl, tp, comment}]}` |
-| `PLACE_ORDER` | `symbol, order_type, volume, sl?, tp?` | `{"status": "SUCCESS", "ticket": N, "price": X, "slippage_pips": Y}` |
-| `CLOSE_POSITION` | `ticket` | `{"status": "SUCCESS", "pnl": X}` |
-| `GET_LIMITS` | — | Current risk limits and usage (positions, exposure, daily stats) |
-
-### Status File Format (EA → Python, every 1s)
-
-```json
-{
-  "status": "ALIVE",
-  "timestamp": "2026.02.26 10:30:00",
-  "symbol": "XAUUSD",
-  "bid": 2005.50,
-  "ask": 2005.60,
-  "balance": 10000.00,
-  "equity": 10050.00,
-  "margin": 200.00,
-  "free_margin": 9850.00,
-  "trading_enabled": true,
-  "daily_pnl": 50.00,
-  "daily_trades": 3,
-  "open_positions": 2,
-  "total_exposure": 0.05,
-  "quotes": {
-    "XAUUSD": {"bid": 2005.50, "ask": 2005.60, "time": 1740561000},
-    "BTCUSD": {"bid": 95000.00, "ask": 95050.00, "time": 1740561000}
-  }
-}
-```
-
----
-
-## Project Structure
-
-```
-Quant_trading/
-├── mt5_bridge/                    # MT5 ↔ Python communication
-│   ├── EA_FileBridge.mq5          # ✅ File-based EA (recommended)
-│   ├── EA_ZeroMQ_Bridge.mq5       # ZeroMQ-based EA (Windows only)
-│   ├── mt5_file_client.py         # Python client for File Bridge
-│   ├── mt5_zmq_client.py          # Python client for ZMQ Bridge
-│   ├── test_connection.py         # Connection test script
-│   └── README.md                  # This file
-│
-├── src/                           # Core trading engine
-│   ├── main.py                    # Main entry point & orchestrator
-│   ├── connectors/                # MT5 connector abstraction
-│   ├── core/                      # Types, constants, exceptions
-│   ├── data/                      # Data engine & indicators
-│   ├── strategies/                # Breakout + Mean Reversion strategies
-│   ├── risk/                      # Risk engine & position sizing
-│   ├── execution/                 # Order execution engine
-│   ├── portfolio/                 # Portfolio & position tracking
-│   ├── state/                     # State persistence & recovery
-│   ├── monitoring/                # Logging, metrics, dashboard
-│   └── backtest/                  # Event-driven backtester
-│
-├── config/                        # Configuration files
-│   ├── config.yaml                # Base configuration
-│   ├── config_dev.yaml            # Development overrides
-│   ├── config_paper.yaml          # Paper trading config
-│   └── config_live.yaml           # Live trading config
-│
-├── scripts/                       # Utility scripts
-│   ├── run_backtest.py            # Run backtests
-│   ├── live_trade.py              # Start live trading
-│   ├── paper_trade.py             # Start paper trading
-│   ├── view_journal.py            # View trade journal
-│   ├── check_bridge.py            # Check MT5 bridge status
-│   ├── close_all_positions.py     # Emergency close all
-│   └── ...                        # Diagnostic & data scripts
-│
-├── tests/                         # Test suite
-│   ├── integration/               # MT5 integration tests
-│   └── unit/                      # Unit tests
-│
-├── data/                          # Runtime data (gitignored except historical/)
-│   └── historical/                # Historical price data for backtesting
-│
-├── requirements.txt               # Python dependencies
-├── requirements-test.txt          # Testing dependencies
-├── pytest.ini                     # Pytest configuration
-├── run_live.sh                    # Shell script to start live trading
-└── .gitignore                     # Git exclusions
-```
-
----
-
-## Running the System
-
-### Paper Trading (Safe — no real orders)
-
-```bash
-source venv/bin/activate  # or venv\Scripts\activate on Windows
-python scripts/paper_trade.py
-```
-
-### Live Trading
-
-> ⚠️ **Ensure MT5 is running with EA_FileBridge attached before starting.**
-
-```bash
-source venv/bin/activate
 python src/main.py --env live --force-live
 ```
 
-Or use the shell script:
-```bash
-./run_live.sh
+### Step 6.3 — What to Expect
+
+1. **First launch may take 1-3 minutes** — Python is loading libraries (this is normal!)
+2. You should then see:
+   ```
+   ============================================================
+   Initializing Trading System
+   ============================================================
+   1. Connecting to MT5...
+   ✓ Connected to MT5
+   ✓ ALL SYSTEMS OPERATIONAL
+   Starting main trading loop...
+   ```
+3. The system is now **live** and trading automatically! 🎉
+
+### Step 6.4 — Stopping the Bot
+
+To stop the trading system:
+- Press **Ctrl + C** in the Command Prompt window
+- The system will gracefully close all positions and save its state
+
+---
+
+## Part 7: Important Settings
+
+### EA Settings (in MetaTrader 5)
+
+You can change these by right-clicking the chart → **Expert Properties** → **Inputs**:
+
+| Setting | Default | Recommended For Beginners |
+|---------|---------|--------------------------|
+| EnableTrading | true | Leave as `true` |
+| MaxOpenPositions | 10 | Start with `3` |
+| MaxDailyLossPercent | 3.0 | Start with `2.0` |
+| MaxTradesPerDay | 50 | Start with `10` |
+
+### Python Config (in `config/config_live.yaml`)
+
+Edit this file with Notepad to change trading parameters:
+
+| Setting | What It Controls |
+|---------|-----------------|
+| `initial_balance` | Your account balance (for risk calculations) |
+| `risk_per_trade_pct` | How much to risk per trade (0.005 = 0.5%) |
+| `max_daily_loss_pct` | Maximum daily loss before stopping (0.05 = 5%) |
+| `max_positions` | Maximum simultaneous trades |
+
+> 💡 **To edit:** Right-click `config_live.yaml` → **Open with** → **Notepad**
+
+---
+
+## ⚠️ Safety Features
+
+This system has **multiple layers of protection**:
+
+1. **EA-Level Protection** (in MetaTrader):
+   - Maximum positions limit
+   - Daily loss limit — stops trading if you lose too much
+   - Daily profit limit — locks in profits
+   - Kill switch — instantly disable all trading
+   - Panic close — emergency close everything
+
+2. **Python-Level Protection** (in the trading engine):
+   - Risk per trade limit (default 0.5%)
+   - Circuit breaker — stops after 3 consecutive losses
+   - Portfolio exposure limits
+   - Automatic state saving (recovers from crashes)
+
+3. **Broker-Level Protection**:
+   - Your broker's margin requirements still apply
+   - Broker stop-out levels provide final safety net
+
+---
+
+## Common Questions
+
+### "Can I just test it without real money?"
+
+**Yes!** Use a **demo account** from your broker. It works exactly the same but with virtual money.
+
+### "How do I know it's working?"
+
+Look at the Command Prompt window — you'll see logs showing what the system is doing. Also check the **Experts** tab in MT5 for EA messages.
+
+### "How do I stop it?"
+
+Press `Ctrl + C` in the Command Prompt window. Or set `EnableTrading = false` in the EA inputs to stop new trades while keeping existing ones open.
+
+### "What if my computer turns off?"
+
+The system saves its state every 10 seconds. When you restart, it will detect the previous state and reconcile with MT5. Any positions that were opened will still be managed by your broker's stop-loss/take-profit levels.
+
+### "Can I change what it trades?"
+
+Yes — edit `config/config_live.yaml`. Under `symbols:`, you can enable/disable XAUUSD and BTCUSD, and adjust their settings.
+
+### "Where are the trade logs?"
+
+Run this command to see your trading history:
 ```
-
-### Backtesting
-
-```bash
-source venv/bin/activate
-python scripts/run_backtest.py
+python scripts/view_journal.py
 ```
 
 ---
 
 ## Troubleshooting
 
-### EA won't compile
+### "python is not recognized"
 
-| Error | Solution |
-|-------|----------|
-| `EA_FileBridge.mq5` shows errors | This EA has **zero external dependencies** — ensure you're using MT5 (MQL5), not MT4 |
-| `EA_ZeroMQ_Bridge.mq5` shows errors | Install ZeroMQ (`Zmq/Zmq.mqh`) in `MQL5/Include/` and DLLs in `MQL5/Libraries/` |
+→ Python wasn't added to PATH. Uninstall Python and reinstall it. In the installer, check **"Add Python to PATH"** at the bottom.
 
-### Python can't find status file
+### "pip is not recognized"
 
-| Platform | Check |
-|----------|-------|
-| **Windows** | Verify `C:\Users\<You>\AppData\Roaming\MetaQuotes\Terminal\Common\Files\mt5_status.json` exists |
-| **macOS** | Verify `~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files/mt5_status.json` exists |
-| **Both** | Ensure the EA is attached to a chart and running (check Experts tab) |
+→ Same fix as above — reinstall Python with PATH enabled.
 
-### Orders rejected
+### "No module named 'pandas'" or similar
 
-1. Check the **Experts** tab in MT5 for detailed error messages
-2. Verify the symbol is valid and tradeable (market hours)
-3. Check margin requirements — `ValidateOrder` logs detailed reasons
-4. Ensure `EnableTrading` is `true` in EA inputs
-5. Check daily limits haven't been reached (`GET_LIMITS` command)
+→ Run `pip install -r requirements.txt` again in the project folder.
 
-### Connection timeouts
+### "Status file not found - is EA running?"
 
-1. Verify the EA is actively processing (status timestamp should update every second)
-2. Check file permissions on the Common Files directory
-3. On macOS, ensure Wine/CrossOver is running and MT5 is not frozen
+→ Make sure:
+1. MetaTrader 5 is open
+2. The EA is attached to a chart (check top-right corner of chart)
+3. Algo Trading is enabled (button should be green)
 
-### Performance issues
+### "Connection timed out"
 
-- Reduce `StatusUpdateIntervalMs` to write status less frequently (e.g., 2000ms)
-- The default `CommandCheckIntervalMs` of 100ms provides ~10ms effective latency
+→ The EA is not responding. Check:
+1. Is MT5 open and logged in?
+2. Is the EA running? (Check Experts tab in Toolbox)
+3. Try removing and re-attaching the EA to the chart
 
----
+### "AllSYSTEMS OPERATIONAL" but "Waiting for data"
 
-## ZeroMQ Bridge (Alternative — Windows Only)
+→ This is normal! The system needs about 10 minutes of data (10 bars on 1-minute timeframe) before it starts generating trade signals. Just wait.
 
-If you're on Windows and prefer socket-based communication, see the `EA_ZeroMQ_Bridge.mq5` and `mt5_zmq_client.py` files. This requires:
+### Numbers look wrong in the logs
 
-1. [mql-zmq](https://github.com/dingmaotu/mql-zmq) library installed in `MQL5/Include/Zmq/`
-2. ZeroMQ DLLs (`libzmq.dll`, `libsodium.dll`) in `MQL5/Libraries/`
-3. [JAson.mqh](https://www.mql5.com/en/code/13663) in `MQL5/Include/`
-4. `pip install pyzmq` on the Python side
-
-See `README_SETUP.md` for detailed ZeroMQ setup instructions.
+→ Check that `config/config_live.yaml` has the correct `initial_balance` matching your actual account balance.
 
 ---
 
-## License
+## File Locations Reference (Windows)
 
-MIT License
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Commit your changes (`git commit -m 'Add my feature'`)
-4. Push to the branch (`git push origin feature/my-feature`)
-5. Open a Pull Request
+| What | Where |
+|------|-------|
+| The project | `C:\Users\YourName\Documents\Quant_Trading\` |
+| Python config | `C:\Users\YourName\Documents\Quant_Trading\config\config_live.yaml` |
+| EA file in MT5 | `...\MQL5\Experts\EA_FileBridge.mq5` (use File → Open Data Folder in MT5) |
+| MT5 shared files | `C:\Users\YourName\AppData\Roaming\MetaQuotes\Terminal\Common\Files\` |
+| Trade logs | Run `python scripts/view_journal.py` |
