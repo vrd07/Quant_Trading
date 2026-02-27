@@ -2,7 +2,7 @@
 Performance Dashboard — Concise P&L + Strategy Analytics.
 
 Outputs:
-  1. Account snapshot  (equity, return, open positions)
+  1. Account snapshot  (real MT5 balance/equity, open positions)
   2. Trade log         (every closed trade: strategy, side, P&L)
   3. Strategy scorecard (per-strategy: count %, win%, loss%, net P&L)
 
@@ -35,6 +35,29 @@ class PerformanceDashboard:
 
         from .logger import get_logger
         self.logger = get_logger(__name__)
+
+    # ── helpers ──────────────────────────────────────────────────────
+
+    def _get_mt5_account(self) -> Dict:
+        """Fetch real balance/equity from MT5 — fallback to internal calc."""
+        try:
+            info = self.portfolio.connector.get_account_info()
+            return {
+                "balance": float(info.get("balance", 0)),
+                "equity": float(info.get("equity", 0)),
+                "margin": float(info.get("margin", 0)),
+                "free_margin": float(info.get("free_margin", 0)),
+            }
+        except Exception:
+            # Fallback: compute from internal P&L
+            stats = self.portfolio.get_statistics()
+            equity = float(self.initial_capital) + stats.get("total_pnl", 0)
+            return {
+                "balance": equity,
+                "equity": equity,
+                "margin": 0,
+                "free_margin": equity,
+            }
 
     # ── public API (used by main.py) ────────────────────────────────
 
@@ -69,10 +92,13 @@ class PerformanceDashboard:
     # ── 1. Account Snapshot ─────────────────────────────────────────
 
     def _print_account_snapshot(self) -> None:
+        acct = self._get_mt5_account()
         stats = self.portfolio.get_statistics()
-        equity = Decimal(str(stats.get("total_pnl", 0))) + self.initial_capital
-        ret = equity - self.initial_capital
-        ret_pct = float(ret / self.initial_capital * 100) if self.initial_capital else 0
+
+        balance = acct["balance"]
+        equity = acct["equity"]
+        ret = equity - float(self.initial_capital)
+        ret_pct = (ret / float(self.initial_capital) * 100) if self.initial_capital else 0
 
         print()
         print("╔══════════════════════════════════════════════════╗")
@@ -82,10 +108,11 @@ class PerformanceDashboard:
         print()
         print("  ACCOUNT")
         print(f"  ├─ Capital      ${float(self.initial_capital):>10,.2f}")
-        print(f"  ├─ Equity       ${float(equity):>10,.2f}")
-        print(f"  ├─ Return       ${float(ret):>+10,.2f}  ({ret_pct:+.2f}%)")
-        print(f"  ├─ Unrealized   ${stats.get('unrealized_pnl', 0):>+10,.2f}")
-        print(f"  ├─ Realized     ${stats.get('realized_pnl', 0):>+10,.2f}")
+        print(f"  ├─ Balance      ${balance:>10,.2f}")
+        print(f"  ├─ Equity       ${equity:>10,.2f}")
+        print(f"  ├─ Return       ${ret:>+10,.2f}  ({ret_pct:+.2f}%)")
+        print(f"  ├─ Margin       ${acct['margin']:>10,.2f}")
+        print(f"  ├─ Free Margin  ${acct['free_margin']:>10,.2f}")
         print(f"  └─ Positions    {stats['total_positions']}  "
               f"(L:{stats['long_positions']}  S:{stats['short_positions']})")
 
@@ -186,11 +213,11 @@ class PerformanceDashboard:
               f"{tc}${total_pnl:>+9.2f}\033[0m")
         print()
 
-    # ── helpers ──────────────────────────────────────────────────────
+    # ── snapshot ─────────────────────────────────────────────────────
 
     def _build_snapshot_dict(self) -> Dict:
+        acct = self._get_mt5_account()
         stats = self.portfolio.get_statistics()
-        equity = Decimal(str(stats.get("total_pnl", 0))) + self.initial_capital
 
         trades = self.journal.get_trades()
         df = pd.DataFrame(trades) if trades else pd.DataFrame()
@@ -210,12 +237,20 @@ class PerformanceDashboard:
                     "avg_pnl": round(float(grp["realized_pnl"].mean()), 2),
                 }
 
+        equity = acct["equity"]
+        ret_pct = (equity - float(self.initial_capital)) / float(self.initial_capital) * 100 if self.initial_capital else 0
+
         return {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "initial_capital": float(self.initial_capital),
-            "current_equity": float(equity),
-            "total_return_pct": float((equity - self.initial_capital) / self.initial_capital * 100) if self.initial_capital else 0,
+            "balance": acct["balance"],
+            "equity": equity,
+            "margin": acct["margin"],
+            "free_margin": acct["free_margin"],
+            "total_return_pct": round(ret_pct, 4),
             "open_positions": stats["total_positions"],
+            "unrealized_pnl": stats.get("unrealized_pnl", 0),
+            "realized_pnl": stats.get("realized_pnl", 0),
             "total_trades": len(trades),
             "strategy_stats": strategy_stats,
         }
