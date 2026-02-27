@@ -20,7 +20,7 @@ symbols:
     commission_per_lot: 0.0
   
   BTCUSD:
-    enabled: false
+    enabled: true
     pip_value: 0.1
     min_lot: 0.01
     max_lot: 2.0
@@ -77,6 +77,11 @@ strategies:
     rr_ratio: 2.0
     only_in_regime: TREND
     mtf_confirmation: true
+    atr_stop_multiplier: 2.0        # ATR-based stop (replaces channel-width stop)
+    volume_confirmation: true        # Require above-average volume
+    volume_ratio_min: 1.2            # Volume must be >= 1.2x 20-bar average
+    rsi_overbought: 75               # Don't buy above RSI 75
+    rsi_oversold: 25                 # Don't sell below RSI 25
   
   mean_reversion:
     enabled: true
@@ -88,7 +93,7 @@ strategies:
     only_in_regime: RANGE
     mtf_confirmation: false
   
-  # VWAP Deviation Strategy (proven in paper trading)
+  # VWAP Deviation Strategy 
   vwap:
     enabled: true
     atr_multiplier: 1.5
@@ -97,19 +102,38 @@ strategies:
     min_volume_ratio: 1.0
     only_in_regime: RANGE
   
-  # Momentum Scalping Strategy (proven in paper trading)
+  # Momentum Scalping Strategy 
   momentum:
     enabled: true
     rsi_period: 14
     ema_period: 20
     rr_ratio: 2.0
-    atr_stop_multiplier: 1.5
+    atr_stop_multiplier: 1.2          # Tighter stop (was 1.5)
     rsi_bull_threshold: 50
     rsi_bear_threshold: 50
+    rsi_overbought: 75                # Don't buy above RSI 75
+    rsi_oversold: 25                  # Don't sell below RSI 25
+    adx_min_threshold: 20             # Require ADX >= 20 for momentum
+    volume_confirmation: true          # Require above-average volume
+    volume_ratio_min: 1.0             # Volume must be >= 1.0x average
     macd_fast: 12
     macd_slow: 26
     macd_signal: 9
     only_in_regime: TREND
+  
+  # Kalman Regime-Switching Strategy (Instruct.md)
+  kalman_regime:
+    enabled: true
+    kalman_q: 0.00001           # Process noise (lower = smoother)
+    kalman_r: 0.01              # Measurement noise
+    rv_window: 20               # Realized volatility window
+    rv_ma_window: 100           # RV moving average for regime threshold
+    zscore_window: 20           # OU z-score std window
+    entry_threshold: 2.0        # |Z| threshold for range-mode entry
+    atr_period: 14
+    sl_atr_multiplier: 1.5      # Stop loss = 1.5 × ATR
+    tp_atr_multiplier: 3.0      # Take profit = 3.0 × ATR
+    news_filter: true           # Skip signals during news blackout
 
 trading_hours:
   sessions:
@@ -124,6 +148,13 @@ trading_hours:
   
   news_filter:
     enabled: true  # ALWAYS ON FOR LIVE
+    csv_path: news/FEB_news.csv
+    currency: USD
+    impacts:
+      - high
+      - red
+    buffer_min: 15
+    timezone: Asia/Kolkata
 
 monitoring:
   log_level: INFO

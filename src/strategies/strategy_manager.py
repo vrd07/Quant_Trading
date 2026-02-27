@@ -19,6 +19,7 @@ from .breakout_strategy import BreakoutStrategy
 from .mean_reversion_strategy import MeanReversionStrategy
 from .vwap_strategy import VWAPStrategy
 from .momentum_strategy import MomentumStrategy
+from .kalman_regime_strategy import KalmanRegimeStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -68,6 +69,13 @@ class StrategyManager:
                 self.strategies[symbol.ticker]['momentum'] = MomentumStrategy(
                     symbol=symbol,
                     config=config.get('strategies', {}).get('momentum', {})
+                )
+            
+            # Initialize Kalman Regime strategy if enabled
+            if config.get('strategies', {}).get('kalman_regime', {}).get('enabled', False):
+                self.strategies[symbol.ticker]['kalman_regime'] = KalmanRegimeStrategy(
+                    symbol=symbol,
+                    config=config.get('strategies', {}).get('kalman_regime', {})
                 )
         
         from ..monitoring.logger import get_logger

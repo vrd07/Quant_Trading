@@ -56,6 +56,7 @@ from src.monitoring.logger import get_logger
 from src.monitoring.trade_journal import TradeJournal
 from src.monitoring.performance_dashboard import PerformanceDashboard
 from src.monitoring.metrics_tracker import MetricsTracker
+from src.data.news_filter import load_ff_events, is_news_blackout
 
 
 class TradingSystem:
@@ -105,6 +106,10 @@ class TradingSystem:
         # Initialize to min time to force immediate reconciliation on startup
         self.last_reconciliation = datetime.min.replace(tzinfo=timezone.utc)
         self.loop_iteration = 0
+        
+        # News filter events (loaded during setup if enabled)
+        self._news_events_df = None
+        self._news_filter_cfg = None
         
         # Shutdown handler
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -195,6 +200,26 @@ class TradingSystem:
             self.logger.info("8. Initializing strategies...")
             self.strategy_manager = StrategyManager(symbols, self.config)
             self.logger.info("✓ Strategies ready")
+            
+            # 10. Load news filter events if enabled
+            nf_cfg = self.config.get('trading_hours', {}).get('news_filter', {})
+            if nf_cfg.get('enabled', False):
+                csv_path = nf_cfg.get('csv_path', 'news/FEB_news.csv')
+                try:
+                    self._news_events_df = load_ff_events(
+                        csv_path=csv_path,
+                        currency=nf_cfg.get('currency', 'USD'),
+                        impacts=nf_cfg.get('impacts', ['high', 'red']),
+                    )
+                    self._news_filter_cfg = nf_cfg
+                    self.logger.info(
+                        f"✓ News filter loaded ({len(self._news_events_df)} events)"
+                    )
+                except FileNotFoundError:
+                    self.logger.warning(
+                        f"News filter CSV not found: {csv_path} — filter disabled"
+                    )
+                    self._news_events_df = None
             
             # 9. Restore state from crash (if any)
             self.logger.info("9. Checking for previous state...")
@@ -313,6 +338,16 @@ class TradingSystem:
         strategy_config = self.config.get('strategies', {})
         min_bars = strategy_config.get('min_bars_required', 10)
         primary_tf = strategy_config.get('primary_timeframe', '5m')
+        
+        # News filter: skip all strategy processing during blackout
+        if self._news_events_df is not None and self._news_filter_cfg:
+            buffer_min = self._news_filter_cfg.get('buffer_min', 15)
+            tz = self._news_filter_cfg.get('timezone', 'Asia/Kolkata')
+            if is_news_blackout(datetime.now(), self._news_events_df,
+                               buffer_min=buffer_min, timezone=tz):
+                if self.loop_iteration % 60 == 1:
+                    self.logger.info("News blackout active — skipping strategies")
+                return
         
         for symbol_ticker in enabled_symbols:
             try:

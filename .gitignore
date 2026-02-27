@@ -28,12 +28,14 @@ data/logs/
 data/state/
 data/metrics/
 data/backtests/
+data/indicators_test.csv
 
 # ============================================
 # Debug & Temporary Files
 # ============================================
 debug_trace.txt
 live_output.log
+live_debug.log
 paper_trading.log
 trading_system.pid
 syntax_result.txt
@@ -68,3 +70,8 @@ Desktop.ini
 *.env
 .env.*
 !.env.example
+
+# ============================================
+# Gemini AI artifacts (local only)
+# ============================================
+.gemini/

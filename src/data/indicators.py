@@ -650,6 +650,79 @@ class Indicators:
         zscore = (df['close'] - vwap) / std
         return zscore
 
+    @staticmethod
+    def kalman_filter(series: pd.Series, q: float = 1e-5, r: float = 0.01) -> pd.Series:
+        """
+        Adaptive Kalman filter for trend extraction.
+        
+        State model: x_t = x_{t-1} + ε_t
+        Observation: y_t = x_t + η_t
+        
+        Args:
+            series: Price series to filter
+            q: Process noise covariance (higher → more responsive)
+            r: Measurement noise covariance (higher → smoother)
+        
+        Returns:
+            Series with filtered trend values
+        """
+        from src.indicators.kalman import KalmanFilter as KF
+        kf = KF(q=q, r=r)
+        return kf.filter_series(series)
+
+    @staticmethod
+    def realized_vol(close: pd.Series, window: int = 20) -> pd.Series:
+        """
+        Rolling realized volatility from log returns.
+        
+        RV_t = sqrt( Σ (ln(P_t / P_{t-1}))² )
+        
+        Args:
+            close: Close price series
+            window: Rolling window length
+        
+        Returns:
+            Series with RV values
+        """
+        from src.indicators.volatility import realized_volatility as rv_fn
+        return rv_fn(close, window=window)
+
+    @staticmethod
+    def rv_regime(close: pd.Series, rv_window: int = 20, rv_ma_window: int = 100) -> pd.Series:
+        """
+        Classify regime via realized volatility.
+        
+        RV > MA(RV) → 1 (trend), else → 0 (range)
+        
+        Args:
+            close: Close price series
+            rv_window: Window for RV calculation
+            rv_ma_window: Window for RV moving average threshold
+        
+        Returns:
+            Series of regime labels (1=trend, 0=range)
+        """
+        from src.indicators.volatility import classify_regime as cr_fn
+        return cr_fn(close, rv_window=rv_window, rv_ma_window=rv_ma_window)
+
+    @staticmethod
+    def ou_zscore(prices: pd.Series, reference: pd.Series, window: int = 20) -> pd.Series:
+        """
+        Ornstein-Uhlenbeck z-score: deviation from a reference level.
+        
+        Z_t = (P_t − ref_t) / σ_t
+        
+        Args:
+            prices: Raw price series
+            reference: Reference / trend series (e.g. Kalman)
+            window: Lookback for rolling std dev
+        
+        Returns:
+            Series of Z-score values
+        """
+        from src.indicators.ou_model import ou_zscore as ou_fn
+        return ou_fn(prices, reference, window=window)
+
 
 # Convenience function for getting multiple indicators at once
 def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
@@ -699,5 +772,15 @@ def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:
     result['macd'] = macd_line
     result['macd_signal'] = signal_line
     result['macd_histogram'] = histogram
+    
+    # Kalman filter trend
+    result['kalman'] = Indicators.kalman_filter(df['close'])
+    
+    # Realized volatility & regime
+    result['realized_vol'] = Indicators.realized_vol(df['close'])
+    result['rv_regime'] = Indicators.rv_regime(df['close'])
+    
+    # OU z-score (deviation from Kalman trend)
+    result['ou_zscore'] = Indicators.ou_zscore(df['close'], result['kalman'])
     
     return result

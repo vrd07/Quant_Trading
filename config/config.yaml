@@ -73,6 +73,20 @@ strategies:
     exit_threshold: 0.5
     stop_threshold: 3.0
     only_in_regime: RANGE
+  
+  # Kalman Regime-Switching Strategy (Instruct.md)
+  kalman_regime:
+    enabled: true
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    rv_window: 20
+    rv_ma_window: 100
+    zscore_window: 20
+    entry_threshold: 2.0
+    atr_period: 14
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 3.0
+    news_filter: false
 
 trading_hours:
   enabled: true
