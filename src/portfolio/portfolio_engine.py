@@ -369,13 +369,22 @@ class PortfolioEngine:
                         position.realized_pnl = realized_pnl # Update the closed position record
                         
                     else:
+                        # History unavailable — still record the trade using last known price
+                        exit_price = position.current_price if position.current_price else position.entry_price
+                        position.metadata['exit_reason'] = 'closed_on_broker'
+
                         self.logger.warning(
-                            "Position missing from MT5 and not found in recent history - PRUNING",
+                            "Position missing from MT5 — closing with last known price",
                             position_id=str(position.position_id),
-                            ticker=mt5_ticket
+                            ticker=mt5_ticket,
+                            exit_price=float(exit_price),
                         )
-                        # Purge stale entry to prevent "Max positions reached" blockage
-                        self.position_tracker.remove_position(position.position_id)
+
+                        self.close_position(
+                            position_id=position.position_id,
+                            exit_price=exit_price,
+                            exit_time=datetime.now(timezone.utc),
+                        )
             
             # 2. Check for "Unknown Positions" (MT5 has it, we don't)
             # Adopt them into our portfolio (resilience against restart/missed fills)
