@@ -42,22 +42,29 @@ class PerformanceDashboard:
         """Fetch real balance/equity from MT5 — fallback to internal calc."""
         try:
             info = self.portfolio.connector.get_account_info()
-            return {
-                "balance": float(info.get("balance", 0)),
-                "equity": float(info.get("equity", 0)),
-                "margin": float(info.get("margin", 0)),
-                "free_margin": float(info.get("free_margin", 0)),
-            }
+            balance = float(info.get("balance", 0))
+            equity = float(info.get("equity", 0))
+
+            # MT5 intermittently returns 0 — guard against it
+            if balance > 0 and equity > 0:
+                return {
+                    "balance": balance,
+                    "equity": equity,
+                    "margin": float(info.get("margin", 0)),
+                    "free_margin": float(info.get("free_margin", 0)),
+                }
         except Exception:
-            # Fallback: compute from internal P&L
-            stats = self.portfolio.get_statistics()
-            equity = float(self.initial_capital) + stats.get("total_pnl", 0)
-            return {
-                "balance": equity,
-                "equity": equity,
-                "margin": 0,
-                "free_margin": equity,
-            }
+            pass
+
+        # Fallback: use internal P&L + initial capital
+        stats = self.portfolio.get_statistics()
+        equity = float(self.initial_capital) + stats.get("total_pnl", 0)
+        return {
+            "balance": equity,
+            "equity": equity,
+            "margin": 0,
+            "free_margin": equity,
+        }
 
     # ── public API (used by main.py) ────────────────────────────────
 
