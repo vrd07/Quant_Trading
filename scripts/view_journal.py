@@ -1,29 +1,31 @@
 #!/usr/bin/env python3
 """
-Live Trade Journal Dashboard
-=============================
-Runs alongside the trading system and continuously displays:
-  - Per-strategy trade counts and P&L percentages
-  - Overall summary statistics
+Trade Analytics CLI — Run alongside or after the trading system.
 
-Auto-cleans journal entries older than 2 days on each refresh.
-Stop with Ctrl+C.
+Usage:
+    python scripts/view_journal.py              # one-shot report
+    python scripts/view_journal.py --live       # auto-refresh every 30s
+    python scripts/view_journal.py --days 7     # look back 7 days
+
+Shows:
+  1. Per-trade P&L with strategy name, side, duration
+  2. Strategy scorecard: usage %, win %, loss %, net P&L
+  3. Daily summary with totals
 """
 
 import sys
 import os
-import time
 import signal
-import pandas as pd
+import time
 from pathlib import Path
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
+import argparse
 
-# Add project root to path
-PROJECT_ROOT = Path(__file__).parent.parent
+# ── setup paths ──────────────────────────────────────────────────────
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 JOURNAL_FILE = PROJECT_ROOT / "data" / "logs" / "trade_journal.csv"
-REFRESH_INTERVAL = 30  # seconds between refreshes
 
 # ── graceful shutdown ────────────────────────────────────────────────
 _running = True
@@ -36,185 +38,207 @@ signal.signal(signal.SIGINT,  _handle_signal)
 signal.signal(signal.SIGTERM, _handle_signal)
 
 
-# ── log cleanup ──────────────────────────────────────────────────────
-def cleanup_old_entries(df: pd.DataFrame, days: int = 2) -> pd.DataFrame:
-    """Remove rows whose exit_time is older than `days` days and rewrite the CSV."""
-    if df.empty or 'exit_time' not in df.columns:
+# ── helpers ──────────────────────────────────────────────────────────
+
+G = "\033[92m"      # green
+R = "\033[91m"      # red
+Y = "\033[93m"      # yellow
+B = "\033[94m"      # blue
+DIM = "\033[2m"     # dim
+BOLD = "\033[1m"    # bold
+RST = "\033[0m"     # reset
+
+
+def color_pnl(val: float, fmt: str = "+.2f") -> str:
+    c = G if val >= 0 else R
+    return f"{c}{val:{fmt}}{RST}"
+
+
+def clear():
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def load_trades(days: int = 30):
+    """Load trade journal and filter by recency."""
+    import pandas as pd
+
+    if not JOURNAL_FILE.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(JOURNAL_FILE)
+    if df.empty:
         return df
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    df['_exit_dt'] = pd.to_datetime(df['exit_time'], utc=True, errors='coerce')
-    fresh = df[df['_exit_dt'] >= cutoff].drop(columns=['_exit_dt'])
-    removed = len(df) - len(fresh)
-
-    if removed > 0:
-        # Rewrite CSV with only fresh entries
-        fresh.to_csv(JOURNAL_FILE, index=False)
-        print(f"  🗑  Cleaned up {removed} entries older than {days} days")
-
-    if '_exit_dt' in df.columns:
-        df = df.drop(columns=['_exit_dt'])
-
-    return fresh
+    df["exit_time"] = pd.to_datetime(df["exit_time"], errors="coerce")
+    cutoff = datetime.now() - timedelta(days=days)
+    df = df[df["exit_time"] >= cutoff].copy()
+    df.sort_values("exit_time", ascending=False, inplace=True)
+    return df
 
 
-# ── display helpers ──────────────────────────────────────────────────
-def clear_screen():
-    os.system('cls' if os.name == 'nt' else 'clear')
+# ── section printers ─────────────────────────────────────────────────
 
-
-def print_header(trade_count: int):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print("╔══════════════════════════════════════════════════════════════╗")
-    print("║              📊  LIVE TRADE JOURNAL DASHBOARD              ║")
-    print("╚══════════════════════════════════════════════════════════════╝")
-    print(f"  Last refresh : {now}")
-    print(f"  Total trades : {trade_count}")
-    print(f"  Refreshing every {REFRESH_INTERVAL}s  |  Ctrl+C to stop")
+def print_header(total_trades: int):
+    print()
+    print(f"{BOLD}╔══════════════════════════════════════════════════╗{RST}")
+    print(f"{BOLD}║          TRADE ANALYTICS REPORT                  ║{RST}")
+    print(f"{BOLD}╚══════════════════════════════════════════════════╝{RST}")
+    print(f"  {DIM}{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}{RST}  "
+          f"│  {total_trades} trades")
     print()
 
 
-def print_strategy_table(df: pd.DataFrame):
-    """Print per-strategy breakdown."""
-    if 'strategy' not in df.columns:
-        print("  ⚠  No 'strategy' column found in journal.")
+def print_trade_log(df, n: int = 20):
+    """Section 1: Per-trade P&L."""
+    if df.empty:
+        print(f"  {Y}No closed trades found.{RST}\n")
         return
 
-    print("┌────────────────────────┬────────┬─────────┬────────────┬────────────┐")
-    print("│  Strategy              │ Trades │ Win %   │ Total P&L  │ Avg P&L %  │")
-    print("├────────────────────────┼────────┼─────────┼────────────┼────────────┤")
+    recent = df.head(n)
 
-    stats = df.groupby('strategy').agg(
-        trades   = ('trade_id', 'count'),
-        total_pnl= ('realized_pnl', 'sum'),
-        avg_pct  = ('pnl_pct', 'mean'),
-        wins     = ('realized_pnl', lambda x: (x > 0).sum())
-    )
-    stats['win_rate'] = (stats['wins'] / stats['trades']) * 100
+    print(f"  {BOLD}TRADE LOG{RST}  {DIM}(most recent {len(recent)}){RST}")
+    print("  " + "─" * 88)
+    print(f"  {'Exit Time':<20} {'Strategy':<16} {'Side':<5} "
+          f"{'Entry':>9}  {'Exit':>9}  {'P&L ($)':>10}  {'P&L (%)':>8}  {'Dur':>6}")
+    print("  " + "─" * 88)
 
-    for strat, row in stats.iterrows():
-        pnl_color = "\033[32m" if row['total_pnl'] >= 0 else "\033[31m"
-        reset     = "\033[0m"
-        print(
-            f"│  {strat:<20s}  │ {int(row['trades']):>6} │ {row['win_rate']:>5.1f} % "
-            f"│ {pnl_color}${row['total_pnl']:>+9.2f}{reset} "
-            f"│ {pnl_color}{row['avg_pct']:>+8.2f} %{reset} │"
-        )
+    for _, t in recent.iterrows():
+        dur = t.get("duration_seconds", 0) / 60
+        pnl = t.get("realized_pnl", 0)
+        pnl_pct = t.get("pnl_pct", 0)
+        strat = str(t.get("strategy", "?"))[:15]
+        side = str(t.get("side", "?"))[:4]
+        entry = t.get("entry_price", 0)
+        exit_ = t.get("exit_price", 0)
+        exit_t = t["exit_time"].strftime("%m-%d %H:%M") if hasattr(t["exit_time"], "strftime") else str(t["exit_time"])[:16]
 
-    print("└────────────────────────┴────────┴─────────┴────────────┴────────────┘")
+        print(f"  {exit_t:<20} {strat:<16} {side:<5} "
+              f"${entry:>8.2f}  ${exit_:>8.2f}  "
+              f"{color_pnl(pnl, '+9.2f')}  "
+              f"{color_pnl(pnl_pct, '+7.2f')}%  "
+              f"{dur:>5.1f}m")
+
+    print("  " + "─" * 88)
+    total_pnl = df["realized_pnl"].sum()
+    print(f"  {'':20} {'':16} {'':5} {'':9}  {'total':>9}  "
+          f"${color_pnl(total_pnl, '+9.2f')}")
     print()
 
 
-def print_overall_summary(df: pd.DataFrame):
-    """Print aggregated stats."""
-    total_pnl = df['realized_pnl'].sum()
-    avg_pct   = df['pnl_pct'].mean()
-    wins      = (df['realized_pnl'] > 0).sum()
-    losses    = (df['realized_pnl'] < 0).sum()
-    win_rate  = (wins / len(df)) * 100 if len(df) > 0 else 0
-    avg_dur   = df['duration_seconds'].mean() / 60 if 'duration_seconds' in df.columns else 0
-
-    pnl_color = "\033[32m" if total_pnl >= 0 else "\033[31m"
-    reset     = "\033[0m"
-
-    print("── Overall Summary ─────────────────────────────────────────────")
-    print(f"  Wins / Losses : {wins}W  /  {losses}L  ({win_rate:.1f}% win rate)")
-    print(f"  Total P&L     : {pnl_color}${total_pnl:+.2f}{reset}")
-    print(f"  Avg P&L %     : {pnl_color}{avg_pct:+.2f} %{reset}")
-    print(f"  Avg Duration  : {avg_dur:.1f} min")
-    print("─────────────────────────────────────────────────────────────────")
-    print()
-
-
-def print_recent_trades(df: pd.DataFrame, n: int = 5):
-    """Show the most recent N trades."""
-    recent = df.tail(n)
-    if recent.empty:
+def print_strategy_scorecard(df):
+    """Section 2: Strategy usage % and win/loss ratio."""
+    if df.empty:
         return
 
-    print(f"── Last {n} Trades ──────────────────────────────────────────────")
-    print(f"  {'Time':<20s}  {'Symbol':<8s}  {'Side':<5s}  {'Strategy':<15s}  {'P&L':>10s}  {'P&L %':>8s}")
-    print(f"  {'─'*20}  {'─'*8}  {'─'*5}  {'─'*15}  {'─'*10}  {'─'*8}")
+    total = len(df)
+    print(f"  {BOLD}STRATEGY SCORECARD{RST}")
+    print("  " + "─" * 80)
+    print(f"  {'Strategy':<16} {'Trades':>7} {'Usage':>6} "
+          f"{'Wins':>5} {'Win%':>6} {'Loss%':>6} "
+          f"{'Net P&L':>10} {'Avg P&L':>9} {'PF':>6}")
+    print("  " + "─" * 80)
 
-    for _, row in recent.iterrows():
-        try:
-            t = str(row['exit_time'])[:19].replace('T', ' ')
-        except Exception:
-            t = '—'
+    rows = []
+    for strat, grp in df.groupby("strategy"):
+        cnt = len(grp)
+        wins = int((grp["realized_pnl"] > 0).sum())
+        losses = int((grp["realized_pnl"] < 0).sum())
+        net = grp["realized_pnl"].sum()
+        avg = grp["realized_pnl"].mean()
+        gross_win = grp.loc[grp["realized_pnl"] > 0, "realized_pnl"].sum()
+        gross_loss = abs(grp.loc[grp["realized_pnl"] < 0, "realized_pnl"].sum())
+        pf = gross_win / gross_loss if gross_loss > 0 else float("inf")
 
-        pnl_val = row.get('realized_pnl', 0)
-        pct_val = row.get('pnl_pct', 0)
-        pnl_color = "\033[32m" if pnl_val >= 0 else "\033[31m"
-        reset     = "\033[0m"
+        rows.append((strat, cnt, cnt / total * 100, wins,
+                      wins / cnt * 100, losses / cnt * 100,
+                      net, avg, pf))
 
-        print(
-            f"  {t:<20s}  {str(row.get('symbol','')):<8s}  "
-            f"{str(row.get('side','')):<5s}  {str(row.get('strategy','')):<15s}  "
-            f"{pnl_color}${pnl_val:>+9.2f}{reset}  {pnl_color}{pct_val:>+6.2f} %{reset}"
-        )
+    rows.sort(key=lambda r: r[6], reverse=True)
+
+    for strat, cnt, usage, wins, wpct, lpct, net, avg, pf in rows:
+        pf_str = f"{pf:>5.2f}" if pf != float("inf") else "  ∞  "
+        print(f"  {str(strat)[:15]:<16} {cnt:>7} {usage:>5.1f}% "
+              f"{wins:>5} {wpct:>5.1f}% {lpct:>5.1f}% "
+              f"${color_pnl(net, '+9.2f')} "
+              f"${color_pnl(avg, '+8.2f')} "
+              f"{pf_str}")
+
+    # Totals
+    total_pnl = df["realized_pnl"].sum()
+    total_wins = int((df["realized_pnl"] > 0).sum())
+    total_gross_win = df.loc[df["realized_pnl"] > 0, "realized_pnl"].sum()
+    total_gross_loss = abs(df.loc[df["realized_pnl"] < 0, "realized_pnl"].sum())
+    total_pf = total_gross_win / total_gross_loss if total_gross_loss > 0 else float("inf")
+    total_pf_str = f"{total_pf:>5.2f}" if total_pf != float("inf") else "  ∞  "
+
+    print("  " + "─" * 80)
+    print(f"  {BOLD}{'TOTAL':<16}{RST} {total:>7} {100.0:>5.1f}% "
+          f"{total_wins:>5} {total_wins / total * 100:>5.1f}% "
+          f"{(total - total_wins) / total * 100:>5.1f}% "
+          f"${color_pnl(total_pnl, '+9.2f')} "
+          f"${color_pnl(total_pnl / total, '+8.2f')} "
+          f"{total_pf_str}")
     print()
 
 
-# ── main loop ────────────────────────────────────────────────────────
+def print_daily_summary(df):
+    """Section 3: Daily P&L breakdown."""
+    if df.empty:
+        return
+
+    df["date"] = df["exit_time"].dt.date
+    print(f"  {BOLD}DAILY P&L{RST}")
+    print("  " + "─" * 56)
+    print(f"  {'Date':<12} {'Trades':>7} {'Wins':>5} {'Win%':>6} "
+          f"{'Net P&L':>10} {'Cum P&L':>10}")
+    print("  " + "─" * 56)
+
+    daily = df.groupby("date").agg(
+        trades=("realized_pnl", "count"),
+        wins=("realized_pnl", lambda x: (x > 0).sum()),
+        net=("realized_pnl", "sum"),
+    ).sort_index()
+
+    cum = 0
+    for date, row in daily.iterrows():
+        cum += row["net"]
+        wpct = row["wins"] / row["trades"] * 100 if row["trades"] else 0
+        print(f"  {str(date):<12} {row['trades']:>7} {row['wins']:>5} {wpct:>5.1f}% "
+              f"${color_pnl(row['net'], '+9.2f')} "
+              f"${color_pnl(cum, '+9.2f')}")
+
+    print("  " + "─" * 56)
+    print()
+
+
+# ── main ─────────────────────────────────────────────────────────────
+
+def run_report(days: int = 30):
+    df = load_trades(days)
+    print_header(len(df))
+    print_trade_log(df, n=25)
+    print_strategy_scorecard(df)
+    print_daily_summary(df)
+
+
 def main():
-    print("Starting Live Trade Journal Dashboard …")
-    print(f"Watching: {JOURNAL_FILE}")
-    print(f"Press Ctrl+C to stop.\n")
+    parser = argparse.ArgumentParser(description="Trade Analytics CLI")
+    parser.add_argument("--live", action="store_true", help="Auto-refresh mode")
+    parser.add_argument("--days", type=int, default=30, help="Lookback days (default: 30)")
+    parser.add_argument("--interval", type=int, default=30, help="Refresh interval in seconds")
+    args = parser.parse_args()
 
-    while _running:
-        # ── read journal ──
-        if not JOURNAL_FILE.exists():
-            clear_screen()
-            print_header(0)
-            print("  ⏳  Waiting for journal file to be created …")
-            _sleep(REFRESH_INTERVAL)
-            continue
-
-        try:
-            df = pd.read_csv(JOURNAL_FILE)
-        except pd.errors.EmptyDataError:
-            clear_screen()
-            print_header(0)
-            print("  ⏳  Journal file exists but is empty. Waiting for trades …")
-            _sleep(REFRESH_INTERVAL)
-            continue
-
-        if df.empty:
-            clear_screen()
-            print_header(0)
-            print("  ⏳  No trades recorded yet. Waiting …")
-            _sleep(REFRESH_INTERVAL)
-            continue
-
-        # ── cleanup old entries ──
-        df = cleanup_old_entries(df, days=2)
-
-        if df.empty:
-            clear_screen()
-            print_header(0)
-            print("  ⏳  All entries were older than 2 days and have been cleaned up.")
-            _sleep(REFRESH_INTERVAL)
-            continue
-
-        # ── render dashboard ──
-        clear_screen()
-        print_header(len(df))
-        print_strategy_table(df)
-        print_overall_summary(df)
-        print_recent_trades(df)
-
-        _sleep(REFRESH_INTERVAL)
-
-    # ── shutdown ──
-    print("\n✅  Dashboard stopped. Goodbye!")
-
-
-def _sleep(seconds: int):
-    """Sleep in small increments so we can respond to Ctrl+C quickly."""
-    for _ in range(seconds * 2):
-        if not _running:
-            break
-        time.sleep(0.5)
+    if args.live:
+        while _running:
+            clear()
+            run_report(args.days)
+            print(f"  {DIM}Refreshing in {args.interval}s  (Ctrl+C to exit){RST}")
+            for _ in range(args.interval * 2):
+                if not _running:
+                    break
+                time.sleep(0.5)
+    else:
+        run_report(args.days)
 
 
 if __name__ == "__main__":

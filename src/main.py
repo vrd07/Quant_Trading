@@ -55,7 +55,6 @@ from src.core.exceptions import (
 from src.monitoring.logger import get_logger
 from src.monitoring.trade_journal import TradeJournal
 from src.monitoring.performance_dashboard import PerformanceDashboard
-from src.monitoring.metrics_tracker import MetricsTracker
 from src.data.news_filter import load_ff_events, is_news_blackout
 
 
@@ -98,7 +97,6 @@ class TradingSystem:
         # Monitoring
         self.trade_journal: Optional[TradeJournal] = None
         self.dashboard: Optional[PerformanceDashboard] = None
-        self.metrics_tracker: Optional[MetricsTracker] = None
         
         # State
         self.running = False
@@ -180,13 +178,7 @@ class TradingSystem:
             self.state_manager = StateManager(state_dir=state_dir)
             self.logger.info(f"✓ State manager ready (env: {self.env})")
             
-            # 7b. Initialize metrics tracker
-            self.logger.info("7b. Initializing metrics tracker...")
-            self.metrics_tracker = MetricsTracker()
-            self.logger.info("✓ Metrics tracker ready")
-            
-            # 7c. Initialize dashboard
-            self.logger.info("7c. Initializing dashboard...")
+            # 7b. Initialize dashboard
             initial_capital = Decimal(str(self.config.get('account', {}).get('initial_balance', 10000)))
             self.dashboard = PerformanceDashboard(
                 portfolio=self.portfolio_engine,

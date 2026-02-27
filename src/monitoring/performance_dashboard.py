@@ -1,15 +1,15 @@
 """
-Performance Dashboard - Display live trading metrics.
+Performance Dashboard — Concise P&L + Strategy Analytics.
 
-Shows:
-- Current equity
-- Daily P&L
-- Open positions
-- Recent trades
-- Key metrics
+Outputs:
+  1. Account snapshot  (equity, return, open positions)
+  2. Trade log         (every closed trade: strategy, side, P&L)
+  3. Strategy scorecard (per-strategy: count %, win%, loss%, net P&L)
+
+All numbers are USD or percentage — nothing else.
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import pandas as pd
@@ -19,189 +19,203 @@ from .trade_journal import TradeJournal
 
 
 class PerformanceDashboard:
-    """
-    Display trading performance metrics.
-    
-    Can output to:
-    - Console (text)
-    - JSON file
-    - Web interface (future)
-    """
-    
+    """Concise trading analytics dashboard."""
+
     def __init__(
         self,
         portfolio: PortfolioEngine,
         journal: TradeJournal,
         initial_capital: Decimal,
-        data_engine=None
+        data_engine=None,
     ):
-        """
-        Initialize dashboard.
-        
-        Args:
-            portfolio: Portfolio engine
-            journal: Trade journal
-            initial_capital: Starting capital
-            data_engine: Optional data engine for bar counts
-        """
         self.portfolio = portfolio
         self.journal = journal
         self.initial_capital = initial_capital
-        self.data_engine = data_engine
-        
+        self.data_engine = data_engine  # kept for interface compat
+
         from .logger import get_logger
         self.logger = get_logger(__name__)
-    
-    def get_current_status(self) -> Dict:
-        """
-        Get current trading status.
-        
-        Returns:
-            Dict with current metrics
-        """
-        stats = self.portfolio.get_statistics()
-        journal_stats = self.journal.get_statistics()
-        
-        current_equity = Decimal(str(stats.get('total_pnl', 0))) + self.initial_capital
-        
-        return {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
-            
-            # Account
-            'initial_capital': float(self.initial_capital),
-            'current_equity': float(current_equity),
-            'total_return': float(current_equity - self.initial_capital),
-            'total_return_pct': float((current_equity - self.initial_capital) / self.initial_capital * 100),
-            
-            # Positions
-            'open_positions': stats['total_positions'],
-            'long_positions': stats['long_positions'],
-            'short_positions': stats['short_positions'],
-            
-            # P&L
-            'unrealized_pnl': stats['unrealized_pnl'],
-            'realized_pnl': stats['realized_pnl'],
-            'daily_realized_pnl': stats['daily_realized_pnl'],
-            
-            # Exposure
-            'total_exposure': stats['total_exposure'],
-            'net_exposure': stats['net_exposure'],
-            
-            # Trade stats
-            'total_trades': journal_stats.get('total_trades', 0),
-            'win_rate': journal_stats.get('win_rate', 0),
-            'profit_factor': journal_stats.get('profit_factor', 0),
-            
-            # Bar counts (for debugging)
-            'bar_counts': self._get_bar_counts(),
-            
-            # Last reconciliation
-            'last_reconciliation': stats.get('last_reconciliation')
-        }
-    
-    def _get_bar_counts(self) -> Dict:
-        """Get bar counts from data engine for each symbol/timeframe."""
-        if not self.data_engine:
-            return {}
-        
-        counts = {}
-        try:
-            for symbol_ticker, timeframes in self.data_engine.candle_stores.items():
-                counts[symbol_ticker] = {}
-                for tf, store in timeframes.items():
-                    counts[symbol_ticker][tf] = len(store)
-        except Exception:
-            pass
-        
-        return counts
-    
+
+    # ── public API (used by main.py) ────────────────────────────────
+
     def print_dashboard(self) -> None:
-        """Print dashboard to console."""
-        status = self.get_current_status()
-        
-        print("\n" + "=" * 60)
-        print("TRADING PERFORMANCE DASHBOARD")
-        print("=" * 60)
-        print(f"Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        
-        print("\n💰 Account Status:")
-        print(f"   Initial Capital:  ${status['initial_capital']:,.2f}")
-        print(f"   Current Equity:   ${status['current_equity']:,.2f}")
-        print(f"   Total Return:     ${status['total_return']:+,.2f} ({status['total_return_pct']:+.2f}%)")
-        
-        print("\n📊 Positions:")
-        print(f"   Open:    {status['open_positions']}")
-        print(f"   Long:    {status['long_positions']}")
-        print(f"   Short:   {status['short_positions']}")
-        
-        print("\n💵 P&L:")
-        print(f"   Unrealized:  ${status['unrealized_pnl']:+,.2f}")
-        print(f"   Realized:    ${status['realized_pnl']:+,.2f}")
-        print(f"   Daily:       ${status['daily_realized_pnl']:+,.2f}")
-        
-        print("\n📈 Exposure:")
-        print(f"   Total:  ${status['total_exposure']:,.2f}")
-        print(f"   Net:    ${status['net_exposure']:+,.2f}")
-        
-        print("\n🎯 Trade Statistics:")
-        print(f"   Total Trades:   {status['total_trades']}")
-        print(f"   Win Rate:       {status['win_rate']:.1f}%")
-        print(f"   Profit Factor:  {status['profit_factor']:.2f}")
-        
-        print("\n" + "=" * 60)
-    
+        """Print full dashboard to stdout."""
+        self._print_account_snapshot()
+        self._print_trade_log()
+        self._print_strategy_scorecard()
+
     def save_snapshot(self, output_file: str) -> None:
-        """Save current status to JSON file."""
+        """Save JSON snapshot for later analysis."""
         import json
         from pathlib import Path
-        
-        status = self.get_current_status()
-        
-        output_path = Path(output_file)
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(output_path, 'w') as f:
-            json.dump(status, f, indent=2)
-        
+
+        data = self._build_snapshot_dict()
+        out = Path(output_file)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with open(out, "w") as f:
+            json.dump(data, f, indent=2)
         self.logger.info(f"Dashboard snapshot saved to {output_file}")
-    
-    def get_recent_trades(self, count: int = 10) -> List[Dict]:
-        """Get most recent trades."""
-        all_trades = self.journal.get_trades()
-        
-        # Sort by exit time (most recent first)
-        sorted_trades = sorted(
-            all_trades,
-            key=lambda t: t['exit_time'],
-            reverse=True
-        )
-        
-        return sorted_trades[:count]
-    
+
     def print_recent_trades(self, count: int = 10) -> None:
-        """Print recent trades to console."""
-        trades = self.get_recent_trades(count)
-        
+        """Alias kept for backward compat — delegates to trade log."""
+        self._print_trade_log(n=count)
+
+    def get_recent_trades(self, count: int = 10) -> List[Dict]:
+        """Return most recent trade dicts."""
+        trades = self.journal.get_trades()
+        trades.sort(key=lambda t: t.get("exit_time", ""), reverse=True)
+        return trades[:count]
+
+    # ── 1. Account Snapshot ─────────────────────────────────────────
+
+    def _print_account_snapshot(self) -> None:
+        stats = self.portfolio.get_statistics()
+        equity = Decimal(str(stats.get("total_pnl", 0))) + self.initial_capital
+        ret = equity - self.initial_capital
+        ret_pct = float(ret / self.initial_capital * 100) if self.initial_capital else 0
+
+        print()
+        print("╔══════════════════════════════════════════════════╗")
+        print("║           TRADING ANALYTICS DASHBOARD            ║")
+        print("╚══════════════════════════════════════════════════╝")
+        print(f"  {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+        print()
+        print("  ACCOUNT")
+        print(f"  ├─ Capital      ${float(self.initial_capital):>10,.2f}")
+        print(f"  ├─ Equity       ${float(equity):>10,.2f}")
+        print(f"  ├─ Return       ${float(ret):>+10,.2f}  ({ret_pct:+.2f}%)")
+        print(f"  ├─ Unrealized   ${stats.get('unrealized_pnl', 0):>+10,.2f}")
+        print(f"  ├─ Realized     ${stats.get('realized_pnl', 0):>+10,.2f}")
+        print(f"  └─ Positions    {stats['total_positions']}  "
+              f"(L:{stats['long_positions']}  S:{stats['short_positions']})")
+
+    # ── 2. Trade Log ────────────────────────────────────────────────
+
+    def _print_trade_log(self, n: int = 15) -> None:
+        trades = self.journal.get_trades()
         if not trades:
-            print("\nNo trades yet")
+            print("\n  No closed trades yet.\n")
             return
-        
-        print(f"\n📋 Recent Trades (Last {min(count, len(trades))}):")
-        print("-" * 100)
-        print(f"{'Symbol':<8} {'Side':<6} {'Entry':<12} {'Exit':<12} {'P&L':<12} {'Duration':<12} {'Strategy':<15}")
-        print("-" * 100)
-        
-        for trade in trades:
-            duration_min = trade['duration_seconds'] / 60
-            
-            print(
-                f"{trade['symbol']:<8} "
-                f"{trade['side']:<6} "
-                f"${trade['entry_price']:<11.2f} "
-                f"${trade['exit_price']:<11.2f} "
-                f"${trade['realized_pnl']:+11.2f} "
-                f"{duration_min:>6.1f}m     "
-                f"{trade['strategy']:<15}"
-            )
-        
-        print("-" * 100)
+
+        trades.sort(key=lambda t: t.get("exit_time", ""), reverse=True)
+        recent = trades[:n]
+
+        print()
+        print("  RECENT TRADES")
+        print("  " + "─" * 82)
+        print(f"  {'Strategy':<16} {'Side':<5} {'Entry':>9}  {'Exit':>9}  "
+              f"{'P&L ($)':>10}  {'P&L (%)':>8}  {'Duration':>8}")
+        print("  " + "─" * 82)
+
+        for t in recent:
+            dur_min = t.get("duration_seconds", 0) / 60
+            pnl = t.get("realized_pnl", 0)
+            pnl_pct = t.get("pnl_pct", 0)
+            strat = t.get("strategy", "?")[:15]
+            side = t.get("side", "?")[:4]
+            entry = t.get("entry_price", 0)
+            exit_ = t.get("exit_price", 0)
+
+            # Color: green for win, red for loss
+            color = "\033[92m" if pnl >= 0 else "\033[91m"
+            reset = "\033[0m"
+
+            print(f"  {strat:<16} {side:<5} "
+                  f"${entry:>8.2f}  ${exit_:>8.2f}  "
+                  f"{color}${pnl:>+9.2f}{reset}  "
+                  f"{color}{pnl_pct:>+7.2f}%{reset}  "
+                  f"{dur_min:>6.1f}m")
+
+        print("  " + "─" * 82)
+        print(f"  Showing {len(recent)} of {len(trades)} total trades")
+
+    # ── 3. Strategy Scorecard ───────────────────────────────────────
+
+    def _print_strategy_scorecard(self) -> None:
+        trades = self.journal.get_trades()
+        if not trades:
+            return
+
+        df = pd.DataFrame(trades)
+        total = len(df)
+
+        print()
+        print("  STRATEGY SCORECARD")
+        print("  " + "─" * 76)
+        print(f"  {'Strategy':<16} {'Trades':>7} {'Usage%':>7} "
+              f"{'Wins':>5} {'Win%':>6} {'Loss%':>6} "
+              f"{'Net P&L':>10} {'Avg P&L':>9}")
+        print("  " + "─" * 76)
+
+        grouped = df.groupby("strategy")
+        rows = []
+        for strat, grp in grouped:
+            cnt = len(grp)
+            wins = (grp["realized_pnl"] > 0).sum()
+            losses = (grp["realized_pnl"] < 0).sum()
+            net = grp["realized_pnl"].sum()
+            avg = grp["realized_pnl"].mean()
+            win_pct = wins / cnt * 100 if cnt else 0
+            loss_pct = losses / cnt * 100 if cnt else 0
+            usage_pct = cnt / total * 100
+
+            rows.append((strat, cnt, usage_pct, wins, win_pct, loss_pct, net, avg))
+
+        # Sort by net P&L descending
+        rows.sort(key=lambda r: r[6], reverse=True)
+
+        for strat, cnt, usage, wins, wpct, lpct, net, avg in rows:
+            color = "\033[92m" if net >= 0 else "\033[91m"
+            reset = "\033[0m"
+
+            print(f"  {str(strat)[:15]:<16} {cnt:>7} {usage:>6.1f}% "
+                  f"{wins:>5} {wpct:>5.1f}% {lpct:>5.1f}% "
+                  f"{color}${net:>+9.2f}{reset} "
+                  f"{color}${avg:>+8.2f}{reset}")
+
+        # Totals row
+        total_pnl = df["realized_pnl"].sum()
+        total_wins = (df["realized_pnl"] > 0).sum()
+        total_win_pct = total_wins / total * 100 if total else 0
+        total_loss_pct = 100 - total_win_pct
+
+        print("  " + "─" * 76)
+        tc = "\033[92m" if total_pnl >= 0 else "\033[91m"
+        print(f"  {'TOTAL':<16} {total:>7} {'100.0':>6}% "
+              f"{total_wins:>5} {total_win_pct:>5.1f}% {total_loss_pct:>5.1f}% "
+              f"{tc}${total_pnl:>+9.2f}\033[0m")
+        print()
+
+    # ── helpers ──────────────────────────────────────────────────────
+
+    def _build_snapshot_dict(self) -> Dict:
+        stats = self.portfolio.get_statistics()
+        equity = Decimal(str(stats.get("total_pnl", 0))) + self.initial_capital
+
+        trades = self.journal.get_trades()
+        df = pd.DataFrame(trades) if trades else pd.DataFrame()
+
+        strategy_stats = {}
+        if len(df):
+            total = len(df)
+            for strat, grp in df.groupby("strategy"):
+                cnt = len(grp)
+                wins = int((grp["realized_pnl"] > 0).sum())
+                strategy_stats[strat] = {
+                    "trades": cnt,
+                    "usage_pct": round(cnt / total * 100, 1),
+                    "win_pct": round(wins / cnt * 100, 1) if cnt else 0,
+                    "loss_pct": round((cnt - wins) / cnt * 100, 1) if cnt else 0,
+                    "net_pnl": round(float(grp["realized_pnl"].sum()), 2),
+                    "avg_pnl": round(float(grp["realized_pnl"].mean()), 2),
+                }
+
+        return {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "initial_capital": float(self.initial_capital),
+            "current_equity": float(equity),
+            "total_return_pct": float((equity - self.initial_capital) / self.initial_capital * 100) if self.initial_capital else 0,
+            "open_positions": stats["total_positions"],
+            "total_trades": len(trades),
+            "strategy_stats": strategy_stats,
+        }
