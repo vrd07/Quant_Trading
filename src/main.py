@@ -105,6 +105,9 @@ class TradingSystem:
         self.last_reconciliation = datetime.min.replace(tzinfo=timezone.utc)
         self.loop_iteration = 0
         
+        # Track last processed bar timestamps to prevent signal spam
+        self._last_processed_bars: Dict[str, datetime] = {}
+        
         # News filter events (loaded during setup if enabled)
         self._news_events_df = None
         self._news_filter_cfg = None
@@ -362,6 +365,14 @@ class TradingSystem:
                             f"Waiting for data: {len(bars)}/{min_bars} {primary_tf} bars for {symbol_ticker}"
                         )
                     continue  # Not enough data yet
+                
+                # Check if we already processed this exact bar
+                latest_bar_time = bars.iloc[-1]['timestamp'] if 'timestamp' in bars.columns else bars.index[-1]
+                if self._last_processed_bars.get(symbol_ticker) == latest_bar_time:
+                    continue  # Avoid evaluating strategies on every tick for the same bar
+                
+                # We have a new bar, process strategies
+                self._last_processed_bars[symbol_ticker] = latest_bar_time
                 
                 # Generate signals
                 signals = self.strategy_manager.on_bar(symbol_ticker, bars)
