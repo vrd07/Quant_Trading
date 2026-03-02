@@ -26,9 +26,9 @@ input double MaxPositionSizePercent = 1.0;          // Max risk per trade (% of 
 input double MaxTotalExposureLots = 5.0;            // Max total lots across all positions
 
 input group "=== DAILY LIMITS ==="
-input double MaxDailyLossPercent = 3.0;             // Stop trading if daily loss exceeds this % (matches Python config)
-input double MaxDailyProfitPercent = 10.0;          // Stop trading if daily profit exceeds this % (take profits)
-input int MaxTradesPerDay = 50;                     // Maximum trades allowed per day (matches Python config)
+input double MaxDailyLossPercent = 100.0;           // Handled by Python now
+input double MaxDailyProfitPercent = 1000.0;        // Handled by Python now
+input int MaxTradesPerDay = 500;                    // Handled by Python now
 
 input group "=== TRADING HOURS ==="
 input bool UseTradingHours = false;                 // Enable/disable trading hours restriction
