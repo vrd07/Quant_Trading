@@ -102,6 +102,7 @@ class MomentumStrategy(BaseStrategy):
         )
         atr = Indicators.atr(bars, period=14)
         adx = Indicators.adx(bars, period=14)
+        vwap = Indicators.vwap(bars)
         
         current_close = bars['close'].iloc[-1]
         current_rsi = rsi.iloc[-1]
@@ -110,14 +111,16 @@ class MomentumStrategy(BaseStrategy):
         prev_histogram = histogram.iloc[-2]
         current_atr = atr.iloc[-1]
         current_adx = adx.iloc[-1]
+        current_vwap = vwap.iloc[-1]
         
-        if any(pd.isna([current_rsi, current_ema, current_histogram, prev_histogram, current_atr, current_adx])):
+        if any(pd.isna([current_rsi, current_ema, current_histogram, prev_histogram, current_atr, current_adx, current_vwap])):
             self._log_no_signal("Indicator calculation failed")
             return None
         
         # ADX minimum threshold: trend must be strong enough for momentum
-        if current_adx < self.adx_min_threshold:
-            self._log_no_signal(f"ADX too low for momentum ({current_adx:.1f} < {self.adx_min_threshold})")
+        # Increased to 25.0 for 95% win rate target
+        if current_adx < 25.0:
+            self._log_no_signal(f"ADX too low for momentum ({current_adx:.1f} < 25.0)")
             return None
         
         # Volume confirmation
@@ -139,10 +142,11 @@ class MomentumStrategy(BaseStrategy):
         macd_turning_positive = current_histogram > 0 and prev_histogram <= 0  # Zero-line crossover
         macd_accelerating = abs(current_histogram) > abs(prev_histogram)  # Histogram growing
         price_above_ema = current_close > current_ema
+        price_above_vwap = current_close > current_vwap  # Strict trend confirmation
         
         if (rsi_bullish and rsi_not_overbought and 
             macd_turning_positive and macd_accelerating and 
-            price_above_ema and volume_ok):
+            price_above_ema and price_above_vwap and volume_ok):
             
             stop_loss = current_close - (self.atr_stop_multiplier * current_atr)
             risk = current_close - stop_loss
@@ -169,6 +173,7 @@ class MomentumStrategy(BaseStrategy):
                     'adx': float(current_adx),
                     'macd_histogram': float(current_histogram),
                     'ema': float(current_ema),
+                    'vwap': float(current_vwap),
                     'atr': float(current_atr),
                     'volume_ratio': float(volume_ratio),
                     'macd_turning': macd_turning_positive,
@@ -183,10 +188,11 @@ class MomentumStrategy(BaseStrategy):
         macd_turning_negative = current_histogram < 0 and prev_histogram >= 0  # Zero-line crossover
         macd_decelerating = abs(current_histogram) > abs(prev_histogram)  # Histogram growing (in negative dir)
         price_below_ema = current_close < current_ema
+        price_below_vwap = current_close < current_vwap  # Strict trend confirmation
         
         if (rsi_bearish and rsi_not_oversold and
             macd_turning_negative and macd_decelerating and
-            price_below_ema and volume_ok):
+            price_below_ema and price_below_vwap and volume_ok):
             
             stop_loss = current_close + (self.atr_stop_multiplier * current_atr)
             risk = stop_loss - current_close
@@ -212,6 +218,7 @@ class MomentumStrategy(BaseStrategy):
                     'adx': float(current_adx),
                     'macd_histogram': float(current_histogram),
                     'ema': float(current_ema),
+                    'vwap': float(current_vwap),
                     'atr': float(current_atr),
                     'volume_ratio': float(volume_ratio),
                     'macd_turning': macd_turning_negative,

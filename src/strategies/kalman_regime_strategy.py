@@ -103,7 +103,13 @@ class KalmanRegimeStrategy(BaseStrategy):
         zscore = Indicators.ou_zscore(close, kalman, window=self.zscore_window)
         current_z = float(zscore.iloc[-1]) if not pd.isna(zscore.iloc[-1]) else 0.0
         
-        # 4. ATR for stop/take-profit
+        # 4. Strict momentum indicators for 95% win rate target
+        rsi = Indicators.rsi(bars, period=14)
+        adx = Indicators.adx(bars, period=14)
+        current_rsi = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
+        current_adx = float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 0.0
+        
+        # 5. ATR for stop/take-profit
         atr = Indicators.atr(bars, period=self.atr_period)
         current_atr = float(atr.iloc[-1])
         if current_atr <= 0 or pd.isna(current_atr):
@@ -113,24 +119,25 @@ class KalmanRegimeStrategy(BaseStrategy):
         stop_distance = self.sl_atr_mult * current_atr
         tp_distance = self.tp_atr_mult * current_atr
         
-        # 5. Signal generation
+        # 6. Signal generation
         side = None
         strength = 0.0
         
         if is_trend:
-            # Trend mode: follow Kalman direction
-            if current_close > current_kalman:
-                side = OrderSide.BUY
-                strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
-            elif current_close < current_kalman:
-                side = OrderSide.SELL
-                strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
+            # Trend mode: follow Kalman direction, but require strong ADX and safe RSI
+            if current_adx > 25.0:  # Strict trend requirement
+                if current_close > current_kalman and current_rsi < 70.0:  # Don't buy overbought
+                    side = OrderSide.BUY
+                    strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
+                elif current_close < current_kalman and current_rsi > 30.0: # Don't sell oversold
+                    side = OrderSide.SELL
+                    strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
         else:
-            # Range mode: mean reversion on z-score
-            if current_z < -self.entry_threshold:
+            # Range mode: mean reversion on z-score, check RSI alignment
+            if current_z < -self.entry_threshold and current_rsi < 35.0:  # Confirmed oversold
                 side = OrderSide.BUY
                 strength = min(abs(current_z) / 3.0, 1.0)
-            elif current_z > self.entry_threshold:
+            elif current_z > self.entry_threshold and current_rsi > 65.0:   # Confirmed overbought
                 side = OrderSide.SELL
                 strength = min(abs(current_z) / 3.0, 1.0)
         
@@ -138,7 +145,8 @@ class KalmanRegimeStrategy(BaseStrategy):
             mode_str = "TREND" if is_trend else "RANGE"
             self._log_no_signal(
                 f"No signal in {mode_str} mode "
-                f"(close={current_close:.2f}, kalman={current_kalman:.2f}, z={current_z:.2f})"
+                f"(close={current_close:.2f}, kalman={current_kalman:.2f}, z={current_z:.2f}, "
+                f"adx={current_adx:.1f}, rsi={current_rsi:.1f})"
             )
             return None
         

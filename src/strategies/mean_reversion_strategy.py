@@ -131,30 +131,43 @@ class MeanReversionStrategy(BaseStrategy):
             entry_thresh_long = min(entry_thresh_long, -1.0)
 
         # 6. Signal Generation
-        current_close = bars['close'].iloc[-1]
-        vwap = Indicators.vwap(bars).iloc[-1]
-        std = bars['close'].rolling(window=self.current_lookback).std().iloc[-1]
+        current_close = float(bars['close'].iloc[-1])
+        vwap = float(Indicators.vwap(bars).iloc[-1])
+        
+        # Calculate ATR for wide, safe stops
+        atr = Indicators.atr(bars, period=14)
+        current_atr = float(atr.iloc[-1]) if not pd.isna(atr.iloc[-1]) else current_close * 0.002
+        
+        # Stop distance is 2.5x ATR
+        stop_dist = current_atr * 2.5
         
         # Buy Signal (Oversold)
         if current_z < entry_thresh_long:
             # Target: VWAP
             take_profit = vwap
-            # Stop: 3 std devs or recent low
-            stop_loss = current_close - (3 * std)
             
+            # Stop: ATR-based
+            stop_loss = current_close - stop_dist
+            
+            # Safety checks for targets
+            if take_profit <= current_close: 
+                take_profit = current_close + (current_atr * 0.5)
+            if stop_loss >= current_close:
+                stop_loss = current_close - stop_dist
+                
             return self._create_signal(
                 side=OrderSide.BUY,
                 strength=min(abs(current_z) / 3, 1.0),
                 regime=regime,
-                entry_price=float(current_close),
-                stop_loss=float(stop_loss),
-                take_profit=float(take_profit),
+                entry_price=current_close,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
                 metadata={
                     'zscore': float(current_z),
                     'half_life': float(current_hl),
                     'lookback': self.current_lookback,
                     'threshold': float(entry_thresh_long),
-                    'vwap': float(vwap)
+                    'vwap': vwap
                 }
             )
             
@@ -162,22 +175,29 @@ class MeanReversionStrategy(BaseStrategy):
         elif current_z > entry_thresh_short:
             # Target: VWAP
             take_profit = vwap
-            # Stop: 3 std devs
-            stop_loss = current_close + (3 * std)
             
+            # Stop: ATR-based
+            stop_loss = current_close + stop_dist
+            
+            # Safety checks for targets
+            if take_profit >= current_close:
+                take_profit = current_close - (current_atr * 0.5)
+            if stop_loss <= current_close:
+                stop_loss = current_close + stop_dist
+                
             return self._create_signal(
                 side=OrderSide.SELL,
                 strength=min(abs(current_z) / 3, 1.0),
                 regime=regime,
-                entry_price=float(current_close),
-                stop_loss=float(stop_loss),
-                take_profit=float(take_profit),
+                entry_price=current_close,
+                stop_loss=stop_loss,
+                take_profit=take_profit,
                 metadata={
                     'zscore': float(current_z),
                     'half_life': float(current_hl),
                     'lookback': self.current_lookback,
                     'threshold': float(entry_thresh_short),
-                    'vwap': float(vwap)
+                    'vwap': vwap
                 }
             )
             

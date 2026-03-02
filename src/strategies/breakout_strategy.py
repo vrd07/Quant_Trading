@@ -121,6 +121,7 @@ class BreakoutStrategy(BaseStrategy):
         atr = Indicators.atr(bars, period=14)
         rsi = Indicators.rsi(bars, period=14)
         adx = Indicators.adx(bars, period=14)
+        vwap = Indicators.vwap(bars)
         
         current_close = bars['close'].iloc[-1]
         current_high = bars['high'].iloc[-1]
@@ -128,8 +129,9 @@ class BreakoutStrategy(BaseStrategy):
         current_atr = atr.iloc[-1]
         current_rsi = rsi.iloc[-1]
         current_adx = adx.iloc[-1]
+        current_vwap = vwap.iloc[-1]
         
-        if any(pd.isna([current_atr, current_rsi, current_adx])):
+        if any(pd.isna([current_atr, current_rsi, current_adx, current_vwap])):
             self._log_no_signal("Indicator calculation failed")
             return None
         
@@ -153,6 +155,15 @@ class BreakoutStrategy(BaseStrategy):
         # --- Check for bullish breakout ---
         # KEY CHANGE: Require CLOSE above channel (not just wick/high)
         if current_close > breakout_upper:
+            
+            # Strict 95% win rate checks
+            if current_adx < 25.0:
+                self._log_no_signal(f"ADX too low for breakout ({current_adx:.1f} < 25.0)")
+                return None
+            
+            if current_close < current_vwap:
+                self._log_no_signal("Price below VWAP, rejecting LONG breakout")
+                return None
             
             # RSI overbought guard: don't buy into exhausted moves
             if current_rsi > self.rsi_overbought:
@@ -204,6 +215,7 @@ class BreakoutStrategy(BaseStrategy):
                     'atr': float(current_atr),
                     'rsi': float(current_rsi),
                     'adx': float(current_adx),
+                    'vwap': float(current_vwap),
                     'volume_ratio': float(volume_ratio),
                     'mtf_confirmed': bool(self.mtf_confirmation and self._pending_bars_by_tf)
                 }
@@ -212,6 +224,15 @@ class BreakoutStrategy(BaseStrategy):
         # --- Check for bearish breakout ---
         # KEY CHANGE: Require CLOSE below channel (not just wick/low)
         if current_close < breakout_lower:
+            
+            # Strict 95% win rate checks
+            if current_adx < 25.0:
+                self._log_no_signal(f"ADX too low for bearish breakout ({current_adx:.1f} < 25.0)")
+                return None
+                
+            if current_close > current_vwap:
+                self._log_no_signal("Price above VWAP, rejecting SHORT breakout")
+                return None
             
             # RSI oversold guard: don't sell into exhausted moves
             if current_rsi < self.rsi_oversold:
@@ -263,6 +284,7 @@ class BreakoutStrategy(BaseStrategy):
                     'atr': float(current_atr),
                     'rsi': float(current_rsi),
                     'adx': float(current_adx),
+                    'vwap': float(current_vwap),
                     'volume_ratio': float(volume_ratio),
                     'mtf_confirmed': bool(self.mtf_confirmation and self._pending_bars_by_tf)
                 }
