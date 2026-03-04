@@ -445,7 +445,10 @@ class MT5Connector:
         """Convert MT5 position dict to Position object."""
         symbol = self._get_or_create_symbol(mt5_pos['symbol'])
         
-        if mt5_pos['type'] == 'BUY' or mt5_pos.get('side') == 'LONG':
+        pos_type = mt5_pos.get('type', mt5_pos.get('side', ''))
+        # EA sends integer type: 0 = BUY (LONG), 1 = SELL (SHORT)
+        # Also handle legacy string format 'BUY'/'LONG'
+        if pos_type in (0, '0', 'BUY', 'LONG') or mt5_pos.get('side') == 'LONG':
             side = PositionSide.LONG
         else:
             side = PositionSide.SHORT
@@ -482,17 +485,20 @@ class MT5Connector:
         return position
     
     def _get_or_create_symbol(self, ticker: str) -> Symbol:
-        """Get symbol from cache or create new one."""
+        """Get symbol from cache or create from config, falling back to defaults."""
         if ticker not in self.symbols_cache:
+            # Try to read lot constraints from system config
+            sym_cfg = {}
+            if hasattr(self, '_system_config') and self._system_config:
+                sym_cfg = self._system_config.get('symbols', {}).get(ticker, {})
             self.symbols_cache[ticker] = Symbol(
                 ticker=ticker,
                 exchange="MT5",
-                pip_value=Decimal("0.01"),
-                min_lot=Decimal("0.01"),
-                max_lot=Decimal("100.0"),
-                lot_step=Decimal("0.01")
+                pip_value=Decimal(str(sym_cfg.get('pip_value', '0.01'))),
+                min_lot=Decimal(str(sym_cfg.get('min_lot', '0.01'))),
+                max_lot=Decimal(str(sym_cfg.get('max_lot', '100.0'))),
+                lot_step=Decimal(str(sym_cfg.get('lot_step', '0.01')))
             )
-        
         return self.symbols_cache[ticker]
     
     def check_connection_health(self) -> bool:

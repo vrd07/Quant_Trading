@@ -154,6 +154,7 @@ class TradingSystem:
             self.logger.info("1. Connecting to MT5...")
             self.connector = MT5Connector()
             self.connector.connect()
+            self.connector._system_config = self.config   # pass full config for symbol creation
             self.logger.info("✓ Connected to MT5")
             
             # 2. Initialize symbols
