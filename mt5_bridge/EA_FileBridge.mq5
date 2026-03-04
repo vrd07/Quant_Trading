@@ -22,7 +22,7 @@ input bool PanicCloseAll = false;                   // Set to TRUE to close all 
 
 input group "=== POSITION LIMITS ==="
 input int MaxOpenPositions = 10;                    // Maximum simultaneous positions
-input double MaxPositionSizePercent = 1.0;          // Max risk per trade (% of balance)
+input double MaxPositionSizePercent = 10.0;         // Max margin per trade (% of balance). 10% = $500 on $5k — enough for 0.02 XAUUSD
 input double MaxTotalExposureLots = 5.0;            // Max total lots across all positions
 
 input group "=== DAILY LIMITS ==="
@@ -337,16 +337,21 @@ bool ValidateOrder(string symbol, double volume)
 {
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    
-   // 1. Check max position size based on % of balance
+   // 1. Check max position margin vs % of balance guard
    double marginRequired = volume * SymbolInfoDouble(symbol, SYMBOL_MARGIN_INITIAL);
    double maxMargin = balance * MaxPositionSizePercent / 100.0;
    
    if(marginRequired > maxMargin)
    {
-      if(SendAlerts) 
-         SendAlert("Position too large: " + DoubleToString(volume, 2) + 
-                   " lots requires $" + DoubleToString(marginRequired, 2) + 
-                   " but max allowed is $" + DoubleToString(maxMargin, 2));
+      string msg = "Position too large: " + DoubleToString(volume, 2) +
+                   " lots needs $" + DoubleToString(marginRequired, 2) +
+                   " margin but MaxPositionSizePercent (" + DoubleToString(MaxPositionSizePercent,1) +
+                   "%) only allows $" + DoubleToString(maxMargin, 2) +
+                   " on $" + DoubleToString(balance, 2) + " balance." +
+                   " Increase MaxPositionSizePercent in EA inputs.";
+      if(SendAlerts) SendAlert(msg);
+      Print("ValidateOrder BLOCKED (margin%): ", msg);
+      WriteResponse("{\"status\":\"ERROR\",\"message\":\"" + msg + "\"}");
       return false;
    }
    
@@ -354,20 +359,24 @@ bool ValidateOrder(string symbol, double volume)
    double currentExposure = GetTotalExposure();
    if(currentExposure + volume > MaxTotalExposureLots)
    {
-      if(SendAlerts)
-         SendAlert("Total exposure limit: Current=" + DoubleToString(currentExposure, 2) + 
-                   " + New=" + DoubleToString(volume, 2) + 
-                   " exceeds max=" + DoubleToString(MaxTotalExposureLots, 2));
+      string msg = "Total exposure exceeded: " + DoubleToString(currentExposure+volume,2) +
+                   " lots > max " + DoubleToString(MaxTotalExposureLots,2);
+      if(SendAlerts) SendAlert(msg);
+      Print("ValidateOrder BLOCKED (exposure): ", msg);
+      WriteResponse("{\"status\":\"ERROR\",\"message\":\"" + msg + "\"}");
       return false;
    }
    
-   // 3. Check margin availability
+   // 3. Check margin availability (80% of free margin safety buffer)
    double freeMargin = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-   if(marginRequired > freeMargin * 0.8) // Use only 80% of free margin for safety
+   if(marginRequired > freeMargin * 0.8)
    {
-      if(SendAlerts)
-         SendAlert("Insufficient margin: Required=" + DoubleToString(marginRequired, 2) + 
-                   " Available=" + DoubleToString(freeMargin, 2));
+      string msg = "Insufficient free margin: need $" + DoubleToString(marginRequired,2) +
+                   " but only $" + DoubleToString(freeMargin*0.8,2) + " available (80% of $" +
+                   DoubleToString(freeMargin,2) + ")";
+      if(SendAlerts) SendAlert(msg);
+      Print("ValidateOrder BLOCKED (free margin): ", msg);
+      WriteResponse("{\"status\":\"ERROR\",\"message\":\"" + msg + "\"}");
       return false;
    }
    
