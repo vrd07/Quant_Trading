@@ -359,22 +359,26 @@ class RiskEngine:
     ) -> Decimal:
         """
         Calculate optimal position size.
-        
-        Uses configured position sizing method (Kelly, fixed fractional, volatility-based).
-        Does NOT exceed exposure limits if context (positions/equity) is provided.
-        
-        Args:
-            symbol: Trading symbol
-            account_balance: Current account balance
-            entry_price: Intended entry price
-            stop_loss: Stop loss price
-            side: Order side (BUY/SELL)
-            current_positions: Optional dict of open positions (for exposure check)
-            account_equity: Optional current account equity (for exposure check)
-        
-        Returns:
-            Position size in lots, rounded to symbol lot step
+
+        If position_sizing.method == 'fixed_lot', returns the fixed lot
+        directly (no fractional math) — this is the $5K prop firm mode.
+        Otherwise falls back to fixed_fractional (risk % of balance).
         """
+        sizing_cfg = self.config.get('risk', {}).get('position_sizing', {})
+
+        # ── Fixed lot mode: always use exactly the configured lot size ─────
+        if sizing_cfg.get('method') == 'fixed_lot':
+            fixed = Decimal(str(sizing_cfg.get('fixed_lot', symbol.min_lot)))
+            # Clamp to symbol constraints
+            fixed = max(fixed, symbol.min_lot)
+            fixed = min(fixed, symbol.max_lot)
+            self.logger.debug(
+                "Using fixed_lot sizing: %s lots for %s",
+                float(fixed), symbol.ticker
+            )
+            return fixed
+
+        # ── Fixed fractional (default): size by % risk ────────────────────
         # 1. Calculate risk-based size (Stop Loss distance)
         risk_size = self.position_sizer.calculate_position_size(
             symbol=symbol,
@@ -383,7 +387,7 @@ class RiskEngine:
             stop_loss=stop_loss,
             risk_pct=self.risk_per_trade_pct
         )
-        
+
         # 2. Apply exposure limit if context provided
         if current_positions is not None and account_equity is not None:
             max_exposure_size = self.exposure_manager.get_max_position_size(
@@ -392,21 +396,20 @@ class RiskEngine:
                 account_equity=account_equity,
                 entry_price=entry_price
             )
-            
+
             if risk_size > max_exposure_size:
-                # User request: Limit to 0.1 lots max when exposure limit is hit
                 capped_size = min(max_exposure_size, Decimal("0.1"))
-                
                 self.logger.info(
-                    "Position size capped by exposure limit (and user 0.1 cap)",
+                    "Position size capped by exposure limit",
                     risk_size=float(risk_size),
                     exposure_limit=float(max_exposure_size),
                     final_size=float(capped_size),
                     symbol=symbol.ticker
                 )
                 return capped_size
-                
+
         return risk_size
+
     
     def record_trade_result(self, pnl: Decimal) -> None:
         """
