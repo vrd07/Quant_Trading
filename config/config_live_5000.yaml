@@ -1,9 +1,10 @@
 # Live Trading Environment Configuration
 # $5,000 Account Size
 # Rules: 3% daily loss ($150), 6% max trailing drawdown ($300)
+# Risk per trade: $15 (0.3%) — 0.02 lot XAUUSD × 75 pip stop = $15
+# Target profit:  $30–$45 per trade (RR 2.0–3.0, set at 2.5 = $37.50)
 # News Trading: Restricted (±5 min around high-impact news)
 # Overnight & Weekend Holding: Allowed
-# Leverage: FX 1:100, Indices 1:20, Metals 1:30, Energies 1:10, Crypto 1:2
 
 environment: live
 
@@ -16,8 +17,8 @@ symbols:
   XAUUSD:
     enabled: true
     pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 10.0
+    min_lot: 0.02             # Fixed 0.02 lots (0.02 × 75 pips × $10/pip/lot = $15 risk)
+    max_lot: 0.02             # Fixed 0.02 lots — no scaling beyond this
     lot_step: 0.01
     value_per_lot: 100
     commission_per_lot: 0.0
@@ -64,29 +65,43 @@ symbols:
     leverage: 10              # Energies 1:10
 
 risk:
-  # $5,000 Account Risk Parameters (GitHub Issue #2)
+  # $5,000 Account Risk Parameters
   max_drawdown_pct: 0.06          # 6% Max Overall/Trailing Drawdown ($300)
-  max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150)
+  max_daily_loss_pct: 0.025       # 2.5% Max Daily Loss ($125)
 
-  # 3% risk per trade ($150 on $5k)
-  risk_per_trade_pct: 0.03        # $150 risk per trade
+  # $15 risk per trade = 0.30% of $5,000
+  # Basis: 0.02 lot XAUUSD × 75 pip stop × $10/pip/lot = $15
+  risk_per_trade_pct: 0.003       # 0.30% = $15 per trade
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
-  absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3%)
+  absolute_max_loss_usd: 125      # Daily loss limit ($5k × 2.5%)
   max_drawdown_usd: 300           # Overall drawdown limit ($5k × 6%)
-  max_daily_profit_usd: 500       # Optional daily profit cap
+  max_daily_profit_usd: 120       # Stop trading for the day once $120 profit hit (~3-4 winning trades)
 
-  max_positions: 2                # Restrict to two trades at a time
+  max_positions: 2
   max_daily_trades: 50
   max_exposure_per_symbol_pct: 5.0
+  max_daily_wins: 4               # Stop trading once 4 wins hit ($120+ target)
 
   position_sizing:
-    method: fixed_fractional
+    method: fixed_lot
+    fixed_lot: 0.02
 
   circuit_breaker:
     enabled: true
-    max_consecutive_losses: 5
+    max_consecutive_losses: 5      # Kill switch (hard stop)
     cooldown_minutes: 15
+    loss_pause_consecutive: 2      # Soft pause after 2 consecutive losses
+    loss_pause_minutes: 30         # Pause for 30 minutes then resume
+
+  trailing_stop:
+    enabled: true
+    breakeven_atr_mult: 1.0        # Move SL to breakeven at +1× risk distance
+    lock_atr_mult: 1.5             # Move SL to partial lock at +1.5× risk distance
+    lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
+
+  # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
+  # (enforced by trading_hours sessions below)
 
 strategies:
   signal_cooldown_minutes: 5
@@ -107,14 +122,15 @@ strategies:
 
   breakout:
     enabled: true
+    timeframe: 5m                 # 5m candles — less noise than 1m
     donchian_period: 20
     confirmation_bars: 1
-    rr_ratio: 1.5
+    rr_ratio: 2.5             # $15 risk × 2.5 = $37.50 target (mid of $30–$45 range)
     only_in_regime: TREND
     mtf_confirmation: true
-    atr_stop_multiplier: 2.5
+    atr_stop_multiplier: 2.5  # Targets ~75 pip stop on XAUUSD 1m
     adx_min_threshold: 25
-    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
+    volume_confirmation: true
     volume_ratio_min: 1.2
     rsi_overbought: 75
     rsi_oversold: 25
@@ -129,14 +145,15 @@ strategies:
     entry_threshold: 2.0
     exit_threshold: 0.5
     stop_threshold: 3.0
-    rr_ratio: 2.0
+    rr_ratio: 2.5             # $15 risk × 2.5 = $37.50 target
     only_in_regime: RANGE
     mtf_confirmation: false
 
   vwap:
     enabled: true
+    timeframe: 1m                 # VWAP works best on 1m (fine-grained entries)
     atr_multiplier: 1.5
-    stop_atr_multiplier: 2.0
+    stop_atr_multiplier: 2.5  # Targets ~75 pip stop on XAUUSD 1m
     atr_period: 14
     min_volume_ratio: 1.0
     rsi_oversold_entry: 35
@@ -148,16 +165,17 @@ strategies:
 
   momentum:
     enabled: true
+    timeframe: 5m                 # 5m candles — avoids 1m noise in EMA stack
     rsi_period: 14
     ema_period: 20
-    rr_ratio: 1.5
-    atr_stop_multiplier: 2.0
+    rr_ratio: 2.5             # $15 risk × 2.5 = $37.50 target
+    atr_stop_multiplier: 2.5  # Targets ~75 pip stop on XAUUSD 1m
     rsi_bull_threshold: 50
     rsi_bear_threshold: 50
     rsi_overbought: 75
     rsi_oversold: 25
     adx_min_threshold: 25
-    volume_confirmation: true         # NOW ENABLED
+    volume_confirmation: true
     volume_ratio_min: 1.0
     macd_fast: 12
     macd_slow: 26
@@ -171,6 +189,7 @@ strategies:
 
   kalman_regime:
     enabled: true
+    timeframe: 15m                # 15m candles — smoother Kalman trend detection
     kalman_q: 0.00001
     kalman_r: 0.01
     rv_window: 20
@@ -181,19 +200,19 @@ strategies:
     kalman_confirm_bars: 2
     min_signal_strength: 0.50
     atr_period: 14
-    sl_atr_multiplier: 2.5
-    tp_atr_multiplier: 2.0
+    sl_atr_multiplier: 2.5    # Targets ~75 pip stop on XAUUSD 1m
+    tp_atr_multiplier: 5.0    # $15 risk × 2.5x via ATR-distance (sl × 2.0 = tp × 2.5 effective RR)
     news_filter: true
 
 trading_hours:
   sessions:
-    - name: london
+    - name: london_open
       start: "07:00"
-      end: "16:00"
+      end: "09:00"                # First 2 hours of London session (highest probability)
       enabled: true
-    - name: new_york
+    - name: new_york_open
       start: "12:00"
-      end: "21:00"
+      end: "14:00"                # First 2 hours of NY session (highest probability)
       enabled: true
 
   news_filter:

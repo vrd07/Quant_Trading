@@ -485,6 +485,7 @@ void ProcessCommands()
    else if(command == "GET_POSITIONS")    HandleGetPositions();
    else if(command == "PLACE_ORDER")      HandlePlaceOrder(commandJson);
    else if(command == "CLOSE_POSITION")   HandleClosePosition(commandJson);
+   else if(command == "MODIFY_ORDER")     HandleModifyOrder(commandJson);
    else if(command == "GET_LIMITS")       HandleGetLimits();
 }
 
@@ -703,7 +704,51 @@ void HandleClosePosition(string json)
    }
 }
 
-//+------------------------------------------------------------------+
+void HandleModifyOrder(string json)
+{
+   ulong ticket = StringToInteger(ExtractJsonValue(json, "ticket"));
+   double new_sl = StringToDouble(ExtractJsonValue(json, "sl"));
+   double new_tp = StringToDouble(ExtractJsonValue(json, "tp"));
+   
+   if(!PositionSelectByTicket(ticket))
+   {
+      WriteResponse("{\"status\":\"ERROR\",\"message\":\"Position not found for MODIFY_ORDER\"}");
+      return;
+   }
+   
+   string symbol = PositionGetString(POSITION_SYMBOL);
+   
+   // Use current SL/TP if not provided in command (0 = don't change)
+   if(new_sl == 0) new_sl = PositionGetDouble(POSITION_SL);
+   if(new_tp == 0) new_tp = PositionGetDouble(POSITION_TP);
+   
+   MqlTradeRequest request;
+   MqlTradeResult result;
+   ZeroMemory(request);
+   ZeroMemory(result);
+   
+   request.action   = TRADE_ACTION_SLTP;  // Modify SL/TP only — no new order
+   request.position = ticket;
+   request.symbol   = symbol;
+   request.sl       = new_sl;
+   request.tp       = new_tp;
+   
+   if(OrderSend(request, result))
+   {
+      string msg = "{\"status\":\"SUCCESS\"";
+      msg += ",\"ticket\":" + IntegerToString(ticket);
+      msg += ",\"new_sl\":" + DoubleToString(new_sl, _Digits);
+      msg += ",\"new_tp\":" + DoubleToString(new_tp, _Digits) + "}";
+      WriteResponse(msg);
+      Print("MODIFY_ORDER OK ticket=", ticket, " sl=", new_sl, " tp=", new_tp);
+   }
+   else
+   {
+      WriteResponse("{\"status\":\"ERROR\",\"code\":" + IntegerToString(result.retcode) + ",\"message\":\"" + result.comment + "\"}");
+      Print("MODIFY_ORDER FAILED ticket=", ticket, " code=", result.retcode, " ", result.comment);
+   }
+}
+
 //| Helper Functions                                                 |
 //+------------------------------------------------------------------+
 

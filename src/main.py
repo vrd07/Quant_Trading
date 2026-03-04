@@ -56,6 +56,7 @@ from src.monitoring.logger import get_logger
 from src.monitoring.trade_journal import TradeJournal
 from src.monitoring.performance_dashboard import PerformanceDashboard
 from src.data.news_filter import load_ff_events, is_news_blackout
+from src.risk.trailing_stop_manager import TrailingStopManager
 
 
 class TradingSystem:
@@ -109,10 +110,25 @@ class TradingSystem:
         self._last_processed_bars: Dict[str, datetime] = {}
         
         # The5ers: directional lock + 5-min reversal buffer state
-        # Records the timestamp of the most recent position CLOSE for each side.
-        # Used to block opposite-side trades for reversal_buffer_min minutes.
         self._last_close_time: Dict[str, datetime] = {}  # 'BUY' or 'SELL' → close timestamp
-        self._reversal_buffer_min: int = 5  # 5-minute buffer per The5ers rules
+        self._reversal_buffer_min: int = 5
+        
+        # ── NEW: Daily wins counter ───────────────────────────────────────
+        # Stop emitting new signals once max_daily_wins achieved.
+        self._daily_wins: int = 0
+        self._daily_wins_date: Optional[str] = None   # reset at midnight
+        self._max_daily_wins: int = 4   # overridden from config in setup()
+        
+        # ── NEW: 2-loss consecutive pause ────────────────────────────────
+        # After _loss_pause_threshold consecutive losses, suppress signals
+        # for _loss_pause_duration seconds.
+        self._consecutive_losses_today: int = 0
+        self._loss_pause_threshold: int = 2   # overridden from config
+        self._loss_pause_duration: int = 1800  # 30 min default
+        self._loss_pause_until: Optional[datetime] = None
+        
+        # ── NEW: Trailing stop manager ───────────────────────────────────
+        self._trailing_stop_mgr: Optional[TrailingStopManager] = None
         
         # News filter events (loaded during setup if enabled)
         self._news_events_df = None
@@ -206,10 +222,19 @@ class TradingSystem:
             )
             self.logger.info("✓ Dashboard ready")
             
-            # 8. Initialize strategies
             self.logger.info("8. Initializing strategies...")
             self.strategy_manager = StrategyManager(symbols, self.config)
             self.logger.info("✓ Strategies ready")
+            
+            # Read advanced session controls from config
+            risk_cfg = self.config.get('risk', {})
+            self._max_daily_wins = risk_cfg.get('max_daily_wins', 4)
+            cb_cfg = risk_cfg.get('circuit_breaker', {})
+            self._loss_pause_threshold = cb_cfg.get('loss_pause_consecutive', 2)
+            self._loss_pause_duration = cb_cfg.get('loss_pause_minutes', 30) * 60
+            
+            # Initialize trailing stop manager
+            self._trailing_stop_mgr = TrailingStopManager(self.config)
             
             # 10. Load news filter events if enabled
             nf_cfg = self.config.get('trading_hours', {}).get('news_filter', {})
@@ -329,6 +354,9 @@ class TradingSystem:
                 # 3. Update portfolio positions with latest prices
                 self._update_portfolio_prices()
                 
+                # 3b. Manage trailing stops (breakeven + lock)
+                self._manage_trailing_stops()
+                
                 # 4. Process strategies for each symbol
                 self._process_strategies()
                 
@@ -381,8 +409,51 @@ class TradingSystem:
         # Shutdown
         self.shutdown()
     
+    def _manage_trailing_stops(self) -> None:
+        """
+        Called every main-loop iteration.
+        Moves SL to breakeven (at +1×ATR) and locks partial profit (at +1.5×ATR).
+        """
+        if self._trailing_stop_mgr is None or self.connector is None:
+            return
+        try:
+            positions = self.connector.get_positions()
+            self._trailing_stop_mgr.cleanup_closed(set(positions.keys()))
+            self._trailing_stop_mgr.update(positions, self.connector)
+        except Exception as e:
+            self.logger.warning("Trailing stop update error (non-critical): %s", e)
+
     def _process_strategies(self) -> None:
-        """Process all strategies and execute signals."""
+        """Process all strategies with per-strategy timeframe routing."""
+        # Reset daily wins counter at midnight UTC
+        today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        if self._daily_wins_date != today_str:
+            self._daily_wins_date = today_str
+            self._daily_wins = 0
+            self._consecutive_losses_today = 0
+            self._loss_pause_until = None
+            self.logger.info("[SessionManager] New trading day — counters reset")
+
+        # ── Daily wins gate ───────────────────────────────────────
+        if self._daily_wins >= self._max_daily_wins:
+            if self.loop_iteration % 60 == 1:
+                self.logger.info(
+                    f"[SessionManager] Daily target reached — "
+                    f"{self._daily_wins}/{self._max_daily_wins} wins. No new signals today."
+                )
+            return
+
+        # ── Loss pause gate ───────────────────────────────────────
+        if self._loss_pause_until and datetime.now(timezone.utc) < self._loss_pause_until:
+            remaining = (self._loss_pause_until - datetime.now(timezone.utc)).seconds // 60
+            if self.loop_iteration % 60 == 1:
+                self.logger.info(
+                    f"[SessionManager] Loss pause active — "
+                    f"{self._consecutive_losses_today} consecutive losses. "
+                    f"{remaining} min remaining."
+                )
+            return
+
         # Only process enabled symbols
         enabled_symbols = [
             ticker for ticker, cfg in self.config.get('symbols', {}).items()
@@ -392,7 +463,16 @@ class TradingSystem:
         # Get strategy config
         strategy_config = self.config.get('strategies', {})
         min_bars = strategy_config.get('min_bars_required', 10)
-        primary_tf = strategy_config.get('primary_timeframe', '5m')
+        global_primary_tf = strategy_config.get('primary_timeframe', '5m')
+
+        # Per-strategy timeframe overrides
+        strategy_timeframes = {
+            'breakout':      strategy_config.get('breakout', {}).get('timeframe', global_primary_tf),
+            'momentum':      strategy_config.get('momentum', {}).get('timeframe', global_primary_tf),
+            'vwap':          strategy_config.get('vwap', {}).get('timeframe', global_primary_tf),
+            'kalman_regime': strategy_config.get('kalman_regime', {}).get('timeframe', global_primary_tf),
+            'mean_reversion':strategy_config.get('mean_reversion', {}).get('timeframe', global_primary_tf),
+        }
         
         # News filter: skip all strategy processing during blackout
         if self._news_events_df is not None and self._news_filter_cfg:
@@ -406,30 +486,40 @@ class TradingSystem:
         
         for symbol_ticker in enabled_symbols:
             try:
-                # Get bars for this symbol using configurable timeframe
-                bars = self.data_engine.get_bars(symbol_ticker, primary_tf)
-                
-                if len(bars) < min_bars:
-                    # Log periodically so user knows why no signals
-                    if self.loop_iteration % 60 == 1:
-                        self.logger.info(
-                            f"Waiting for data: {len(bars)}/{min_bars} {primary_tf} bars for {symbol_ticker}"
+                strategies_for_symbol = self.strategy_manager.strategies.get(symbol_ticker, {})
+
+                # Collect signals from each strategy using its own timeframe
+                all_signals = []
+                for strategy_name, strategy in strategies_for_symbol.items():
+                    tf = strategy_timeframes.get(strategy_name, global_primary_tf)
+                    bars = self.data_engine.get_bars(symbol_ticker, tf)
+                    
+                    if len(bars) < min_bars:
+                        if self.loop_iteration % 60 == 1:
+                            self.logger.info(
+                                f"Waiting for data: {len(bars)}/{min_bars} "
+                                f"{tf} bars for {symbol_ticker}/{strategy_name}"
+                            )
+                        continue
+                    
+                    # Check if we already processed this exact bar for this strategy
+                    bar_key = f"{symbol_ticker}_{strategy_name}"
+                    latest_bar_time = bars.iloc[-1]['timestamp'] if 'timestamp' in bars.columns else bars.index[-1]
+                    if self._last_processed_bars.get(bar_key) == latest_bar_time:
+                        continue
+                    self._last_processed_bars[bar_key] = latest_bar_time
+
+                    try:
+                        signal = strategy.on_bar(bars)
+                        if signal:
+                            all_signals.append((strategy_name, signal))
+                    except Exception as se:
+                        self.logger.error(
+                            "Strategy error", strategy=strategy_name,
+                            symbol=symbol_ticker, error=str(se), exc_info=True
                         )
-                    continue  # Not enough data yet
-                
-                # Check if we already processed this exact bar
-                latest_bar_time = bars.iloc[-1]['timestamp'] if 'timestamp' in bars.columns else bars.index[-1]
-                if self._last_processed_bars.get(symbol_ticker) == latest_bar_time:
-                    continue  # Avoid evaluating strategies on every tick for the same bar
-                
-                # We have a new bar, process strategies
-                self._last_processed_bars[symbol_ticker] = latest_bar_time
-                
-                # Generate signals
-                signals = self.strategy_manager.on_bar(symbol_ticker, bars)
-                
-                # Execute signals
-                for signal in signals:
+
+                for _, signal in all_signals:
                     self._execute_signal(signal)
                     
             except Exception as e:
@@ -464,6 +554,14 @@ class TradingSystem:
     def _execute_signal(self, signal) -> None:
         """Execute trading signal."""
         try:
+            # ── Daily wins gate ───────────────────────────────────────
+            if self._daily_wins >= self._max_daily_wins:
+                self.logger.info(
+                    f"[SessionManager] Daily wins target hit — signal suppressed",
+                    strategy=signal.strategy_name,
+                )
+                return
+
             # Get current account state
             account_info = self._get_effective_account_info()
             
@@ -657,6 +755,7 @@ class TradingSystem:
             
             # Detect closed positions (present before, absent now) and update
             # the reversal buffer clock for The5ers 5-minute rule.
+            # Also update daily wins / consecutive loss counters.
             try:
                 from src.core.constants import PositionSide as _PositionSide
                 positions_after = {
@@ -667,14 +766,47 @@ class TradingSystem:
                 for pid, pos in positions_before.items():
                     if pid not in positions_after:
                         pos_side = getattr(pos, 'side', None)
+                        pnl = float(getattr(pos, 'unrealized_pnl', 0) or 0)
+
+                        # Reversal buffer (The5ers rule)
                         if pos_side == _PositionSide.LONG:
                             self._last_close_time['BUY'] = now_utc
-                            self.logger.info("[The5ers] Recorded LONG close for reversal buffer")
                         elif pos_side == _PositionSide.SHORT:
                             self._last_close_time['SELL'] = now_utc
-                            self.logger.info("[The5ers] Recorded SHORT close for reversal buffer")
+
+                        # Session manager counters
+                        if pnl > 0:
+                            self._daily_wins += 1
+                            self._consecutive_losses_today = 0  # reset on win
+                            self.logger.info(
+                                f"[SessionManager] WIN recorded \u2014 "
+                                f"daily_wins={self._daily_wins}/{self._max_daily_wins} "
+                                f"pnl=${pnl:.2f}"
+                            )
+                            if self._daily_wins >= self._max_daily_wins:
+                                self.logger.info(
+                                    f"[SessionManager] \U0001f3af DAILY TARGET HIT \u2014 "
+                                    f"no more signals today. "
+                                    f"Wins: {self._daily_wins}"
+                                )
+                        else:
+                            self._consecutive_losses_today += 1
+                            self.logger.info(
+                                f"[SessionManager] LOSS recorded \u2014 "
+                                f"consecutive={self._consecutive_losses_today} pnl=${pnl:.2f}"
+                            )
+                            if self._consecutive_losses_today >= self._loss_pause_threshold:
+                                self._loss_pause_until = now_utc + timedelta(
+                                    seconds=self._loss_pause_duration
+                                )
+                                pause_min = self._loss_pause_duration // 60
+                                self.logger.warning(
+                                    f"[SessionManager] \u26a0\ufe0f LOSS PAUSE activated \u2014 "
+                                    f"{self._consecutive_losses_today} consecutive losses. "
+                                    f"Trading paused for {pause_min} minutes."
+                                )
             except Exception as rb_err:
-                self.logger.warning(f"Reversal buffer update failed (non-critical): {rb_err}")
+                self.logger.warning(f"Session/reversal update failed (non-critical): {rb_err}")
             
             self.last_reconciliation = datetime.now(timezone.utc)
             

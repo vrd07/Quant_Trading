@@ -299,9 +299,51 @@ class MT5Connector:
         stop_loss: Optional[Decimal] = None,
         take_profit: Optional[Decimal] = None
     ) -> bool:
-        """Modify position SL/TP (not supported by current file bridge)."""
-        logger.warning("Position modification not supported by file bridge")
-        return False
+        """
+        Modify SL/TP of an existing position via MODIFY_ORDER command.
+
+        Uses the EA's HandleModifyOrder (TRADE_ACTION_SLTP) to update
+        stop loss and/or take profit without placing a new order.
+
+        Args:
+            position_id: MT5 ticket (string)
+            stop_loss:   New stop loss price (None = keep current)
+            take_profit: New take profit price (None = keep current)
+
+        Returns:
+            True if modification was accepted by the EA, False otherwise
+        """
+        logger.info(
+            "Modifying position %s: sl=%s tp=%s", position_id, stop_loss, take_profit
+        )
+        try:
+            command = {
+                "command": "MODIFY_ORDER",
+                "ticket": int(position_id),
+                "sl": float(stop_loss) if stop_loss is not None else 0,
+                "tp": float(take_profit) if take_profit is not None else 0,
+            }
+            response = self.client.send_command(command)
+            logger.debug("Modify response: %s", response)
+
+            if response.get("status") == "SUCCESS":
+                logger.info(
+                    "Position %s modified: new_sl=%s new_tp=%s",
+                    position_id,
+                    response.get("new_sl"),
+                    response.get("new_tp"),
+                )
+                return True
+            else:
+                logger.warning(
+                    "Modify position failed: %s", response.get("message", "Unknown")
+                )
+                return False
+
+        except Exception as e:
+            logger.error("Failed to modify position %s: %s", position_id, e, exc_info=True)
+            return False
+
 
     def get_closed_positions(self, minutes: int = 1440) -> List[Dict]:
         """
