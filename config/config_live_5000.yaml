@@ -1,0 +1,237 @@
+# Live Trading Environment Configuration
+# $5,000 Account Size
+# Rules: 3% daily loss ($150), 6% max trailing drawdown ($300)
+# News Trading: Restricted (±5 min around high-impact news)
+# Overnight & Weekend Holding: Allowed
+# Leverage: FX 1:100, Indices 1:20, Metals 1:30, Energies 1:10, Crypto 1:2
+
+environment: live
+
+account:
+  initial_balance: 5000.0
+  currency: USD
+  leverage: 100  # Default (FX). Symbol-specific leverage handled below.
+
+symbols:
+  XAUUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 100
+    commission_per_lot: 0.0
+    leverage: 30              # Metals 1:30
+
+  BTCUSD:
+    enabled: false
+    pip_value: 0.1
+    min_lot: 0.01
+    max_lot: 2.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 2               # Crypto 1:2
+
+  EURUSD:
+    enabled: false
+    pip_value: 0.00001
+    min_lot: 0.01
+    max_lot: 100.0
+    lot_step: 0.01
+    value_per_lot: 100000
+    commission_per_lot: 0.0
+    leverage: 100             # FX 1:100
+
+  US30:
+    enabled: false
+    pip_value: 1.0
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 20              # Indices 1:20
+
+  USOIL:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1000
+    commission_per_lot: 0.0
+    leverage: 10              # Energies 1:10
+
+risk:
+  # $5,000 Account Risk Parameters (GitHub Issue #2)
+  max_drawdown_pct: 0.06          # 6% Max Overall/Trailing Drawdown ($300)
+  max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150)
+
+  # 3% risk per trade ($150 on $5k)
+  risk_per_trade_pct: 0.03        # $150 risk per trade
+
+  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
+  absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3%)
+  max_drawdown_usd: 300           # Overall drawdown limit ($5k × 6%)
+  max_daily_profit_usd: 500       # Optional daily profit cap
+
+  max_positions: 2                # Restrict to two trades at a time
+  max_daily_trades: 50
+  max_exposure_per_symbol_pct: 5.0
+
+  position_sizing:
+    method: fixed_fractional
+
+  circuit_breaker:
+    enabled: true
+    max_consecutive_losses: 5
+    cooldown_minutes: 15
+
+strategies:
+  signal_cooldown_minutes: 5
+  primary_timeframe: 1m
+  min_bars_required: 10
+
+  regime_filter:
+    enabled: true
+    adx_period: 14
+    adx_trend_threshold: 25
+    adx_range_threshold: 20
+    atr_period: 14
+    atr_ma_period: 20
+    use_hurst: true
+    hurst_period: 100
+    hurst_trend_threshold: 0.55
+    hurst_range_threshold: 0.45
+
+  breakout:
+    enabled: true
+    donchian_period: 20
+    confirmation_bars: 1
+    rr_ratio: 1.5
+    only_in_regime: TREND
+    mtf_confirmation: true
+    atr_stop_multiplier: 2.5
+    adx_min_threshold: 25
+    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
+    volume_ratio_min: 1.2
+    rsi_overbought: 75
+    rsi_oversold: 25
+    bb_squeeze_lookback: 20
+    stoch_overbought: 80
+    stoch_oversold: 20
+    min_signal_strength: 0.65
+
+  mean_reversion:
+    enabled: true
+    zscore_lookback: 20
+    entry_threshold: 2.0
+    exit_threshold: 0.5
+    stop_threshold: 3.0
+    rr_ratio: 2.0
+    only_in_regime: RANGE
+    mtf_confirmation: false
+
+  vwap:
+    enabled: true
+    atr_multiplier: 1.5
+    stop_atr_multiplier: 2.0
+    atr_period: 14
+    min_volume_ratio: 1.0
+    rsi_oversold_entry: 35
+    rsi_overbought_entry: 65
+    cci_oversold_entry: -100
+    cci_overbought_entry: 100
+    cci_period: 20
+    only_in_regime: RANGE
+
+  momentum:
+    enabled: true
+    rsi_period: 14
+    ema_period: 20
+    rr_ratio: 1.5
+    atr_stop_multiplier: 2.0
+    rsi_bull_threshold: 50
+    rsi_bear_threshold: 50
+    rsi_overbought: 75
+    rsi_oversold: 25
+    adx_min_threshold: 25
+    volume_confirmation: true         # NOW ENABLED
+    volume_ratio_min: 1.0
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    ema_fast: 9
+    ema_mid: 21
+    ema_slow: 50
+    rsi_slope_bars: 3
+    min_signal_strength: 0.65
+    only_in_regime: TREND
+
+  kalman_regime:
+    enabled: true
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    rv_window: 20
+    rv_ma_window: 100
+    zscore_window: 20
+    entry_threshold: 2.5
+    trend_adx_min: 22
+    kalman_confirm_bars: 2
+    min_signal_strength: 0.50
+    atr_period: 14
+    sl_atr_multiplier: 2.5
+    tp_atr_multiplier: 2.0
+    news_filter: true
+
+trading_hours:
+  sessions:
+    - name: london
+      start: "07:00"
+      end: "16:00"
+      enabled: true
+    - name: new_york
+      start: "12:00"
+      end: "21:00"
+      enabled: true
+
+  news_filter:
+    enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
+    csv_path: news/2026-03-04_news.csv
+    currency: USD
+    impacts:
+      - high
+      - red
+    buffer_min: 5               # 5-minute buffer (Issue #2 requirement)
+    timezone: Asia/Kolkata
+
+monitoring:
+  log_level: INFO
+  state_save_interval_sec: 10
+  enable_console_logging: true
+
+  alerts:
+    kill_switch: true
+    daily_loss_pct: 0.02        # Alert at 2% daily loss
+
+data:
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  history_bars: 1000
+  tick_buffer_size: 5000
+
+portfolio:
+  reconciliation_interval_sec: 30
+
+file_bridge:
+  enabled: true
+  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  check_interval_ms: 100
+
+shutdown:
+  close_all_positions: true
+  save_state: true

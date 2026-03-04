@@ -723,6 +723,71 @@ class Indicators:
         from src.indicators.ou_model import ou_zscore as ou_fn
         return ou_fn(prices, reference, window=window)
 
+    @staticmethod
+    def cci(df: pd.DataFrame, period: int = 20) -> pd.Series:
+        """
+        Commodity Channel Index — measures deviation from typical price average.
+
+        CCI = (Typical Price - SMA(TP, period)) / (0.015 × Mean Absolute Deviation)
+
+        Interpretation:
+        - CCI > +100 : Overbought (price well above average) — good for SELL confirmation
+        - CCI < -100 : Oversold  (price well below average) — good for BUY  confirmation
+        - CCI near 0 : No strong deviation
+
+        Args:
+            df: DataFrame with high, low, close columns
+            period: Lookback period (default 20)
+
+        Returns:
+            Series with CCI values
+        """
+        tp = (df['high'] + df['low'] + df['close']) / 3.0
+        sma_tp = tp.rolling(window=period).mean()
+        # Mean absolute deviation (manually, since pandas mad() is deprecated)
+        mad = tp.rolling(window=period).apply(lambda x: np.mean(np.abs(x - x.mean())), raw=True)
+        cci = (tp - sma_tp) / (0.015 * mad)
+        return cci
+
+    @staticmethod
+    def rsi_slope(df: pd.DataFrame, rsi_period: int = 14, slope_bars: int = 3) -> pd.Series:
+        """
+        RSI slope over the last N bars — positive means RSI is rising.
+
+        Args:
+            df: DataFrame with close column
+            rsi_period: RSI lookback
+            slope_bars: Number of bars for slope calculation
+
+        Returns:
+            Series with RSI slope values (positive = rising, negative = falling)
+        """
+        rsi = Indicators.rsi(df, period=rsi_period)
+        slope = rsi.diff(slope_bars)
+        return slope
+
+    @staticmethod
+    def bb_width(df: pd.DataFrame, period: int = 20, num_std: float = 2.0) -> pd.Series:
+        """
+        Bollinger Band Width — measures band squeeze/expansion.
+
+        BB Width = (Upper - Lower) / Middle
+
+        Low width = squeeze (coiled, breakout potential)
+        High width = expansion (trend in progress)
+
+        Args:
+            df: DataFrame with close column
+            period: BB lookback period
+            num_std: Standard deviation multiplier
+
+        Returns:
+            Series with BB width values (normalized)
+        """
+        upper, middle, lower = Indicators.bollinger_bands(df, period=period, num_std=num_std)
+        width = (upper - lower) / middle
+        return width
+
 
 # Convenience function for getting multiple indicators at once
 def calculate_indicators(df: pd.DataFrame) -> pd.DataFrame:

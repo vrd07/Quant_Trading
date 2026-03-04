@@ -443,6 +443,8 @@ void WriteStatus()
          json += "\"" + symbol + "\":{";
          json += "\"bid\":" + DoubleToString(tick.bid, digits) + ",";
          json += "\"ask\":" + DoubleToString(tick.ask, digits) + ",";
+         json += "\"volume\":" + IntegerToString(tick.volume) + ",";
+         json += "\"volume_real\":" + DoubleToString(tick.volume_real, 2) + ",";
          json += "\"time\":" + IntegerToString(tick.time);
          json += "}";
          added++;

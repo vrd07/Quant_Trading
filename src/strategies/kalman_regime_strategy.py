@@ -55,17 +55,23 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.rv_window = config.get('rv_window', 20)
         self.rv_ma_window = config.get('rv_ma_window', 100)
 
-        # OU z-score thresholds (range mode)
+        # OU z-score thresholds (range mode) — tightened from 2.0 to 2.5 for quality
         self.zscore_window = config.get('zscore_window', 20)
-        self.entry_threshold = config.get('entry_threshold', 2.0)
+        self.entry_threshold = config.get('entry_threshold', 2.5)
 
         # ATR-based risk management
         self.atr_period = config.get('atr_period', 14)
         self.sl_atr_mult = config.get('sl_atr_multiplier', 2.5)
         self.tp_atr_mult = config.get('tp_atr_multiplier', 2.0)
 
-        # Minimum trend ADX confirmation (light — only avoids dead-flat markets)
-        self.trend_adx_min = config.get('trend_adx_min', 15)
+        # ADX gate raised from 15 to 22 — avoids choppy/low-trend markets
+        self.trend_adx_min = config.get('trend_adx_min', 22)
+
+        # Require N consecutive bars on the correct side of Kalman before entry
+        self.kalman_confirm_bars = config.get('kalman_confirm_bars', 2)
+
+        # Minimum signal strength to emit a signal
+        self.min_signal_strength = config.get('min_signal_strength', 0.50)
 
         # News filter (optional)
         self.news_filter_enabled = config.get('news_filter', False)
@@ -131,23 +137,39 @@ class KalmanRegimeStrategy(BaseStrategy):
         strength = 0.0
 
         if is_trend:
-            # ── TREND MODE (Instruct.md spec) ────────────────────────────
+            # ── TREND MODE ───────────────────────────────────────────────
             # Core rule: Close > Kalman → BUY, Close < Kalman → SELL
-            # Light confirmation: ADX > trend_adx_min (avoids flat, dead markets)
+            # ADX gate: avoid flat/dead markets (raised to 22)
             if current_adx < self.trend_adx_min:
                 self._log_no_signal(
                     f"TREND mode: ADX too low ({current_adx:.1f} < {self.trend_adx_min})"
                 )
                 return None
 
+            # Multi-bar Kalman confirmation: require N consecutive bars on correct side
+            # This avoids triggering on a single noisy crossover bar
+            close_series = bars['close']
+            kalman_full = Indicators.kalman_filter(close_series, q=self.kalman_q, r=self.kalman_r)
+            confirm_n = self.kalman_confirm_bars
+            recent_closes = close_series.iloc[-(confirm_n + 1):-1]   # last N bars (exc. current)
+            recent_kalman = kalman_full.iloc[-(confirm_n + 1):-1]
+
             price_above_kalman = current_close > current_kalman
             price_below_kalman = current_close < current_kalman
 
             if price_above_kalman:
+                # All recent bars must also have been above Kalman
+                if not (recent_closes > recent_kalman).all():
+                    self._log_no_signal(
+                        f"TREND BUY: not {confirm_n} consecutive bars above Kalman")
+                    return None
                 side = OrderSide.BUY
-                # Strength = normalised Kalman separation
                 strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
             elif price_below_kalman:
+                if not (recent_closes < recent_kalman).all():
+                    self._log_no_signal(
+                        f"TREND SELL: not {confirm_n} consecutive bars below Kalman")
+                    return None
                 side = OrderSide.SELL
                 strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
 
@@ -169,6 +191,12 @@ class KalmanRegimeStrategy(BaseStrategy):
                 f"(close={current_close:.2f}, kalman={current_kalman:.2f}, z={current_z:.2f}, "
                 f"adx={current_adx:.1f}, rsi={current_rsi:.1f})"
             )
+            return None
+
+        # Minimum signal strength gate
+        if strength < self.min_signal_strength:
+            self._log_no_signal(
+                f"Kalman signal strength too low ({strength:.2f} < {self.min_signal_strength})")
             return None
 
         # ── 7. Compute SL / TP ──────────────────────────────────────────────

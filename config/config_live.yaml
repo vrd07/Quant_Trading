@@ -72,16 +72,21 @@ strategies:
   
   breakout:
     enabled: true
-    donchian_period: 20  # Use standard period for live
-    confirmation_bars: 1 # Require 1 bar confirmation for safety
-    rr_ratio: 1.5               # Was 2.0 → take profits sooner
+    donchian_period: 20
+    confirmation_bars: 1
+    rr_ratio: 1.5
     only_in_regime: TREND
     mtf_confirmation: true
-    atr_stop_multiplier: 2.5        # Was 2.0 → wider stops, give room to breathe
-    volume_confirmation: false       # Disabled: file bridge provides no volume data
-    volume_ratio_min: 1.2            # Volume must be >= 1.2x 20-bar average
-    rsi_overbought: 75               # Don't buy above RSI 75
-    rsi_oversold: 25                 # Don't sell below RSI 25
+    atr_stop_multiplier: 2.5
+    adx_min_threshold: 25            # Raised from 20 — requires stronger trend
+    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
+    volume_ratio_min: 1.2
+    rsi_overbought: 75
+    rsi_oversold: 25
+    bb_squeeze_lookback: 20           # Require BB squeeze before breakout
+    stoch_overbought: 80              # Don't buy when Stochastic already overbought
+    stoch_oversold: 20                # Don't sell when Stochastic already oversold
+    min_signal_strength: 0.65         # Gate: skip weak signals
   
   mean_reversion:
     enabled: true
@@ -100,6 +105,11 @@ strategies:
     stop_atr_multiplier: 2.0
     atr_period: 14
     min_volume_ratio: 1.0
+    rsi_oversold_entry: 35      # BUY only when RSI < 35 (genuinely oversold)
+    rsi_overbought_entry: 65    # SELL only when RSI > 65 (genuinely overbought)
+    cci_oversold_entry: -100    # BUY only when CCI < -100
+    cci_overbought_entry: 100   # SELL only when CCI > +100
+    cci_period: 20
     only_in_regime: RANGE
   
   # Momentum Scalping Strategy 
@@ -107,34 +117,41 @@ strategies:
     enabled: true
     rsi_period: 14
     ema_period: 20
-    rr_ratio: 1.5               # Was 2.0 → take profits sooner
-    atr_stop_multiplier: 2.0          # Was 1.2 → wider stops
+    rr_ratio: 1.5
+    atr_stop_multiplier: 2.0
     rsi_bull_threshold: 50
     rsi_bear_threshold: 50
-    rsi_overbought: 75                # Don't buy above RSI 75
-    rsi_oversold: 25                  # Don't sell below RSI 25
-    adx_min_threshold: 20             # Require ADX >= 20 for momentum
-    volume_confirmation: false         # Disabled: file bridge provides no volume data
-    volume_ratio_min: 1.0             # Volume must be >= 1.0x average
+    rsi_overbought: 75
+    rsi_oversold: 25
+    adx_min_threshold: 25             # Require ADX >= 25 for strong trend
+    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
+    volume_ratio_min: 1.0
     macd_fast: 12
     macd_slow: 26
     macd_signal: 9
+    ema_fast: 9                       # EMA triple stack alignment
+    ema_mid: 21
+    ema_slow: 50
+    rsi_slope_bars: 3                 # RSI must be rising/falling over 3 bars
+    min_signal_strength: 0.65         # Gate: skip weak signals
     only_in_regime: TREND
   
   # Kalman Regime-Switching Strategy (Instruct.md)
   kalman_regime:
-    enabled: true              # ← Enabled for The5ers challenge
-    kalman_q: 0.00001           # Process noise (lower = smoother)
-    kalman_r: 0.01              # Measurement noise
-    rv_window: 20               # Realized volatility window
-    rv_ma_window: 100           # RV moving average for regime threshold
-    zscore_window: 20           # OU z-score std window
-    entry_threshold: 2.0        # |Z| threshold for range-mode entry
-    trend_adx_min: 15           # Light ADX gate for trend mode (avoids dead-flat markets)
+    enabled: true
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    rv_window: 20
+    rv_ma_window: 100
+    zscore_window: 20
+    entry_threshold: 2.5        # Tightened from 2.0 — fewer but cleaner reversals
+    trend_adx_min: 22           # Raised from 15 — avoid choppy markets
+    kalman_confirm_bars: 2      # Require 2 consecutive bars on correct Kalman side
+    min_signal_strength: 0.50   # Gate: skip weak kalman signals
     atr_period: 14
-    sl_atr_multiplier: 2.5      # Stop loss distance
-    tp_atr_multiplier: 2.0      # Take profit distance
-    news_filter: true           # Skip signals during news blackout
+    sl_atr_multiplier: 2.5
+    tp_atr_multiplier: 2.0
+    news_filter: true
 
 trading_hours:
   sessions:
