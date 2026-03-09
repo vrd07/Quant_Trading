@@ -4,55 +4,52 @@ from collections import defaultdict
 
 def parse_logs():
     log_files = glob.glob("/Users/varadbandekar/Documents/Quant_trading/data/logs/trading_system_live.log*")
-    # Sort files so .log is last, .log.1 before it, etc (reverse numerical order)
     log_files.sort(key=lambda x: -int(x.split('.')[-1]) if x[-1].isdigit() else 0)
 
-    trades = []
+    # Track strategies by signal ID or order ID
+    strategy_map = {}
     
-    # Regex to capture "Position closed | position_id=xxx | symbol=XAUUSD | ... | realized_pnl=0.0961"
+    # Regex for signals and orders to map IDs to strategies
+    order_re = re.compile(r'order_id=(?P<order_id>[\w-]+) \| strategy=(?P<strategy>\w+)')
+    
+    # Regex for position closes
     pos_close_re = re.compile(r'(?P<time>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}) \| INFO     \| src\..+ \| Position closed \|.*position_id=(?P<position_id>[\w-]+).*symbol=(?P<symbol>[A-Z]+).*realized_pnl=(?P<pnl>-?[\d\.]+)')
     
+    trades = []
+
     for file in log_files:
         try:
             with open(file, 'r', encoding='utf-8') as f:
                 for line in f:
-                    match = pos_close_re.search(line)
-                    if match:
-                        trades.append(match.groupdict())
+                    match_order = order_re.search(line)
+                    if match_order:
+                        strategy_map[match_order.group('order_id')] = match_order.group('strategy')
+                        
+                    match_pos = pos_close_re.search(line)
+                    if match_pos:
+                        d = match_pos.groupdict()
+                        # MT5 position_id is usually the order_id that opened it
+                        d['strategy'] = strategy_map.get(d['position_id'], 'unknown')
+                        trades.append(d)
         except Exception as e:
             print(f"Error reading {file}: {e}")
 
-    print(f"Found {len(trades)} position close events in live logs.")
-    
-    wins = 0
-    losses = 0
-    total_pnl = 0.0
-    symbols = defaultdict(float)
+    strat_stats = defaultdict(lambda: {'wins': 0, 'losses': 0, 'pnl': 0.0})
 
     for t in trades:
         pnl = float(t['pnl'])
-        total_pnl += pnl
-        symbols[t['symbol']] += pnl
-        
+        strat = t['strategy']
+        strat_stats[strat]['pnl'] += pnl
         if pnl > 0:
-            wins += 1
-        elif pnl <= 0:
-            losses += 1
+            strat_stats[strat]['wins'] += 1
+        elif pnl < 0:
+            strat_stats[strat]['losses'] += 1
 
-    print("\n=== LIVE LOG METRICS ===")
-    print(f"Total Trades: {len(trades)}")
-    print(f"Wins: {wins}, Losses: {losses}")
-    print(f"Win Rate: {(wins/len(trades)*100):.2f}%" if len(trades) > 0 else "0%")
-    print(f"Total PNL: ${total_pnl:.2f}")
-    
-    print("\n=== SYMBOL PNL ===")
-    for sym, pnl in symbols.items():
-        print(f"{sym}: ${pnl:.2f}")
-
-    print("\n=== LATEST 20 LOSING TRADES ===")
-    losers = [t for t in trades if float(t['pnl']) < 0][-20:]
-    for l in losers:
-        print(f"Time: {l['time']} | Symbol: {l['symbol']} | PNL: ${float(l['pnl']):.2f}")
+    print("\n=== STRATEGY PERFORMANCE ===")
+    for strat, stats in strat_stats.items():
+        total = stats['wins'] + stats['losses']
+        win_rate = (stats['wins'] / total * 100) if total > 0 else 0
+        print(f"Strategy: {strat.ljust(20)} | Trades: {total:3d} | WR: {win_rate:5.1f}% | Net PNL: ${stats['pnl']:6.2f}")
 
 if __name__ == "__main__":
     parse_logs()
