@@ -142,5 +142,5 @@ class BaseStrategy(ABC):
         return signal
     
     def _log_no_signal(self, reason: str) -> None:
-        """Log why no signal was generated."""
-        self.logger.debug(f"No signal: {reason}")
+        """Log why no signal was generated (INFO so it's visible in normal logs)."""
+        self.logger.info(f"No signal: {reason}")

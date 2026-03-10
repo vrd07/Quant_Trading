@@ -134,13 +134,13 @@ strategies:
     volume_ratio_min: 1.2
     rsi_overbought: 75
     rsi_oversold: 25
-    bb_squeeze_lookback: 20
+    bb_squeeze_lookback: 10       # Reduced from 20 → min_bars = 35 (was 45, was blocking with 44 bars!)
     stoch_overbought: 80
     stoch_oversold: 20
     min_signal_strength: 0.65
 
   mean_reversion:
-    enabled: true
+    enabled: false               # DISABLED: Too risky for prop firm challenge — XAUUSD trends strongly
     zscore_lookback: 20
     entry_threshold: 2.0
     exit_threshold: 0.5
@@ -182,7 +182,7 @@ strategies:
     macd_signal: 9
     ema_fast: 9
     ema_mid: 21
-    ema_slow: 50
+    ema_slow: 30                  # Reduced from 50 → min_bars = 40 (was 55, was blocking with 44 bars!)
     rsi_slope_bars: 3
     min_signal_strength: 0.65
     only_in_regime: TREND
@@ -223,7 +223,7 @@ trading_hours:
       start: "07:00"             # 12:30 IST
       end: "09:30"               # 15:00 IST
       enabled: true
-      strategies: [breakout, momentum, kalman_regime, mean_reversion, vwap]
+      strategies: [breakout, momentum, kalman_regime, vwap]
 
     # ── NY OPEN ───────────────────────────────────────────────────────────────
     # High volatility, strong continuation moves after London direction is set.
@@ -232,7 +232,7 @@ trading_hours:
       start: "12:00"             # 17:30 IST
       end: "14:30"               # 20:00 IST
       enabled: true
-      strategies: [breakout, momentum, kalman_regime, mean_reversion, vwap]
+      strategies: [breakout, momentum, kalman_regime, vwap]
 
     # ── NY EVENING / LATE SESSION ─────────────────────────────────────────────
     # Post-NYSE hours. Gold often trends in the direction set by NY open.
