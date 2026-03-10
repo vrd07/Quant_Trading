@@ -6,6 +6,9 @@ from .kill_switch import KillSwitch
 from .circuit_breaker import CircuitBreaker
 from .drawdown_tracker import DrawdownTracker
 from .exposure_manager import ExposureManager
+# Kelly criterion — optional position sizing utility (not used in live fixed_lot mode,
+# but available for backtesting / paper trading with position_sizing.method: kelly)
+from .kelly import kelly_criterion, fixed_fractional
 
 __all__ = [
     "RiskEngine",
@@ -14,4 +17,6 @@ __all__ = [
     "CircuitBreaker",
     "DrawdownTracker",
     "ExposureManager",
+    "kelly_criterion",
+    "fixed_fractional",
 ]

@@ -198,6 +198,19 @@ class TradingSystem:
             self.trade_journal = TradeJournal()
             self.logger.info("✓ Trade journal ready")
             
+            # 6b. Sync trade history from MT5
+            self.logger.info("   Syncing trade history from MT5...")
+            try:
+                if str(PROJECT_ROOT / "scripts") not in sys.path:
+                    sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+                from sync_mt5_history import get_history_deals, sync_journal
+                deals = get_history_deals(self.connector, days=30)
+                if deals:
+                    sync_journal(deals)
+                    self.logger.info("   ✓ Trade history synced")
+            except Exception as e:
+                self.logger.warning(f"   ⚠ Failed to sync trade history: {e}")
+            
             # 7. Initialize portfolio engine
             self.logger.info("7. Initializing portfolio engine...")
             self.portfolio_engine = PortfolioEngine(
@@ -433,6 +446,20 @@ class TradingSystem:
             self._loss_pause_until = None
             self.logger.info("[SessionManager] New trading day — counters reset")
 
+            # ── Reset RiskEngine daily metrics (was never called before) ──────
+            # This refreshes: daily_trades_count, daily_start_equity,
+            # and gives the equity HWM a chance to update to today's starting equity.
+            try:
+                account_info = self._get_effective_account_info()
+                self.risk_engine.reset_daily_metrics(account_info['equity'])
+                self.risk_engine.update_equity_hwm(account_info['equity'])
+                self.logger.info(
+                    "[RiskEngine] Daily metrics reset — equity=%.2f",
+                    float(account_info['equity'])
+                )
+            except Exception as _e:
+                self.logger.warning("[RiskEngine] Daily reset failed (non-critical): %s", _e)
+
         # ── Daily profit target gate ──────────────────────────────
         daily_pnl = float(self.portfolio_engine.daily_realized_pnl + self.portfolio_engine.get_total_unrealized_pnl())
         if self._max_daily_profit > 0 and daily_pnl >= self._max_daily_profit:
@@ -478,7 +505,8 @@ class TradingSystem:
         if self._news_events_df is not None and self._news_filter_cfg:
             buffer_min = self._news_filter_cfg.get('buffer_min', 15)
             tz = self._news_filter_cfg.get('timezone', 'Asia/Kolkata')
-            if is_news_blackout(datetime.now(), self._news_events_df,
+            # Use UTC-aware datetime (consistent with rest of codebase)
+            if is_news_blackout(datetime.now(timezone.utc), self._news_events_df,
                                buffer_min=buffer_min, timezone=tz):
                 if self.loop_iteration % 60 == 1:
                     self.logger.info("News blackout active — skipping strategies")
@@ -690,10 +718,78 @@ class TradingSystem:
             )
     
     def _process_fills(self) -> None:
-        """Check for and process order fills."""
-        # This would poll MT5 for fill confirmations
-        # For file-based bridge, check for fill messages
-        pass
+        """
+        Detect recently closed positions from MT5 and update TradeJournal + RiskEngine.
+
+        The file-bridge has no push notifications — fills are only discoverable
+        by polling get_closed_positions(). This runs every loop tick (1s) and
+        uses a local set to avoid double-counting deals already recorded.
+
+        Why this matters: Without this, the system only discovers SL/TP hits
+        during the 30-second reconciliation cycle. This creates a ~29-second
+        window where the RiskEngine thinks a position is still open and could
+        approve a conflicting signal.
+        """
+        # Lazy-init the set of already-processed deal tickets
+        if not hasattr(self, '_processed_deal_tickets'):
+            self._processed_deal_tickets: set = set()
+
+        try:
+            # Only scan the last 5 minutes of history (cheap — avoids large lookback)
+            deals = self.connector.get_closed_positions(minutes=5)
+            if not deals:
+                return
+
+            for deal in deals:
+                ticket = str(deal.get('ticket') or deal.get('order') or deal.get('deal', ''))
+                if not ticket or ticket in self._processed_deal_tickets:
+                    continue  # Already handled
+
+                # Mark as processed immediately to avoid double-counting on retries
+                self._processed_deal_tickets.add(ticket)
+
+                realized_pnl = float(deal.get('profit', 0))
+                symbol_name = str(deal.get('symbol', ''))
+                comment = str(deal.get('comment', ''))
+
+                # Extract strategy name from comment format "strategy|orderId"
+                strategy = 'unknown'
+                if '|' in comment:
+                    strategy = comment.split('|')[0]
+
+                # Record in TradeJournal if available
+                if self.trade_journal is not None:
+                    try:
+                        from decimal import Decimal as _Dec
+                        self.trade_journal.record_trade(
+                            strategy=strategy,
+                            symbol=symbol_name,
+                            side='UNKNOWN',           # deal history has no side
+                            entry_price=_Dec(str(deal.get('price_open', 0))),
+                            exit_price=_Dec(str(deal.get('price', deal.get('price_close', 0)))),
+                            quantity=_Dec(str(deal.get('volume', 0))),
+                            realized_pnl=_Dec(str(realized_pnl)),
+                            entry_time=None,
+                            exit_time=None,
+                            metadata={'mt5_ticket': ticket, 'source': 'fill_poll'}
+                        )
+                    except Exception as _je:
+                        self.logger.debug("Fill poll: journal record failed for ticket=%s: %s", ticket, _je)
+
+                # Update RiskEngine circuit breaker in real-time (no more 30s blind spot)
+                if self.risk_engine is not None:
+                    from decimal import Decimal as _Dec
+                    self.risk_engine.record_trade_result(_Dec(str(realized_pnl)))
+
+                self.logger.info(
+                    "[FillPoller] Detected closed deal: ticket=%s symbol=%s "
+                    "pnl=%.2f strategy=%s",
+                    ticket, symbol_name, realized_pnl, strategy
+                )
+
+        except Exception as e:
+            # Non-critical — reconciliation will catch anything missed
+            self.logger.debug("[FillPoller] Error polling fills (non-critical): %s", e)
     
     def _update_portfolio_prices(self) -> None:
         """Update all portfolio positions with latest prices."""
@@ -823,16 +919,18 @@ class TradingSystem:
                             self._last_close_time['SELL'] = now_utc
 
                         # Session manager counters
-                        if pnl > 0:
-                            self._consecutive_losses_today = 0  # reset on win
+                        # §3.4 fix: pnl >= 0 (breakeven trade isn't a loss)
+                        if pnl >= 0:
+                            self._consecutive_losses_today = 0  # reset on win or breakeven
                             current_daily_pnl = float(self.portfolio_engine.daily_realized_pnl)
+                            outcome = 'WIN' if pnl > 0 else 'BREAKEVEN'
                             self.logger.info(
-                                f"[SessionManager] WIN recorded \u2014 "
+                                f"[SessionManager] {outcome} recorded — "
                                 f"pnl=${pnl:.2f} | daily total=${current_daily_pnl:.2f}/${self._max_daily_profit:.2f}"
                             )
                             if self._max_daily_profit > 0 and current_daily_pnl >= self._max_daily_profit:
                                 self.logger.info(
-                                    f"[SessionManager] \U0001f3af DAILY TARGET HIT \u2014 "
+                                    f"[SessionManager] 🎯 DAILY TARGET HIT — "
                                     f"no more signals today."
                                 )
                         else:
@@ -919,9 +1017,11 @@ class TradingSystem:
         """Log current system metrics."""
         try:
             portfolio_stats = self.portfolio_engine.get_statistics()
+            # Use real account info from MT5, not portfolio totals
+            account_info = self._get_effective_account_info()
             risk_metrics = self.risk_engine.get_risk_metrics(
-                account_balance=Decimal(str(portfolio_stats.get('total_pnl', 0))),
-                account_equity=Decimal(str(portfolio_stats.get('total_pnl', 0))),
+                account_balance=account_info['balance'],
+                account_equity=account_info['equity'],
                 current_positions={p.position_id: p for p in self.portfolio_engine.get_all_positions()},
                 daily_pnl=Decimal(str(portfolio_stats.get('daily_realized_pnl', 0)))
             )
@@ -1040,8 +1140,8 @@ def main():
     parser = argparse.ArgumentParser(description="Algorithmic Trading System")
     parser.add_argument(
         '--config',
-        default='config/config.yaml',
-        help='Configuration file path'
+        default=None,
+        help='Configuration file path (overrides env default)'
     )
     parser.add_argument(
         '--env',
@@ -1065,7 +1165,7 @@ def main():
         'live': 'config/config_live.yaml'
     }
     
-    config_file = config_files.get(args.env, args.config)
+    config_file = args.config if args.config else config_files.get(args.env, 'config/config_dev.yaml')
     log_trace(f"Using config file: {config_file}")
     
     # === LIVE MODE SAFETY GATE ===

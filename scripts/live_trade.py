@@ -33,11 +33,11 @@ def main():
         return
     
     print("Starting live trading...")
-    print("Using config/config_live.yaml")
+    print("Using config/config_live_5000.yaml")
     print("=" * 60)
     
     # Create system with live config
-    system = TradingSystem(config_file="config/config_live.yaml")
+    system = TradingSystem(config_file="config/config_live_5000.yaml")
     
     # Run
     system.run()

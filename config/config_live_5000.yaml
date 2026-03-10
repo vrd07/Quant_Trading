@@ -214,7 +214,7 @@ trading_hours:
       start: "01:30"             # 07:00 IST
       end: "06:00"               # 11:30 IST
       enabled: true
-      strategies: [breakout]  # Only breakout in Asian session (Kalman disabled due to chop)
+      strategies: [breakout, kalman_regime]  # kalman_regime added: catches slow Asian trends on 15m bars
 
     # ── LONDON OPEN ───────────────────────────────────────────────────────────
     # Highest volatility, biggest moves. All strategies allowed.

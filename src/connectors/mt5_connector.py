@@ -312,7 +312,7 @@ class MT5Connector:
         Args:
             position_id: MT5 ticket (string)
             stop_loss:   New stop loss price (None = keep current)
-            take_profit: New take profit price (None = keep current)
+            take_profit: New take profit price (None = keep current, NOT zero it out)
 
         Returns:
             True if modification was accepted by the EA, False otherwise
@@ -321,12 +321,18 @@ class MT5Connector:
             "Modifying position %s: sl=%s tp=%s", position_id, stop_loss, take_profit
         )
         try:
-            command = {
+            command: dict = {
                 "command": "MODIFY_ORDER",
                 "ticket": int(position_id),
                 "sl": float(stop_loss) if stop_loss is not None else 0,
-                "tp": float(take_profit) if take_profit is not None else 0,
             }
+            # CRITICAL: Only include 'tp' when the caller explicitly provides one.
+            # Sending tp=0 would wipe out the existing take-profit on the broker.
+            # When take_profit is None, omit the key entirely so the EA keeps
+            # whatever TP is already set.
+            if take_profit is not None:
+                command["tp"] = float(take_profit)
+
             response = self.client.send_command(command)
             logger.debug("Modify response: %s", response)
 

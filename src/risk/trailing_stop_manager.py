@@ -75,15 +75,47 @@ class TrailingStopManager:
 
     def _process_position(self, ticket_str: str, pos, connector) -> None:
         """Process a single position — upgrade SL stage if criteria are met."""
-        # Get entry and current price
-        entry = float(getattr(pos, 'entry_price', 0) or
-                      pos.metadata.get('entry_price', 0) if hasattr(pos, 'metadata') else 0)
-        current_sl = float(getattr(pos, 'stop_loss', 0) or
-                           pos.metadata.get('sl', 0) if hasattr(pos, 'metadata') else 0)
-        current_price = float(getattr(pos, 'current_price', 0) or
-                              pos.metadata.get('price_current', 0) if hasattr(pos, 'metadata') else 0)
-        current_tp = float(getattr(pos, 'take_profit', 0) or
-                          pos.metadata.get('tp', 0) if hasattr(pos, 'metadata') else 0)
+        # --- Robust field reads using explicit None-guards ---
+        # CRITICAL: use `is None` checks, NOT truthiness (`or`).
+        # A Decimal("0") price is falsy in Python — truthiness would silently
+        # replace a real 0.0 value with the fallback, causing silent failures.
+
+        # Entry price
+        _entry_attr = getattr(pos, 'entry_price', None)
+        if _entry_attr is not None:
+            entry = float(_entry_attr)
+        elif hasattr(pos, 'metadata'):
+            entry = float(pos.metadata.get('entry_price', 0) or 0)
+        else:
+            entry = 0.0
+
+        # Current stop loss
+        _sl_attr = getattr(pos, 'stop_loss', None)
+        if _sl_attr is not None:
+            current_sl = float(_sl_attr)
+        elif hasattr(pos, 'metadata'):
+            current_sl = float(pos.metadata.get('sl', 0) or 0)
+        else:
+            current_sl = 0.0
+
+        # Current price
+        _price_attr = getattr(pos, 'current_price', None)
+        if _price_attr is not None:
+            current_price = float(_price_attr)
+        elif hasattr(pos, 'metadata'):
+            current_price = float(pos.metadata.get('price_current', 0) or 0)
+        else:
+            current_price = 0.0
+
+        # Current take profit (may legitimately be None/0 — keep as None so
+        # modify_position does NOT send tp=0 and wipe the real TP)
+        _tp_attr = getattr(pos, 'take_profit', None)
+        if _tp_attr is not None and float(_tp_attr) != 0.0:
+            current_tp_decimal = Decimal(str(float(_tp_attr)))
+        elif hasattr(pos, 'metadata') and pos.metadata.get('tp'):
+            current_tp_decimal = Decimal(str(float(pos.metadata['tp'])))
+        else:
+            current_tp_decimal = None  # ← None means "keep existing" in modify_position
 
         if entry == 0 or current_price == 0:
             return
@@ -95,6 +127,12 @@ class TrailingStopManager:
             atr_dist = abs(entry - current_sl) if current_sl != 0 else 0
             self._initial_atr_dist[ticket_str] = atr_dist
             self._stage[ticket_str] = 0
+            if atr_dist == 0:
+                logger.warning(
+                    f"[TrailingStop] ticket={ticket_str}: initial SL=0, cannot compute "
+                    f"ATR distance — BE/trail disabled for this position "
+                    f"(entry={entry:.5f}, sl={current_sl})"
+                )
 
         atr_dist = self._initial_atr_dist[ticket_str]
         if atr_dist == 0:
@@ -106,56 +144,57 @@ class TrailingStopManager:
         from ..core.constants import PositionSide
         is_long = getattr(pos, 'side', None) == PositionSide.LONG
 
-        if is_long:
-            profit_distance = current_price - entry
-        else:
-            profit_distance = entry - current_price
+        profit_distance = (current_price - entry) if is_long else (entry - current_price)
 
-        # Debug logging every 60 iterations roughly
+        # Debug logging every 60 seconds
         import time
-        if not hasattr(self, '_last_log_time'): self._last_log_time = {}
+        if not hasattr(self, '_last_log_time'):
+            self._last_log_time = {}
         if time.time() - self._last_log_time.get(ticket_str, 0) > 60:
             logger.debug(
                 f"[TrailingStop] ticket={ticket_str} stage={current_stage} "
-                f"entry={entry:.2f} price={current_price:.2f} "
+                f"entry={entry:.2f} price={current_price:.2f} sl={current_sl:.2f} "
                 f"profit_dist={profit_distance:.2f} "
-                f"req_stage1={self.breakeven_atr_mult * atr_dist:.2f} "
-                f"req_stage2={self.lock_atr_mult * atr_dist:.2f}"
+                f"req_BE={self.breakeven_atr_mult * atr_dist:.2f} "
+                f"req_lock={self.lock_atr_mult * atr_dist:.2f}"
             )
             self._last_log_time[ticket_str] = time.time()
 
-        # Stage 2: Lock in partial profit (entry + lock_fraction × atr_dist)
+        # ── Stage 2: Lock in partial profit (entry + lock_fraction × atr_dist) ──
         if current_stage < 2 and profit_distance >= self.lock_atr_mult * atr_dist:
-            new_sl = (entry + self.lock_fraction * atr_dist) if is_long else (entry - self.lock_fraction * atr_dist)
-            # Only move SL in the favourable direction
+            new_sl = (entry + self.lock_fraction * atr_dist) if is_long \
+                     else (entry - self.lock_fraction * atr_dist)
+            # Only move SL in the favourable direction (never move backwards)
             if (is_long and new_sl > current_sl) or (not is_long and new_sl < current_sl):
                 success = connector.modify_position(
                     position_id=ticket_str,
                     stop_loss=Decimal(str(round(new_sl, 5))),
-                    take_profit=Decimal(str(current_tp)) if current_tp else None
+                    take_profit=current_tp_decimal  # None = keep existing TP in MT5
                 )
                 if success:
                     self._stage[ticket_str] = 2
                     logger.info(
-                        f"[TrailingStop] Stage 2 — Partial lock: ticket={ticket_str} "
-                        f"new_sl={new_sl:.5f} (locked {self.lock_fraction*100:.0f}% of risk)"
+                        f"[TrailingStop] ✅ Stage 2 LOCK: ticket={ticket_str} "
+                        f"new_sl={new_sl:.5f} "
+                        f"(locked {self.lock_fraction*100:.0f}% of ${atr_dist:.2f} risk)"
                     )
             return
 
-        # Stage 1: Move to breakeven
+        # ── Stage 1: Move SL to breakeven (entry price) ──
         if current_stage < 1 and profit_distance >= self.breakeven_atr_mult * atr_dist:
-            new_sl = entry  # Breakeven — exactly at entry
+            new_sl = entry  # Breakeven — worst case: $0 loss
             if (is_long and new_sl > current_sl) or (not is_long and new_sl < current_sl):
                 success = connector.modify_position(
                     position_id=ticket_str,
                     stop_loss=Decimal(str(round(new_sl, 5))),
-                    take_profit=Decimal(str(current_tp)) if current_tp else None
+                    take_profit=current_tp_decimal  # None = keep existing TP in MT5
                 )
                 if success:
                     self._stage[ticket_str] = 1
                     logger.info(
-                        f"[TrailingStop] Stage 1 — Breakeven: ticket={ticket_str} "
-                        f"entry={entry:.5f} sl_moved_to_breakeven"
+                        f"[TrailingStop] ✅ Stage 1 BREAKEVEN: ticket={ticket_str} "
+                        f"sl_moved_to_entry={entry:.5f} "
+                        f"(triggered at +{profit_distance:.2f} / req {self.breakeven_atr_mult * atr_dist:.2f})"
                     )
 
     def cleanup_closed(self, open_tickets: set) -> None:
