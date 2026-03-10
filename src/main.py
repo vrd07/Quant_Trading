@@ -1215,4 +1215,11 @@ def main():
 
 
 if __name__ == "__main__":
+    # Windows 11 compatibility: fix asyncio event loop policy
+    # Python 3.8+ on Windows defaults to ProactorEventLoop which doesn't support
+    # some subprocess operations. SelectorEventLoop is the safe cross-platform choice.
+    import sys as _sys
+    if _sys.platform == "win32":
+        import asyncio as _asyncio
+        _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
     main()

@@ -1,8 +1,13 @@
 import json
-import os
+import sys
+from pathlib import Path
 
-files_dir = os.path.expanduser("~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files")
-status_file = os.path.join(files_dir, "mt5_status.json")
+# Use the cross-platform path detection from MT5FileClient
+sys.path.insert(0, str(Path(__file__).parent))
+from mt5_bridge.mt5_file_client import MT5FileClient
+
+files_dir = MT5FileClient._get_default_mt5_path()
+status_file = files_dir / "mt5_status.json"
 
 try:
     with open(status_file, "r") as f:

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<!--
+  Windows Task Scheduler XML — Quant Trading Bot Auto-Start
+  
+  IMPORT INSTRUCTIONS:
+  1. Open Task Scheduler (search "Task Scheduler" in Start)
+  2. Click "Import Task..." in the right panel
+  3. Select this file
+  4. Edit the <WorkingDirectory> and <Command> paths to match your install location
+  5. Click OK
+
+  The task will run at Windows logon and restart automatically if it crashes.
+-->
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Quant Trading Bot — Live XAUUSD trading on The5ers account</Description>
+    <Author>Quant Trading System</Author>
+    <Date>2026-03-11T00:00:00</Date>
+  </RegistrationInfo>
+  <Triggers>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <!-- Remove the <UserId> tag to trigger for ANY user, or set your specific user -->
+    </LogonTrigger>
+  </Triggers>
+  <Principals>
+    <Principal id="Author">
+      <LogonType>InteractiveToken</LogonType>
+      <RunLevel>LeastPrivilege</RunLevel>
+    </Principal>
+  </Principals>
+  <Settings>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>  <!-- No time limit -->
+    <RestartOnFailure>
+      <Interval>PT1M</Interval>   <!-- Restart after 1 minute if crashed -->
+      <Count>3</Count>            <!-- Max 3 restarts -->
+    </RestartOnFailure>
+  </Settings>
+  <Actions Context="Author">
+    <Exec>
+      <!-- EDIT THIS: full path to your python.exe -->
+      <Command>C:\Users\%USERNAME%\AppData\Local\Programs\Python\Python311\python.exe</Command>
+      <!-- EDIT THIS: full path to your project -->
+      <Arguments>src\main.py --config config\config_live_5000.yaml --env live</Arguments>
+      <WorkingDirectory>C:\Users\%USERNAME%\Documents\Quant_trading</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

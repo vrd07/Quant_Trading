@@ -68,12 +68,21 @@ def main():
 
     # ── Check 1: Bridge file directory ──────────────────────────
     bridge_cfg = config.get("file_bridge", {})
-    data_dir = Path(bridge_cfg.get(
-        "data_dir",
-        "~/Library/Application Support/net.metaquotes.wine.metatrader5/"
-        "drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-    )).expanduser()
+    bridge_data_dir = bridge_cfg.get("data_dir")
+    if bridge_data_dir:
+        data_dir = Path(bridge_data_dir).expanduser()
+    else:
+        # Auto-detect using MT5FileClient cross-platform logic
+        try:
+            sys.path.insert(0, str(PROJECT_ROOT))
+            from mt5_bridge.mt5_file_client import MT5FileClient
+            data_dir = MT5FileClient._get_default_mt5_path()
+        except Exception:
+            import os as _os
+            data_dir = Path(_os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) \
+                       / "MetaQuotes" / "Terminal" / "Common" / "Files"
     status_file = data_dir / "mt5_status.json"
+
     results.append(check(
         "Bridge directory exists",
         data_dir.exists(),

@@ -16,3 +16,5 @@ scipy>=1.10.0
 scikit-optimize>=0.9.0
 pytz>=2023.3
 
+# Cross-platform process management (used by scripts/force_cleanup.py)
+psutil>=5.9.0

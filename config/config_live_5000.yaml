@@ -278,6 +278,10 @@ portfolio:
 
 file_bridge:
   enabled: true
+  # ── MT5 data directory ──────────────────────────────────────────────────────
+  # Windows 11 (native MT5, no Wine — uncomment the line below):
+  # data_dir: "C:/Users/<YourWindowsUsername>/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  # macOS (MT5 under Wine — active by default):
   data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100
 

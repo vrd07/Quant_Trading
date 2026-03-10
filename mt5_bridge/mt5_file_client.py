@@ -27,14 +27,16 @@ class MT5FileClient:
         Initialize the file-based MT5 client.
         
         Args:
-            data_dir: Directory for communication files. 
-                     Defaults to MT5 Common Files folder.
+            data_dir: Directory for communication files.
+                     If None, auto-detects based on operating system:
+                     - Windows 11: %APPDATA%\\MetaQuotes\\Terminal\\Common\\Files
+                     - macOS (Wine): ~/Library/Application Support/.../Common/Files
+                     - Linux (Wine): ~/.wine/drive_c/users/.../Common/Files
         """
         if data_dir is None:
-            # Use MT5 Common Files directory (Wine/Mac path)
-            self.data_dir = Path.home() / "Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-        else:
-            self.data_dir = Path(data_dir).expanduser()
+            data_dir = self._get_default_mt5_path()
+        
+        self.data_dir = Path(data_dir).expanduser()
         
         self.command_file = self.data_dir / "mt5_commands.json"
         self.status_file = self.data_dir / "mt5_status.json"
@@ -44,10 +46,70 @@ class MT5FileClient:
         self.data_dir.mkdir(parents=True, exist_ok=True)
         
         print(f"📁 MT5 File Bridge Client")
-        print(f"   Data Directory: {self.data_dir}")
+        print(f"   Platform    : {self._platform_name()}")
+        print(f"   Data Dir    : {self.data_dir}")
         print(f"   Command File: {self.command_file.name}")
-        print(f"   Status File: {self.status_file.name}")
-        print(f"   Response File: {self.response_file.name}")
+        print(f"   Status File : {self.status_file.name}")
+        print(f"   Response File:{self.response_file.name}")
+
+    @staticmethod
+    def _platform_name() -> str:
+        import sys
+        return {"win32": "Windows", "darwin": "macOS", "linux": "Linux"}.get(sys.platform, sys.platform)
+
+    @staticmethod
+    def _get_default_mt5_path() -> Path:
+        """
+        Auto-detect the MT5 Common Files directory based on the OS.
+
+        Returns:
+            Path to MT5 Common Files directory.
+        """
+        import sys
+        home = Path.home()
+
+        if sys.platform == "win32":
+            # Windows 11: native MT5 — no Wine needed
+            # APPDATA is set by Windows, e.g. C:\Users\<name>\AppData\Roaming
+            import os
+            appdata = os.environ.get("APPDATA", str(home / "AppData" / "Roaming"))
+            return Path(appdata) / "MetaQuotes" / "Terminal" / "Common" / "Files"
+
+        elif sys.platform == "darwin":
+            # macOS: MT5 runs under Wine via MetaTrader5 Mac app
+            return (
+                home
+                / "Library"
+                / "Application Support"
+                / "net.metaquotes.wine.metatrader5"
+                / "drive_c"
+                / "users"
+                / "user"
+                / "AppData"
+                / "Roaming"
+                / "MetaQuotes"
+                / "Terminal"
+                / "Common"
+                / "Files"
+            )
+
+        else:
+            # Linux: MT5 under Wine (common setup)
+            return (
+                home
+                / ".wine"
+                / "drive_c"
+                / "users"
+                / "user"
+                / "AppData"
+                / "Roaming"
+                / "MetaQuotes"
+                / "Terminal"
+                / "Common"
+                / "Files"
+            )
+
+
     
     def _send_command(self, command_dict, timeout=5):
         """
