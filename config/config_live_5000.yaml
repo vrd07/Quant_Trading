@@ -279,8 +279,17 @@ portfolio:
 file_bridge:
   enabled: true
   # ── MT5 data directory ──────────────────────────────────────────────────────
-  # Windows 11 (native MT5, no Wine — uncomment the line below):
-  # data_dir: "C:/Users/<YourWindowsUsername>/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  #
+  # WINDOWS 11 USERS:
+  #   Option A (recommended — works with ANY username including spaces):
+  #     Comment out BOTH data_dir lines below. The bot will auto-detect the
+  #     correct path using Windows' %APPDATA% environment variable.
+  #
+  #   Option B (manual — only needed if auto-detect fails):
+  #     Uncomment the line below and replace <YourWindowsUsername> with yours.
+  #     If your username has spaces (e.g. "Shubham Ghodke"), include them as-is:
+  #     data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  #
   # macOS (MT5 under Wine — active by default):
   data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100

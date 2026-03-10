@@ -107,35 +107,31 @@ Wait for everything to install. This may take 2–3 minutes. You'll see a lot of
 ## ⚙️ Step 6 — Configure the Bot
 
 1. Open the folder `Quant_Trading\config\` in File Explorer
-2. Open `config_live_5000.yaml` with **Notepad** (right-click → Open with → Notepad)
-3. Find the `file_bridge` section near the bottom. It looks like this:
+2. Right-click `config_live_5000.yaml` → **Open with → Notepad**
+3. Scroll to the very bottom and find the `file_bridge` section
+
+**✅ Easiest option (works for everyone, including names with spaces like "Shubham Ghodke"):**
+
+Just put a `#` in front of the macOS `data_dir` line to disable it. Leave everything else as-is. The bot will **automatically find the correct MT5 folder** on Windows — no path editing needed.
+
+It should look like this after your edit:
 
 ```yaml
 file_bridge:
   enabled: true
-  # Windows 11 (native MT5 — uncomment the line below):
-  # data_dir: "C:/Users/<YourWindowsUsername>/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-  # macOS (MT5 under Wine — active by default):
-  data_dir: "~/Library/Application Support/..."
-```
-
-4. **Replace `<YourWindowsUsername>`** in the commented Windows line with your actual Windows username
-   - Not sure what it is? Open Command Prompt and type `echo %USERNAME%`
-5. **Remove the `#`** from the Windows line (to activate it)
-6. **Add a `#`** at the start of the macOS `data_dir` line (to deactivate it)
-
-It should now look like this (with your real username):
-
-```yaml
-file_bridge:
-  enabled: true
-  # Windows 11:
-  data_dir: "C:/Users/John/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
-  # macOS (disabled):
+  # macOS (disabled — add # to the front of this line):
   # data_dir: "~/Library/Application Support/..."
 ```
 
-7. Save the file (`Ctrl + S`) and close Notepad
+4. Save the file (`Ctrl + S`) and close Notepad
+
+> **If auto-detect ever fails** (the health check shows ❌ for the bridge directory), you can manually set the path:
+> ```yaml
+> data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+> ```
+> Spaces in your Windows username are perfectly fine here — just type it exactly as it appears.
+>
+> Not sure of your exact username? Open Command Prompt and type: `echo %USERNAME%`
 
 ---
 
