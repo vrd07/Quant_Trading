@@ -434,7 +434,7 @@ class TradingSystem:
             self._trailing_stop_mgr.cleanup_closed(set(positions.keys()))
             self._trailing_stop_mgr.update(positions, self.connector)
         except Exception as e:
-            self.logger.warning("Trailing stop update error (non-critical): %s", e)
+            self.logger.warning(f"Trailing stop update error (non-critical): {e}")
 
     def _process_strategies(self) -> None:
         """Process all strategies with per-strategy timeframe routing."""
@@ -454,11 +454,10 @@ class TradingSystem:
                 self.risk_engine.reset_daily_metrics(account_info['equity'])
                 self.risk_engine.update_equity_hwm(account_info['equity'])
                 self.logger.info(
-                    "[RiskEngine] Daily metrics reset — equity=%.2f",
-                    float(account_info['equity'])
+                    f"[RiskEngine] Daily metrics reset — equity={float(account_info['equity']):.2f}"
                 )
             except Exception as _e:
-                self.logger.warning("[RiskEngine] Daily reset failed (non-critical): %s", _e)
+                self.logger.warning(f"[RiskEngine] Daily reset failed (non-critical): {_e}")
 
         # ── Daily profit target gate ──────────────────────────────
         daily_pnl = float(self.portfolio_engine.daily_realized_pnl + self.portfolio_engine.get_total_unrealized_pnl())
@@ -774,7 +773,7 @@ class TradingSystem:
                             metadata={'mt5_ticket': ticket, 'source': 'fill_poll'}
                         )
                     except Exception as _je:
-                        self.logger.debug("Fill poll: journal record failed for ticket=%s: %s", ticket, _je)
+                        self.logger.debug(f"Fill poll: journal record failed for ticket={ticket}: {_je}")
 
                 # Update RiskEngine circuit breaker in real-time (no more 30s blind spot)
                 if self.risk_engine is not None:
@@ -782,14 +781,13 @@ class TradingSystem:
                     self.risk_engine.record_trade_result(_Dec(str(realized_pnl)))
 
                 self.logger.info(
-                    "[FillPoller] Detected closed deal: ticket=%s symbol=%s "
-                    "pnl=%.2f strategy=%s",
-                    ticket, symbol_name, realized_pnl, strategy
+                    f"[FillPoller] Detected closed deal: ticket={ticket} symbol={symbol_name} "
+                    f"pnl={realized_pnl:.2f} strategy={strategy}"
                 )
 
         except Exception as e:
             # Non-critical — reconciliation will catch anything missed
-            self.logger.debug("[FillPoller] Error polling fills (non-critical): %s", e)
+            self.logger.debug(f"[FillPoller] Error polling fills (non-critical): {e}")
     
     def _update_portfolio_prices(self) -> None:
         """Update all portfolio positions with latest prices."""
