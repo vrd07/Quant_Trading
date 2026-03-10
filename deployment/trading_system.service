@@ -1,0 +1,23 @@
+[Unit]
+Description=Algorithmic Trading System
+After=network.target
+
+[Service]
+Type=simple
+User=trader
+WorkingDirectory=/home/trader/trading_system
+ExecStart=/home/trader/trading_system/venv/bin/python scripts/paper_trade.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Resource limits
+LimitNOFILE=65536
+MemoryLimit=2G
+
+# Environment
+Environment="PYTHONUNBUFFERED=1"
+
+[Install]
+WantedBy=multi-user.target
