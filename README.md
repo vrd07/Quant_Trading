@@ -1,353 +1,254 @@
-# 🖥️ Windows Setup Guide — Step-by-Step
+# 📈 Quant Trading Bot — Windows 11 Setup Guide
 
-This guide is written for **complete beginners**. Follow every step exactly as written.
-
----
-
-## What You Need
-
-- A **Windows 10 or 11** computer
-- An **internet connection**
-- A **broker account** that supports MetaTrader 5 (demo account is fine to start)
-
-You will install two things:
-1. **Python** — the programming language that runs the trading brain
-2. **MetaTrader 5** — the trading platform that connects to your broker
+> **This guide is written for non-technical users who want to run the trading bot on a fresh Windows 11 PC.**
+> No coding knowledge needed — just follow each step in order.
 
 ---
 
-## Part 1: Install Python
+## ⚠️ Important Disclaimer
 
-### Step 1.1 — Download Python
-
-1. Open your web browser
-2. Go to: **https://www.python.org/downloads/**
-3. Click the big yellow button that says **"Download Python 3.x.x"**
-4. A file will download (something like `python-3.x.x-amd64.exe`)
-
-### Step 1.2 — Install Python
-
-1. Double-click the downloaded file to open the installer
-2. **⚠️ IMPORTANT: Check the box at the bottom that says "Add Python to PATH"** — this is critical!
-3. Click **"Install Now"**
-4. Wait for it to finish
-5. Click **"Close"**
-
-### Step 1.3 — Verify Python Works
-
-1. Press `Win + R` on your keyboard (the Windows key + the letter R)
-2. Type `cmd` and press Enter — a black window (Command Prompt) opens
-3. Type this and press Enter:
-   ```
-   python --version
-   ```
-4. You should see something like: `Python 3.12.5`
-5. If you see an error, restart your computer and try again
+> This bot trades **real money** on a live account. You can lose your entire balance.
+> Only run this if you fully understand the risks and have tested everything first.
 
 ---
 
-## Part 2: Install MetaTrader 5
+## 🗂️ What This Bot Does
 
-### Step 2.1 — Download MT5
+This is an **automated gold (XAUUSD) trading bot** built for the **The5ers $5,000 prop firm challenge**. It:
 
-1. Go to: **https://www.metatrader5.com/en/download**
-2. Click **"Download MetaTrader 5"**
-3. Run the downloaded installer
-4. Follow the installation wizard (click Next, Next, Finish)
-
-### Step 2.2 — Log In to Your Broker
-
-1. Open MetaTrader 5
-2. Your broker should appear in the server list
-3. Enter your **login**, **password**, and select your **server**
-4. Click **OK**
-5. You should see your account balance in the bottom-left area
-
-> 💡 **Tip:** If you don't have a broker yet, many brokers offer free **demo accounts** with virtual money. This is perfect for testing.
+- Connects to MetaTrader 5 (MT5) on your PC
+- Automatically analyzes gold prices 24/7
+- Places and manages trades using multiple strategies
+- Enforces strict risk rules (daily loss limits, trailing stops, etc.)
+- Targets a **$400 profit** while staying within a **5% daily loss** and **10% drawdown** limit
 
 ---
 
-## Part 3: Download This Project
+## 🖥️ Step 1 — What You Need
 
-### Step 3.1 — Download from GitHub
+Before you start, make sure you have:
 
-1. Go to: **https://github.com/vrd07/Quant_Trading**
-2. Click the green **"Code"** button
-3. Click **"Download ZIP"**
-4. Save the ZIP file to your computer
-
-### Step 3.2 — Extract the ZIP
-
-1. Find the downloaded ZIP file (usually in your **Downloads** folder)
-2. Right-click it → **"Extract All..."**
-3. Choose where to extract it (e.g., `C:\Users\YourName\Documents\`)
-4. Click **"Extract"**
-5. You should now have a folder called `Quant_Trading-main`
-6. **Rename** it to `Quant_Trading` (remove the `-main` part) for simplicity
+| Requirement | Where to Get It |
+|---|---|
+| Windows 11 PC | Your current PC |
+| Internet connection | Your router/WiFi |
+| MetaTrader 5 | [Download here](https://www.metatrader5.com/en/download) |
+| A The5ers MT5 account | [The5ers website](https://the5ers.com/) |
+| Python 3.11 | [Download here](https://www.python.org/downloads/) |
+| Git | [Download here](https://git-scm.com/download/win) |
 
 ---
 
-## Part 4: Install Python Dependencies
+## 🐍 Step 2 — Install Python
 
-### Step 4.1 — Open Command Prompt in Project Folder
+1. Go to [python.org/downloads](https://www.python.org/downloads/)
+2. Click **"Download Python 3.11.x"**
+3. Run the installer
+4. ✅ **VERY IMPORTANT:** On the first screen, tick **"Add Python to PATH"** before clicking Install
 
-1. Open the `Quant_Trading` folder in File Explorer
-2. Click on the **address bar** at the top (where it shows the folder path)
-3. Type `cmd` and press **Enter** — a Command Prompt opens in this folder
+   ![Python PATH checkbox — must be ticked](https://www.python.org/static/img/python-logo.png)
 
-> 💡 **Alternative:** Press `Win + R`, type `cmd`, press Enter. Then type:
-> ```
-> cd C:\Users\YourName\Documents\Quant_Trading
-> ```
-> (Replace `YourName` with your actual Windows username)
+5. Click **"Install Now"**
+6. When done, click **"Close"**
 
-### Step 4.2 — Install Required Packages
+**Verify it worked:** Press `Win + R`, type `cmd`, press Enter. Then type:
+```
+python --version
+```
+You should see something like `Python 3.11.9`. If you get an error, Python was not added to PATH — reinstall and tick the box.
 
-Type this command and press Enter:
+---
+
+## 📥 Step 3 — Download the Bot
+
+1. Press `Win + R`, type `cmd`, press Enter (this opens the Command Prompt)
+2. Type these commands one at a time, pressing **Enter** after each:
+
+```
+cd %USERPROFILE%\Documents
+git clone https://github.com/vrd07/Quant_Trading.git
+cd Quant_Trading
+```
+
+You should now be inside the bot's folder.
+
+---
+
+## 📦 Step 4 — Install Bot Dependencies
+
+Still in the Command Prompt (inside the `Quant_Trading` folder), type:
+
 ```
 pip install -r requirements.txt
 ```
 
-Wait for it to finish. You'll see a lot of text scrolling — that's normal. It should end with `Successfully installed ...`.
-
-> ⚠️ **If you see "pip is not recognized":** Python wasn't added to PATH. Uninstall Python and reinstall it, making sure to check **"Add Python to PATH"** in Step 1.2.
+Wait for everything to install. This may take 2–3 minutes. You'll see a lot of text scrolling — that's normal.
 
 ---
 
-## Part 5: Set Up the Expert Advisor (EA) in MT5
+## 📉 Step 5 — Install & Set Up MetaTrader 5
 
-The EA is the "robot" inside MetaTrader that receives commands from Python.
-
-### Step 5.1 — Find Your MT5 Data Folder
-
-1. Open MetaTrader 5
-2. Click **File** (top-left menu) → **Open Data Folder**
-3. A Windows Explorer window opens — this is your MT5 data folder
-4. Navigate into: `MQL5` → `Experts`
-5. **Keep this folder open** — you'll need it in the next step
-
-### Step 5.2 — Copy the EA File
-
-1. Open the `Quant_Trading` project folder
-2. Go into `mt5_bridge`
-3. Find the file called **`EA_FileBridge.mq5`**
-4. **Copy** this file (`Ctrl + C`)
-5. **Paste** it into the `MQL5/Experts` folder you opened in Step 5.1 (`Ctrl + V`)
-
-### Step 5.3 — Compile the EA
-
-1. Go back to MetaTrader 5
-2. Press **F4** on your keyboard — this opens **MetaEditor** (the code editor)
-3. In MetaEditor, on the left panel, find: `Experts` → `EA_FileBridge.mq5`
-4. Double-click to open it
-5. Press **F7** to compile (or click the **Compile** button)
-6. Look at the bottom panel — it should say:
-   ```
-   0 errors, 0 warnings
-   ```
-7. ✅ If you see 0 errors, the EA is ready!
-8. Close MetaEditor (click the X)
-
-> ⚠️ **If you see errors:** Make sure you copied `EA_FileBridge.mq5` (NOT `EA_ZeroMQ_Bridge.mq5`). The File Bridge has zero external dependencies and should compile without any issues.
-
-### Step 5.4 — Enable Automated Trading
-
-1. In MetaTrader 5, click **Tools** (top menu) → **Options**
-2. Click the **Expert Advisors** tab
-3. Check ✅ **Allow automated trading**
-4. Click **OK**
-5. In the main toolbar, find the **Algo Trading** button and click it
-6. The button should turn **green** ✅ — this means automated trading is enabled
-
-### Step 5.5 — Attach the EA to a Chart
-
-1. Press **Ctrl + N** to open the **Navigator** panel (left side)
-2. Expand **Expert Advisors**
-3. Find **EA_FileBridge**
-4. **Drag and drop** it onto any open chart (e.g., XAUUSD chart)
-5. A settings window appears:
-   - Go to the **Inputs** tab
-   - You can adjust settings here (see table below), or leave defaults
-   - Click **OK**
-6. In the **top-right corner** of the chart, you should see the EA name — this means it's running!
-
-### Step 5.6 — Verify the EA is Working
-
-1. Press **Ctrl + T** to open the **Toolbox** at the bottom
-2. Click the **Experts** tab
-3. You should see messages like:
-   ```
-   ========================================
-   === EA_FileBridge v3.0 PRODUCTION ===
-   ========================================
-   ```
-4. ✅ The EA is running and ready to receive commands from Python!
+1. Download MT5 from [metatrader5.com](https://www.metatrader5.com/en/download)
+2. Install it like a normal Windows app
+3. Open MT5 and **log in with your The5ers account credentials**
+4. Open the **EA (Expert Advisor) bridge file:**
+   - In MT5, click **File → Open Data Folder**
+   - Navigate to `MQL5 → Experts`
+   - Copy the file `mt5_bridge\EA_FileBridge.mq5` from the bot folder into this `Experts` folder
+5. Back in MT5, go to **Tools → Options → Expert Advisors** and tick:
+   - ✅ Allow automated trading
+   - ✅ Allow DLL imports
+6. In the **Navigator** panel (left side), expand **Expert Advisors**, find `EA_FileBridge`, and drag it onto the **XAUUSD** chart
+7. A dialog appears — click **OK**
+8. You should see a smiley face 🙂 in the top-right of the chart, meaning the EA is running
 
 ---
 
-## Part 6: Run the Trading System
+## ⚙️ Step 6 — Configure the Bot
 
-### Step 6.1 — Open Command Prompt
+1. Open the folder `Quant_Trading\config\` in File Explorer
+2. Open `config_live_5000.yaml` with **Notepad** (right-click → Open with → Notepad)
+3. Find the `file_bridge` section near the bottom. It looks like this:
 
-1. Open the `Quant_Trading` folder
-2. Click the address bar, type `cmd`, press Enter
-
-### Step 6.2 — Start the Bot
-
-Type this command and press Enter:
-```
-python src/main.py --env live --force-live
+```yaml
+file_bridge:
+  enabled: true
+  # Windows 11 (native MT5 — uncomment the line below):
+  # data_dir: "C:/Users/<YourWindowsUsername>/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  # macOS (MT5 under Wine — active by default):
+  data_dir: "~/Library/Application Support/..."
 ```
 
-### Step 6.3 — What to Expect
+4. **Replace `<YourWindowsUsername>`** in the commented Windows line with your actual Windows username
+   - Not sure what it is? Open Command Prompt and type `echo %USERNAME%`
+5. **Remove the `#`** from the Windows line (to activate it)
+6. **Add a `#`** at the start of the macOS `data_dir` line (to deactivate it)
 
-1. **First launch may take 1-3 minutes** — Python is loading libraries (this is normal!)
-2. You should then see:
-   ```
-   ============================================================
-   Initializing Trading System
-   ============================================================
-   1. Connecting to MT5...
-   ✓ Connected to MT5
-   ✓ ALL SYSTEMS OPERATIONAL
-   Starting main trading loop...
-   ```
-3. The system is now **live** and trading automatically! 🎉
+It should now look like this (with your real username):
 
-### Step 6.4 — Stopping the Bot
-
-To stop the trading system:
-- Press **Ctrl + C** in the Command Prompt window
-- The system will gracefully close all positions and save its state
-
----
-
-## Part 7: Important Settings
-
-### EA Settings (in MetaTrader 5)
-
-You can change these by right-clicking the chart → **Expert Properties** → **Inputs**:
-
-| Setting | Default | Recommended For Beginners |
-|---------|---------|--------------------------|
-| EnableTrading | true | Leave as `true` |
-| MaxOpenPositions | 10 | Start with `3` |
-| MaxDailyLossPercent | 3.0 | Start with `2.0` |
-| MaxTradesPerDay | 50 | Start with `10` |
-
-### Python Config (in `config/config_live.yaml`)
-
-Edit this file with Notepad to change trading parameters:
-
-| Setting | What It Controls |
-|---------|-----------------|
-| `initial_balance` | Your account balance (for risk calculations) |
-| `risk_per_trade_pct` | How much to risk per trade (0.005 = 0.5%) |
-| `max_daily_loss_pct` | Maximum daily loss before stopping (0.05 = 5%) |
-| `max_positions` | Maximum simultaneous trades |
-
-> 💡 **To edit:** Right-click `config_live.yaml` → **Open with** → **Notepad**
-
----
-
-## ⚠️ Safety Features
-
-This system has **multiple layers of protection**:
-
-1. **EA-Level Protection** (in MetaTrader):
-   - Maximum positions limit
-   - Daily loss limit — stops trading if you lose too much
-   - Daily profit limit — locks in profits
-   - Kill switch — instantly disable all trading
-   - Panic close — emergency close everything
-
-2. **Python-Level Protection** (in the trading engine):
-   - Risk per trade limit (default 0.5%)
-   - Circuit breaker — stops after 3 consecutive losses
-   - Portfolio exposure limits
-   - Automatic state saving (recovers from crashes)
-
-3. **Broker-Level Protection**:
-   - Your broker's margin requirements still apply
-   - Broker stop-out levels provide final safety net
-
----
-
-## Common Questions
-
-### "Can I just test it without real money?"
-
-**Yes!** Use a **demo account** from your broker. It works exactly the same but with virtual money.
-
-### "How do I know it's working?"
-
-Look at the Command Prompt window — you'll see logs showing what the system is doing. Also check the **Experts** tab in MT5 for EA messages.
-
-### "How do I stop it?"
-
-Press `Ctrl + C` in the Command Prompt window. Or set `EnableTrading = false` in the EA inputs to stop new trades while keeping existing ones open.
-
-### "What if my computer turns off?"
-
-The system saves its state every 10 seconds. When you restart, it will detect the previous state and reconcile with MT5. Any positions that were opened will still be managed by your broker's stop-loss/take-profit levels.
-
-### "Can I change what it trades?"
-
-Yes — edit `config/config_live.yaml`. Under `symbols:`, you can enable/disable XAUUSD and BTCUSD, and adjust their settings.
-
-### "Where are the trade logs?"
-
-Run this command to see your trading history:
+```yaml
+file_bridge:
+  enabled: true
+  # Windows 11:
+  data_dir: "C:/Users/John/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  # macOS (disabled):
+  # data_dir: "~/Library/Application Support/..."
 ```
-python scripts/view_journal.py
+
+7. Save the file (`Ctrl + S`) and close Notepad
+
+---
+
+## ▶️ Step 7 — Run the Bot
+
+**Option A — Double-click (easiest):**
+
+1. Open the `scripts` folder inside `Quant_Trading`
+2. Double-click **`start_live.bat`**
+3. A black window will appear asking: *"Are you ABSOLUTELY SURE you want to trade live? (type YES)"*
+4. Type `YES` and press Enter
+5. The bot is now running! 🎉
+
+**Option B — PowerShell (nicer looking):**
+
+1. Right-click **`scripts\start_live.ps1`**
+2. Click **"Run with PowerShell"**
+3. If Windows asks about execution policy, type `R` and press Enter
+4. Type `YES` when prompted
+
+> **Do not close the black window** while the bot is running. Closing it stops the bot.
+
+---
+
+## 🏥 Step 8 — Health Check (Run Before Every Session)
+
+Before starting the bot each day, run a quick health check to make sure everything is working:
+
+1. Open Command Prompt in the `Quant_Trading` folder
+2. Type:
+```
+python scripts\health_check.py --config config\config_live_5000.yaml
+```
+3. You should see all `✅ PASS` lines. If you see a `❌ FAIL`, do not run the bot until it's fixed.
+
+---
+
+## 📋 Step 9 — View Your Trades
+
+To see your trade history and performance:
+
+```
+python scripts\view_journal.py
+```
+
+Or for detailed log analysis:
+
+```
+python scripts\analyze_logs.py
 ```
 
 ---
 
-## Troubleshooting
+## 🔴 How to Stop the Bot
 
-### "python is not recognized"
-
-→ Python wasn't added to PATH. Uninstall Python and reinstall it. In the installer, check **"Add Python to PATH"** at the bottom.
-
-### "pip is not recognized"
-
-→ Same fix as above — reinstall Python with PATH enabled.
-
-### "No module named 'pandas'" or similar
-
-→ Run `pip install -r requirements.txt` again in the project folder.
-
-### "Status file not found - is EA running?"
-
-→ Make sure:
-1. MetaTrader 5 is open
-2. The EA is attached to a chart (check top-right corner of chart)
-3. Algo Trading is enabled (button should be green)
-
-### "Connection timed out"
-
-→ The EA is not responding. Check:
-1. Is MT5 open and logged in?
-2. Is the EA running? (Check Experts tab in Toolbox)
-3. Try removing and re-attaching the EA to the chart
-
-### "AllSYSTEMS OPERATIONAL" but "Waiting for data"
-
-→ This is normal! The system needs about 10 minutes of data (10 bars on 1-minute timeframe) before it starts generating trade signals. Just wait.
-
-### Numbers look wrong in the logs
-
-→ Check that `config/config_live.yaml` has the correct `initial_balance` matching your actual account balance.
+- **Cleanly:** Press `Ctrl + C` in the black window. The bot will save its state and close all positions if configured to do so.
+- **Emergency:** Close the black window directly (less clean — use only in emergency).
 
 ---
 
-## File Locations Reference (Windows)
+## 🔄 Auto-Start at Windows Login (Optional)
 
-| What | Where |
-|------|-------|
-| The project | `C:\Users\YourName\Documents\Quant_Trading\` |
-| Python config | `C:\Users\YourName\Documents\Quant_Trading\config\config_live.yaml` |
-| EA file in MT5 | `...\MQL5\Experts\EA_FileBridge.mq5` (use File → Open Data Folder in MT5) |
-| MT5 shared files | `C:\Users\YourName\AppData\Roaming\MetaQuotes\Terminal\Common\Files\` |
-| Trade logs | Run `python scripts/view_journal.py` |
+If you want the bot to start automatically every time you turn on your PC:
+
+1. Open **Task Scheduler** (search it in the Start menu)
+2. Click **"Import Task..."** on the right panel
+3. Select the file `deployment\windows_task.xml`
+4. **Edit the paths** inside the task to match your actual Python and folder locations
+5. Click **OK**
+
+---
+
+## 🆘 Common Problems & Fixes
+
+| Problem | Fix |
+|---|---|
+| `python is not recognized` | Reinstall Python and tick **"Add to PATH"** |
+| `ModuleNotFoundError` | Run `pip install -r requirements.txt` again |
+| Health check shows MT5 status file missing | Make sure MT5 is open and the EA_FileBridge is running on the chart |
+| Bot closes immediately | Read the error message in the black window carefully, it will tell you what's wrong |
+| `❌ FAIL Bridge directory exists` | Double-check the `data_dir` path in the config — your username might be wrong |
+| EA shows 🙁 (sad face) in MT5 | Go to Tools → Options → Expert Advisors and enable automated trading |
+
+---
+
+## 📁 Folder Structure (What Everything Is)
+
+```
+Quant_Trading/
+├── config/
+│   └── config_live_5000.yaml    ← Main settings file (edit this)
+├── data/
+│   └── logs/                    ← Trading logs and journal
+├── mt5_bridge/
+│   └── EA_FileBridge.mq5        ← Copy this into MT5's Experts folder
+├── scripts/
+│   ├── start_live.bat           ← Double-click to start (Windows)
+│   ├── start_live.ps1           ← PowerShell launcher
+│   ├── health_check.py          ← Run this before every session
+│   ├── view_journal.py          ← See your trade history
+│   └── analyze_logs.py          ← See strategy performance
+└── src/
+    └── main.py                  ← The bot's brain (don't edit this)
+```
+
+---
+
+## 📞 Need Help?
+
+If something doesn't work, take a screenshot of the error message in the black window and send it. The most useful info is:
+1. The **exact error message** (the red text)
+2. Which **step** you were on when it happened
+
+---
+
+*Last updated: March 2026 — Windows 11 compatible*
