@@ -47,6 +47,9 @@ class TrailingStopManager:
         # Fraction of ATR to lock in at stage 2 (0.5 = lock in half the expected move)
         self.lock_fraction: float = trail_cfg.get('lock_fraction', 0.5)
 
+        # Time-based stop (minutes) to close stuck positions
+        self.time_stop_minutes: Optional[int] = trail_cfg.get('time_stop_minutes', None)
+
         # Track upgrade stage per position ticket: 0=none, 1=breakeven, 2=locked
         self._stage: Dict[str, int] = {}
 
@@ -159,6 +162,29 @@ class TrailingStopManager:
                 f"req_lock={self.lock_atr_mult * atr_dist:.2f}"
             )
             self._last_log_time[ticket_str] = time.time()
+
+        # ── Time-based stop logic ──
+        if self.time_stop_minutes is not None:
+            # Try to get open time from position
+            _opened_attr = getattr(pos, 'opened_at', None)
+            if _opened_attr is not None:
+                opened_at = _opened_attr
+            elif hasattr(pos, 'metadata') and pos.metadata.get('time_setup'):
+                import datetime
+                opened_at = datetime.datetime.fromtimestamp(pos.metadata['time_setup'], tz=datetime.timezone.utc)
+            else:
+                opened_at = None
+
+            if opened_at is not None:
+                duration_minutes = (datetime.now(timezone.utc) - opened_at).total_seconds() / 60.0
+                if duration_minutes >= self.time_stop_minutes:
+                    logger.info(
+                        f"[TimeStop] Closing ticket={ticket_str} after {duration_minutes:.1f} minutes "
+                        f"(limit: {self.time_stop_minutes}m), profit_dist={profit_distance:.2f}."
+                    )
+                    # Use connector to close position
+                    connector.close_position(position_id=ticket_str, symbol=getattr(pos.symbol, 'ticker', ''))
+                    return
 
         # ── Stage 2: Lock in partial profit (entry + lock_fraction × atr_dist) ──
         if current_stage < 2 and profit_distance >= self.lock_atr_mult * atr_dist:
