@@ -61,8 +61,27 @@ def parse_mt5_comment(comment: str):
     # Format typically: strategy|uuid
     if "|" in comment:
         parts = comment.split("|", 1)
-        return parts[0]
-    return comment
+        extracted = parts[0].strip().lower()
+    else:
+        extracted = comment.strip().lower()
+
+    # Known strategies to match against (even if truncated)
+    known_strategies = [
+        "kalman_regime",
+        "vwap",
+        "momentum",
+        "breakout",
+        "mean_reversion",
+        "zscore_mean_reversion"
+    ]
+
+    for strat in known_strategies:
+        # If the extracted part is a substring of the known strategy (e.g., 'kalman_req' -> 'kalman_regime')
+        # OR if the known strategy is a substring of the extracted part
+        if extracted in strat or strat in extracted:
+            return strat
+
+    return extracted
 
 def sync_journal(deals: list):
     """Read existing journal, backfill/update data, and save."""
