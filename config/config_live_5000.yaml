@@ -99,6 +99,7 @@ risk:
     breakeven_atr_mult: 0.5        # Move SL to breakeven at +0.5× risk distance
     lock_atr_mult: 1.5             # Move SL to partial lock at +1.5× risk distance
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
+    time_stop_minutes: 45          # Close position if open for more than 45 minutes
 
   # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
   # (enforced by trading_hours sessions below)
@@ -195,7 +196,7 @@ strategies:
     rv_window: 20
     rv_ma_window: 100
     zscore_window: 20
-    entry_threshold: 2.5
+    entry_threshold: 1.5          # Reduced from 2.5 to 1.5 to trigger trades more reliably in chop
     trend_adx_min: 22
     kalman_confirm_bars: 2
     min_signal_strength: 0.50
