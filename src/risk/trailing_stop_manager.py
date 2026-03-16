@@ -170,8 +170,7 @@ class TrailingStopManager:
             if _opened_attr is not None:
                 opened_at = _opened_attr
             elif hasattr(pos, 'metadata') and pos.metadata.get('time_setup'):
-                import datetime
-                opened_at = datetime.datetime.fromtimestamp(pos.metadata['time_setup'], tz=datetime.timezone.utc)
+                opened_at = datetime.fromtimestamp(pos.metadata['time_setup'], tz=timezone.utc)
             else:
                 opened_at = None
 
