@@ -188,22 +188,40 @@ strategies:
     min_signal_strength: 0.65
     only_in_regime: TREND
 
-  kalman_regime:
-    enabled: true
-    timeframe: 15m                # 15m candles — smoother Kalman trend detection
-    kalman_q: 0.00001
-    kalman_r: 0.01
-    rv_window: 20
-    rv_ma_window: 100
-    zscore_window: 20
-    entry_threshold: 1.5          # Reduced from 2.5 to 1.5 to trigger trades more reliably in chop
-    trend_adx_min: 22
-    kalman_confirm_bars: 2
-    min_signal_strength: 0.50
-    atr_period: 14
-    sl_atr_multiplier: 1.5    # Targets ~45 pip stop on XAUUSD 1m
-    tp_atr_multiplier: 5.0    # $15 risk × 2.5x via ATR-distance (sl × 2.0 = tp × 2.5 effective RR)
-    news_filter: true
+    kalman_regime:
+      enabled: true
+      timeframe: 15m                # 15m candles — smoother Kalman trend detection
+      kalman_q: 0.00001
+      kalman_r: 0.01
+      rv_window: 20
+      rv_ma_window: 100
+      zscore_window: 20
+      entry_threshold: 1.5          # Reduced from 2.5 to 1.5 to trigger trades more reliably in chop
+      trend_adx_min: 22
+      kalman_confirm_bars: 2
+      min_signal_strength: 0.50
+      atr_period: 14
+      sl_atr_multiplier: 1.5    # Targets ~45 pip stop on XAUUSD 1m
+      tp_atr_multiplier: 5.0    # $15 risk × 2.5x via ATR-distance (sl × 2.0 = tp × 2.5 effective RR)
+      news_filter: true
+
+    mini_medallion:
+      enabled: true
+      timeframe: 1m
+      score_threshold: 3.0
+      risk_atr_multiplier: 1.0  # Stop loss at 1x ATR based on instruction specs
+      rr_ratio: 1.5             # Take profit at 1.5x ATR
+      weights:
+        mean_reversion: 1.0
+        momentum_burst: 0.8
+        volatility_expansion: 1.2
+        vwap_reversion: 0.9
+        order_flow: 1.1
+        liquidity_sweep: 1.3
+        lead_lag: 0.7
+        market_regime: 1.0
+        session_volatility: 0.6
+        volatility_spike: 0.8
 
 trading_hours:
   # Friday cutoff: no NEW trades after this UTC time on Fridays (weekend gap protection)
@@ -220,7 +238,7 @@ trading_hours:
       end: "06:00"               # 11:30 IST
       enabled: true
       lot_size_multiplier: 0.5   # ← HALF size in thin Asian market (0.01 lots)
-      strategies: [breakout, kalman_regime, vwap]
+      strategies: [breakout, kalman_regime, vwap, mini_medallion]
 
     # ── LONDON OPEN ───────────────────────────────────────────────────────────
     # 🔥 Highest volatility. Biggest directional breakouts of the day.
@@ -231,7 +249,7 @@ trading_hours:
       end: "09:30"               # 15:00 IST
       enabled: true
       lot_size_multiplier: 1.0   # Full size
-      strategies: [breakout, momentum, kalman_regime, vwap]
+      strategies: [breakout, momentum, kalman_regime, vwap, mini_medallion]
 
     # ── LONDON CONTINUATION / NY PRE-MARKET ───────────────────────────────────
     # London still active, NY traders positioning before open.
@@ -242,7 +260,7 @@ trading_hours:
       end: "12:00"               # 17:30 IST
       enabled: true
       lot_size_multiplier: 1.0   # Full size — still high liquidity
-      strategies: [breakout, momentum, kalman_regime, vwap]
+      strategies: [breakout, momentum, kalman_regime, vwap, mini_medallion]
 
     # ── NY OPEN / LONDON-NY OVERLAP ───────────────────────────────────────────
     # 🔥 NY session opens. London + NY both active → highest combined liquidity.
@@ -253,7 +271,7 @@ trading_hours:
       end: "14:30"               # 20:00 IST
       enabled: true
       lot_size_multiplier: 1.0   # Full size
-      strategies: [breakout, momentum, kalman_regime, vwap]
+      strategies: [breakout, momentum, kalman_regime, vwap, mini_medallion]
 
     # ── NY EVENING / LATE SESSION ─────────────────────────────────────────────
     # Post-NYSE. Lower volume. Clean trends when ML=TREND, noisy otherwise.
@@ -264,7 +282,7 @@ trading_hours:
       end: "20:30"               # 02:00 IST next day
       enabled: true
       lot_size_multiplier: 0.75  # Slightly reduced — thinner market
-      strategies: [breakout, momentum, kalman_regime]
+      strategies: [breakout, momentum, kalman_regime, mini_medallion]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
