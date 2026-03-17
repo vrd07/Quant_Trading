@@ -164,6 +164,7 @@ STRATEGY_MAP = {
         "kalman_regime": True,
         "mean_reversion": False,
         "vwap":          False,
+        "mini_medallion": True,
     },
     "RANGE": {
         "breakout":      False,
@@ -171,6 +172,7 @@ STRATEGY_MAP = {
         "kalman_regime": True,   # still useful as regime watchdog
         "mean_reversion": False,  # NOTE: disabled for prop challenge — kept as False
         "vwap":          True,
+        "mini_medallion": True,
     },
     "VOLATILE": {
         "breakout":      False,
@@ -178,6 +180,7 @@ STRATEGY_MAP = {
         "kalman_regime": True,
         "mean_reversion": False,
         "vwap":          False,
+        "mini_medallion": True,
     },
 }
 
