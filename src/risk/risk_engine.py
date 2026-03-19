@@ -233,7 +233,8 @@ class RiskEngine:
                 current_equity=account_equity
             )
             
-            if current_drawdown >= self.max_drawdown_pct:
+            bypass_drawdown = self.config.get('risk', {}).get('bypass_drawdown_limit', False)
+            if current_drawdown >= self.max_drawdown_pct and not bypass_drawdown:
                 reason = f"Drawdown limit reached: {current_drawdown:.2%} >= {self.max_drawdown_pct:.2%}"
                 self.logger.error(
                     "DRAWDOWN LIMIT EXCEEDED",
@@ -246,6 +247,11 @@ class RiskEngine:
                     reason,
                     drawdown=current_drawdown,
                     limit=self.max_drawdown_pct
+                )
+            elif current_drawdown >= self.max_drawdown_pct and bypass_drawdown:
+                self.logger.warning(
+                    f"Drawdown limit reached ({current_drawdown:.2%} >= {self.max_drawdown_pct:.2%}) but BYPASSED via config.",
+                    order_id=str(order.order_id)
                 )
             
             # CHECK 5: Max daily trades limit
