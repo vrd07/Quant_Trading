@@ -17,8 +17,8 @@ symbols:
   XAUUSD:
     enabled: true
     pip_value: 0.01
-    min_lot: 0.02             # Fixed 0.02 lots (0.02 × 75 pips × $10/pip/lot = $15 risk)
-    max_lot: 0.02             # Fixed 0.02 lots — no scaling beyond this
+    min_lot: 0.02             # System minimum
+    max_lot: 0.05             # Increased to allow strategy overrides (up to 0.05)
     lot_step: 0.01
     value_per_lot: 100
     commission_per_lot: 0.0
@@ -210,6 +210,7 @@ strategies:
   mini_medallion:
     enabled: true
     timeframe: 1m
+    fixed_lot: 0.03           # Strategy-specific hardcoded lot size override
     score_threshold: 4.0
     risk_atr_multiplier: 1.0  # Stop loss at 1x ATR based on instruction specs
     rr_ratio: 1.5             # Take profit at 1.5x ATR

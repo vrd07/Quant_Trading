@@ -29,6 +29,7 @@ class MiniMedallionStrategy(BaseStrategy):
         self.score_threshold = config.get('score_threshold', 3.0)
         self.risk_atr_multiplier = config.get('risk_atr_multiplier', 1.0)
         self.rr_ratio = config.get('rr_ratio', 1.5)
+        self.fixed_lot = config.get('fixed_lot', None)
         
         # Signal Weights
         self.weights = config.get('weights', {
@@ -111,6 +112,14 @@ class MiniMedallionStrategy(BaseStrategy):
             tp = current_price - take_profit_dist
             strength = min((abs(alpha_score) - self.score_threshold) / 2.0, 1.0)
 
+        # Metadata processing
+        metadata = {
+            'alpha_score': round(alpha_score, 2),
+            'signals': signals
+        }
+        if self.fixed_lot:
+            metadata['fixed_lot'] = self.fixed_lot
+
         # Return Signal
         return self._create_signal(
             side=side,
@@ -119,10 +128,7 @@ class MiniMedallionStrategy(BaseStrategy):
             entry_price=current_price,
             stop_loss=sl,
             take_profit=tp,
-            metadata={
-                'alpha_score': round(alpha_score, 2),
-                'signals': signals
-            }
+            metadata=metadata
         )
 
     # --- INDIVIDUAL ALPHA SIGNALS ---

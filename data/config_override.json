@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-03-20T03:58:44.188968+00:00",
-  "valid_until": "2026-03-21T03:58:44.188968+00:00",
+  "generated_at": "2026-03-20T04:08:38.455464+00:00",
+  "valid_until": "2026-03-21T04:08:38.455464+00:00",
   "regime": "RANGE",
-  "confidence": 0.6449,
-  "classifier": "RandomForest (n=39 samples)",
+  "confidence": 0.5262,
+  "classifier": "RandomForest (n=40 samples)",
   "strategy_overrides": {
     "breakout": false,
     "momentum": false,
@@ -13,13 +13,13 @@
     "mini_medallion": true
   },
   "diagnostics": {
-    "adx_14": 48.996942,
-    "atr_pct": 0.088115,
-    "bb_width_ratio": 6.551729,
-    "close_ema20_pct": 0.809865,
-    "momentum_1d": -0.042404,
-    "momentum_5d": 1.189443,
-    "range_atr_ratio": 0.890716,
-    "vol_ratio": 0.493242
+    "adx_14": 52.556984,
+    "atr_pct": 0.075176,
+    "bb_width_ratio": 5.409689,
+    "close_ema20_pct": 0.707617,
+    "momentum_1d": 0.01735,
+    "momentum_5d": 1.219066,
+    "range_atr_ratio": 0.274987,
+    "vol_ratio": 0.060446
   }
 }

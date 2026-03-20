@@ -148,6 +148,10 @@ class ExecutionEngine:
                 account_equity=account_equity
             )
             
+            # Apply strategy-specific fixed lot override directly from the signal
+            if 'fixed_lot' in signal.metadata:
+                position_size = Decimal(str(signal.metadata['fixed_lot']))
+            
             if position_size <= 0:
                 self.logger.warning(
                     "Position size calculated as zero",

@@ -930,17 +930,11 @@ class TradingSystem:
         """Update all portfolio positions with latest prices."""
         try:
             ticks = {}
-            
-            # Only fetch ticks for enabled symbols
-            enabled_symbols = [
-                ticker for ticker, cfg in self.config.get('symbols', {}).items()
-                if cfg.get('enabled', False)
-            ]
-            for symbol_ticker in enabled_symbols:
-                tick = self.connector.get_current_tick(symbol_ticker)
-                if tick:
-                    ticks[symbol_ticker] = tick
-            
+            for position in self.portfolio_engine.get_all_positions():
+                if position.symbol:
+                    tick = self.connector.get_current_tick(position.symbol.ticker)
+                    if tick:
+                        ticks[position.symbol.ticker] = tick
             self.portfolio_engine.update_all_positions(ticks)
             
         except Exception as e:
@@ -1115,7 +1109,24 @@ class TradingSystem:
                 sys.exit(1)
             
             # Restore positions to portfolio
+            loaded_symbols = {s.ticker: s for s in self._load_symbols()}
             for position in state.positions.values():
+                # Patch symbol with full config values
+                if position.symbol:
+                    base_ticker = position.symbol.ticker.split('.')[0] if '.' in position.symbol.ticker else position.symbol.ticker
+                    if base_ticker in loaded_symbols:
+                        full_sym = loaded_symbols[base_ticker]
+                        from src.core.types import Symbol
+                        position.symbol = Symbol(
+                            ticker=position.symbol.ticker,
+                            exchange=full_sym.exchange,
+                            pip_value=full_sym.pip_value,
+                            min_lot=full_sym.min_lot,
+                            max_lot=full_sym.max_lot,
+                            lot_step=full_sym.lot_step,
+                            value_per_lot=full_sym.value_per_lot,
+                            commission_per_lot=full_sym.commission_per_lot
+                        )
                 self.portfolio_engine.add_position(position)
             
             # Restore risk engine state

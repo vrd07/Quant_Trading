@@ -500,14 +500,19 @@ class MT5Connector:
             # Try to read lot constraints from system config
             sym_cfg = {}
             if hasattr(self, '_system_config') and self._system_config:
-                sym_cfg = self._system_config.get('symbols', {}).get(ticker, {})
+                # Strip known suffixes (like .w) to find base symbol in config
+                base_ticker = ticker.split('.')[0] if '.' in ticker else ticker
+                sym_cfg = self._system_config.get('symbols', {}).get(ticker) or \
+                          self._system_config.get('symbols', {}).get(base_ticker, {})
             self.symbols_cache[ticker] = Symbol(
                 ticker=ticker,
                 exchange="MT5",
                 pip_value=Decimal(str(sym_cfg.get('pip_value', '0.01'))),
                 min_lot=Decimal(str(sym_cfg.get('min_lot', '0.01'))),
                 max_lot=Decimal(str(sym_cfg.get('max_lot', '100.0'))),
-                lot_step=Decimal(str(sym_cfg.get('lot_step', '0.01')))
+                lot_step=Decimal(str(sym_cfg.get('lot_step', '0.01'))),
+                value_per_lot=Decimal(str(sym_cfg.get('value_per_lot', '1.0'))),
+                commission_per_lot=Decimal(str(sym_cfg.get('commission_per_lot', '0.0')))
             )
         return self.symbols_cache[ticker]
     
