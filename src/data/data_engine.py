@@ -108,14 +108,19 @@ class DataEngine:
             'BTCUSD': 'BTC-USD',
             'ETHUSD': 'ETH-USD',
             'XAUUSD': 'GC=F',
+            'EURUSD': 'EURUSD=X',
+            'US30': '^DJI',       # Dow Jones
+            'USOIL': 'CL=F',      # Crude Oil
         }
         
         results = {}
         
         for symbol_ticker, symbol in self.symbols.items():
-            yf_ticker = yf_symbol_map.get(symbol_ticker)
+            base_ticker = symbol_ticker.split('.')[0] if '.' in symbol_ticker else symbol_ticker
+            yf_ticker = yf_symbol_map.get(symbol_ticker) or yf_symbol_map.get(base_ticker)
+            
             if not yf_ticker:
-                logger.warning(f"No yfinance mapping for {symbol_ticker}, skipping preload")
+                logger.warning(f"No yfinance mapping for {symbol_ticker} (base {base_ticker}), skipping preload")
                 continue
             
             try:
