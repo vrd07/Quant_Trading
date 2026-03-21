@@ -350,23 +350,7 @@ class TradingSystem:
                     self.logger.critical("Kill switch active - halting trading")
                     break
                 
-                # 1a. Check Weekend Holding (Prop Firm Requirement)
-                now_utc = datetime.now(timezone.utc)
-                is_weekend = False
-                if now_utc.weekday() == 5: # Saturday
-                    is_weekend = True
-                elif now_utc.weekday() == 4 and now_utc.hour >= 21: # Friday evening (after 21:00 UTC)
-                    is_weekend = True
-                elif now_utc.weekday() == 6 and now_utc.hour < 21: # Sunday before 21:00 UTC
-                    is_weekend = True
-                    
-                if is_weekend:
-                    if self.loop_iteration % 60 == 1:
-                        self.logger.info("Weekend closure active - waiting for Sunday open")
-                    self._close_all_open_positions()
-                    time.sleep(60) # Sleep longer during weekend
-                    continue
-                
+                # 1a. Weekend Holding disabled via user instruction
                 # 2. Update data from MT5
                 self.data_engine.update_from_connector()
                 
@@ -532,15 +516,7 @@ class TradingSystem:
             now_utc = datetime.now(timezone.utc)
             now_hhmm = now_utc.strftime('%H:%M')
 
-            # ── Friday cutoff: no new trades after cutoff UTC time ────────────
-            friday_cutoff = self.config.get('trading_hours', {}).get('friday_cutoff_utc', '19:00')
-            if now_utc.weekday() == 4 and now_hhmm >= friday_cutoff:  # 4 = Friday
-                if self.loop_iteration % 60 == 1:
-                    self.logger.info(
-                        f"[SessionManager] Friday cutoff ({friday_cutoff} UTC) — "
-                        "no new trades until Monday. Protecting against weekend gap."
-                    )
-                return
+            # ── Friday cutoff disabled via user instruction ────────────
 
             for session in sessions_cfg:
                 if not session.get('enabled', True):
@@ -727,7 +703,7 @@ class TradingSystem:
                         capture_output=False,
                         stdout=logf,
                         stderr=logf,
-                        timeout=120,
+                        timeout=300,
                     )
                 if result.returncode == 0:
                     self.logger.info("[RegimeML] Classifier finished — loading new override")

@@ -92,8 +92,8 @@ risk:
     enabled: true
     max_consecutive_losses: 5      # Kill switch (hard stop)
     cooldown_minutes: 15
-    loss_pause_consecutive: 2      # Soft pause after 2 consecutive losses
-    loss_pause_minutes: 30         # Pause for 30 minutes then resume
+    loss_pause_consecutive: 3      # Soft pause after 2 consecutive losses
+    loss_pause_minutes: 15         # Pause for 30 minutes then resume
 
   trailing_stop:
     enabled: true
@@ -227,8 +227,8 @@ strategies:
       volatility_spike: 0.8
 
 trading_hours:
-  # Friday cutoff: no NEW trades after this UTC time on Fridays (weekend gap protection)
-  friday_cutoff_utc: "19:00"
+  # Friday cutoff disabled for 24/7 crypto/weekend trading
+  # friday_cutoff_utc: "19:00"
 
   sessions:
     # ── ASIAN SESSION ─────────────────────────────────────────────────────────
