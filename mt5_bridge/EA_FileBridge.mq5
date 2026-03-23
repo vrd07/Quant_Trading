@@ -17,6 +17,7 @@ input int StatusUpdateIntervalMs = 1000; // Write status every 1000ms (1s)
 
 //--- Input parameters - RISK MANAGEMENT (CRITICAL FOR LIVE TRADING)
 input group "=== EMERGENCY CONTROLS ==="
+input string AuthToken = "ANTIGRAVITY_TOKEN";       // MITNICK SECURE: Master JSON Authentication Layer
 input bool EnableTrading = true;                    // MASTER KILL SWITCH - Set to FALSE to stop all trading
 input bool PanicCloseAll = false;                   // Set to TRUE to close all positions immediately
 
@@ -495,6 +496,15 @@ void ProcessCommands()
    FileClose(handle);
    
    if(commandJson == lastCommandContent || StringLen(commandJson) < 5) return;
+   
+   // KEVIN MITNICK THREAT MODELING GUARD (Auth Layer)
+   string command_auth = ExtractJsonValue(commandJson, "auth");
+   if(AuthToken != "" && command_auth != AuthToken)
+   {
+       Print("🚨 SECURITY REJECTION: Invalid AuthToken received in commands file. Dropping payload.");
+       lastCommandContent = commandJson; // prevent loop
+       return;
+   }
    
    lastCommandContent = commandJson;
    

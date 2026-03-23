@@ -129,8 +129,9 @@ class MT5FileClient:
         # Small delay to ensure file is deleted
         time.sleep(0.05)
         
-        # Add timestamp to make command unique (EA ignores duplicates)
+        # Add timestamp and AuthToken for security (Mitnick rule)
         command_dict['timestamp'] = time.time()
+        command_dict['auth'] = "ANTIGRAVITY_TOKEN"
         
         # Write command in UTF-16 format (MT5 expects this)
         with open(self.command_file, 'w', encoding='utf-16') as f:
@@ -152,7 +153,7 @@ class MT5FileClient:
                 except (json.JSONDecodeError, FileNotFoundError, UnicodeDecodeError):
                     # File not ready yet, wait and retry
                     pass
-            time.sleep(0.1)
+            time.sleep(0.02)
         
         raise TimeoutError(f"No response from MT5 after {timeout} seconds")
     
