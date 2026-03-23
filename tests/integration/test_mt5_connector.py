@@ -38,6 +38,7 @@ def connector():
         conn.connect()
         logger.info("Successfully connected to MT5")
     except MT5ConnectionError as e:
+        pytest.mt5_unavailable = True
         pytest.skip(f"MT5 not available: {e}")
     
     yield conn
@@ -54,11 +55,15 @@ def fresh_connector():
     This fixture is function-scoped and creates a new connection
     for each test that uses it.
     """
+    if getattr(pytest, "mt5_unavailable", False):
+        pytest.skip("MT5 not available (cached)")
+        
     conn = MT5Connector()
     
     try:
         conn.connect()
     except MT5ConnectionError as e:
+        pytest.mt5_unavailable = True
         pytest.skip(f"MT5 not available: {e}")
     
     yield conn

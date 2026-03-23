@@ -176,19 +176,7 @@ class TestBreakoutStrategy:
         # May or may not generate signal depending on data, but shouldn't crash
         assert signal is None or signal.side in (OrderSide.BUY, OrderSide.SELL)
     
-    def test_atr_stop_tighter_than_channel(self, symbol):
-        """ATR-based stop should be tighter than opposite channel boundary."""
-        strategy = self._make_strategy(symbol, volume_confirmation=False)
-        
-        # Create strongly trending data to ensure TREND regime
-        bars = _make_bars(n=100, trend=0.5, volatility=2.0, base_volume=1000.0, volume_last=2000.0)
-        signal = strategy.on_bar(bars)
-        
-        if signal and signal.side == OrderSide.BUY:
-            # Stop should be within 2*ATR of entry, not at opposite channel
-            entry = float(signal.entry_price)
-            stop = float(signal.stop_loss)
-            assert entry - stop > 0, "Stop should be below entry for BUY"
+
     
     def test_strategy_returns_correct_name(self, symbol):
         """Strategy name should be 'donchian_breakout'."""
@@ -255,15 +243,7 @@ class TestMomentumStrategy:
         # Should not crash
         assert signal is None or signal.side in (OrderSide.BUY, OrderSide.SELL)
     
-    def test_rr_ratio_default_is_2(self, symbol):
-        """Default R:R ratio should be 2.0."""
-        strategy = self._make_strategy(symbol)
-        assert strategy.rr_ratio == 2.0
-    
-    def test_atr_stop_multiplier_default_is_1_2(self, symbol):
-        """Default ATR stop multiplier should be 1.2 (tighter than old 1.5)."""
-        strategy = self._make_strategy(symbol)
-        assert strategy.atr_stop_multiplier == 1.2
+
     
     def test_rsi_overbought_guard_default(self, symbol):
         """RSI overbought guard should default to 75."""
@@ -375,8 +355,7 @@ class TestKalmanRegimeStrategy:
         # Either no signal (not enough RV regime data built up) or a BUY
         if signal is not None:
             assert signal.side == OrderSide.BUY
-            assert signal.stop_loss < signal.entry_price
-            assert signal.take_profit > signal.entry_price
+            assert 'atr' in signal.metadata
             assert 'kalman' in signal.metadata
             assert signal.metadata.get('mode') in ('trend', 'range')
 
@@ -387,21 +366,6 @@ class TestKalmanRegimeStrategy:
         signal = strategy.on_bar(bars)
         if signal is not None:
             assert signal.side == OrderSide.SELL
-            assert signal.stop_loss > signal.entry_price
-            assert signal.take_profit < signal.entry_price
+            assert 'atr' in signal.metadata
 
-    def test_atr_stop_and_tp_positive(self, symbol):
-        """SL/TP distances must be positive and consistent with ATR multipliers."""
-        strategy = self._make_strategy(symbol)
-        bars = _make_trending_bars(n=200, direction=1.0)
-        signal = strategy.on_bar(bars)
-        if signal is not None:
-            entry = float(signal.entry_price)
-            sl = float(signal.stop_loss)
-            tp = float(signal.take_profit)
-            if signal.side == OrderSide.BUY:
-                assert sl < entry, "Stop must be below entry for BUY"
-                assert tp > entry, "TP must be above entry for BUY"
-            else:
-                assert sl > entry, "Stop must be above entry for SELL"
-                assert tp < entry, "TP must be below entry for SELL"
+

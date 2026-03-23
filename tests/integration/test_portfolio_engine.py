@@ -16,8 +16,15 @@ from src.core.constants import PositionSide
 @pytest.fixture
 def portfolio():
     """Create portfolio engine for testing."""
+    if getattr(pytest, "mt5_unavailable", False):
+        pytest.skip("MT5 not available (cached)")
+        
     connector = MT5Connector()
-    connector.connect()
+    try:
+        connector.connect()
+    except Exception as e:
+        pytest.mt5_unavailable = True
+        pytest.skip(f"Could not connect to MT5, skipping integration test: {e}")
     
     engine = PortfolioEngine(connector)
     

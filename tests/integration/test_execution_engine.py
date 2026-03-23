@@ -19,8 +19,15 @@ from src.core.constants import OrderSide, MarketRegime
 @pytest.fixture
 def setup():
     """Setup execution engine with dependencies."""
+    if getattr(pytest, "mt5_unavailable", False):
+        pytest.skip("MT5 not available (cached)")
+        
     connector = MT5Connector()
-    connector.connect()
+    try:
+        connector.connect()
+    except Exception as e:
+        pytest.mt5_unavailable = True
+        pytest.skip(f"Could not connect to MT5, skipping integration test: {e}")
     
     config = {
         'risk': {
@@ -65,8 +72,7 @@ def test_signal_to_order_conversion(setup):
         strength=0.8,
         regime=MarketRegime.TREND,
         entry_price=Decimal("1.10000"),
-        stop_loss=Decimal("1.09900"),
-        take_profit=Decimal("1.10200")
+        metadata={'atr': 0.0005}  # Fallback: SL = 2x ATR = 0.00100 -> 1.09900
     )
     
     # Submit signal (will be validated but not actually sent to MT5)
@@ -110,8 +116,7 @@ def test_real_order_submission(setup):
         strength=0.5,
         regime=MarketRegime.TREND,
         entry_price=tick.ask,
-        stop_loss=tick.ask - Decimal("0.00100"),  # 10 pips
-        take_profit=tick.ask + Decimal("0.00200")   # 20 pips
+        metadata={'atr': 0.0005}  # Fallback: SL = 2x ATR = 10 pips
     )
     
     order = execution.submit_signal(
