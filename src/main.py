@@ -1284,10 +1284,40 @@ def main():
     config_files = {
         'dev': 'config/config_dev.yaml',
         'paper': 'config/config_paper.yaml',
-        'live': 'config/config_live.yaml'
+        'live': 'config/config_live_5000.yaml'
     }
     
-    config_file = args.config if args.config else config_files.get(args.env, 'config/config_dev.yaml')
+    config_file = args.config
+    
+    # Interactive prompt if live mode is specified without a hardcoded config
+    if args.env == 'live' and not config_file and not args.force_live:
+        print("\n" + "=" * 60)
+        print("  Select Account Size Config for LIVE Trading")
+        print("=" * 60)
+        print("  1) $100")
+        print("  2) $1,000")
+        print("  3) $5,000")
+        print("  4) $10,000")
+        print("  5) $25,000")
+        print("=" * 60)
+        try:
+            choice = input("  Enter choice (1-5) [Default: 3]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\n  Aborted.")
+            return
+            
+        choice_map = {
+            "1": "config/config_live_100.yaml",
+            "2": "config/config_live_1000.yaml",
+            "3": "config/config_live_5000.yaml",
+            "4": "config/config_live_10000.yaml",
+            "5": "config/config_live_25000.yaml"
+        }
+        config_file = choice_map.get(choice, "config/config_live_5000.yaml")
+        
+    if not config_file:
+        config_file = config_files.get(args.env, 'config/config_dev.yaml')
+        
     log_trace(f"Using config file: {config_file}")
     
     # === LIVE MODE SAFETY GATE ===
