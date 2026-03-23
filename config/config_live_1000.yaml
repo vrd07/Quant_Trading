@@ -24,6 +24,7 @@ symbols:
     commission_per_lot: 0.0
     leverage: 30              # Metals 1:30
     min_stops_distance: 1.0   # 100 pips min distance for Gold
+    max_spread: 3.5           # 35 pips max spread threshold
 
 
   BTCUSD:
@@ -36,6 +37,7 @@ symbols:
     commission_per_lot: 0.0
     leverage: 2               # Crypto 1:2
     min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
+    max_spread: 15.0          # $15.00 max spread threshold
 
 
   EURUSD:
@@ -48,6 +50,7 @@ symbols:
     commission_per_lot: 0.0
     leverage: 100             # FX 1:100
     min_stops_distance: 0.00050 # 5 pip min distance
+    max_spread: 0.00030       # 3 pips max spread threshold
 
 
   US30:
@@ -59,6 +62,7 @@ symbols:
     value_per_lot: 1
     commission_per_lot: 0.0
     leverage: 20              # Indices 1:20
+    max_spread: 5.0           # 5 points max spread threshold
 
   USOIL:
     enabled: false
@@ -69,6 +73,7 @@ symbols:
     value_per_lot: 1000
     commission_per_lot: 0.0
     leverage: 10              # Energies 1:10
+    max_spread: 0.05          # 5 cents max spread threshold
 
 risk:
   # $1,000 Account Risk Parameters
@@ -91,9 +96,7 @@ risk:
   max_daily_wins: 8               # Stop trading once 8 wins hit ($250+ target)
 
   position_sizing:
-    method: fixed_lot
-    fixed_lot: 0.01
-
+    method: dynamic_atr
   circuit_breaker:
     enabled: true
     max_consecutive_losses: 5      # Kill switch (hard stop)
@@ -216,7 +219,6 @@ strategies:
   mini_medallion:
     enabled: true
     timeframe: 1m
-    fixed_lot: 0.01           # Strategy-specific hardcoded lot size override
     score_threshold: 4.0
     risk_atr_multiplier: 1.0  # Stop loss at 1x ATR based on instruction specs
     rr_ratio: 1.5             # Take profit at 1.5x ATR

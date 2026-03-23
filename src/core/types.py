@@ -49,6 +49,7 @@ class Symbol:
     lot_step: Decimal = Decimal("0.01")
     value_per_lot: Decimal = Decimal("1.0")
     commission_per_lot: Decimal = Decimal("0.0")
+    max_spread: Decimal = Decimal("999.0")
     
     def __str__(self) -> str:
         return self.ticker

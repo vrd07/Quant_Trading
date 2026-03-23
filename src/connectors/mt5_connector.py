@@ -515,7 +515,8 @@ class MT5Connector:
                 max_lot=Decimal(str(sym_cfg.get('max_lot', '100.0'))),
                 lot_step=Decimal(str(sym_cfg.get('lot_step', '0.01'))),
                 value_per_lot=Decimal(str(sym_cfg.get('value_per_lot', '1.0'))),
-                commission_per_lot=Decimal(str(sym_cfg.get('commission_per_lot', '0.0')))
+                commission_per_lot=Decimal(str(sym_cfg.get('commission_per_lot', '0.0'))),
+                max_spread=Decimal(str(sym_cfg.get('max_spread', '999.0')))
             )
             # Dynamically attach stops distance to help Carmack rule
             setattr(self.symbols_cache[ticker], 'min_stops_distance', Decimal(str(sym_cfg.get('min_stops_distance', '1.0'))))

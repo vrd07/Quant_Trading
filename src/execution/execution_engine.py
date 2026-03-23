@@ -141,6 +141,27 @@ class ExecutionEngine:
                 )
                 return None
             
+            # 0.6. SPREAD GUARD (INSTITUTIONAL EXECUTION RULE)
+            # Refuse execution if the current ask/bid spread violates the symbol's configured maximum limit.
+            # A wide spread instantly destroys dynamic edge.
+            current_tick = self.connector.get_current_tick(signal.symbol.ticker)
+            if not current_tick:
+                self.logger.warning(
+                    "Signal rejected - could not fetch current tick for spread validation",
+                    symbol=signal.symbol.ticker
+                )
+                return None
+                
+            current_spread = abs(current_tick.ask - current_tick.bid)
+            if current_spread > signal.symbol.max_spread:
+                self.logger.warning(
+                    "Signal rejected [SPREAD GUARD] - Current spread %.4f exceeds max limit %.4f",
+                    float(current_spread), float(signal.symbol.max_spread),
+                    symbol=signal.symbol.ticker,
+                    strategy=signal.strategy_name
+                )
+                return None
+            
             # 0.75 Calculate Stops via Ritchie RiskProcessor
             signal = self.risk_processor.calculate_stops(signal)
             
