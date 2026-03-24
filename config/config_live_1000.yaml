@@ -28,7 +28,7 @@ symbols:
 
 
   BTCUSD:
-    enabled: true
+    enabled: false
     pip_value: 0.1
     min_lot: 0.01
     max_lot: 0.01             # Lowered max limit for crypto margin safety
@@ -41,7 +41,7 @@ symbols:
 
 
   EURUSD:
-    enabled: true
+    enabled: false
     pip_value: 0.00001
     min_lot: 0.01
     max_lot: 0.02
