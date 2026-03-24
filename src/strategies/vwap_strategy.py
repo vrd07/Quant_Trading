@@ -33,6 +33,7 @@ class VWAPStrategy(BaseStrategy):
         # Strategy parameters
         # Risk logic removed (handled by RiskProcessor)
         self.atr_period = config.get('atr_period', 14)
+        self.atr_multiplier = config.get('atr_multiplier', 2.0)
         self.min_volume_ratio = config.get('min_volume_ratio', 1.0)
         self.only_in_regime = MarketRegime[config.get('only_in_regime', 'RANGE')]
 

@@ -34,6 +34,7 @@ class MomentumStrategy(BaseStrategy):
 
         # Strategy parameters
         self.rsi_period = config.get('rsi_period', 14)
+        self.ema_period = config.get('ema_period', 20)
         # Risk parameters removed (handled by RiskProcessor)
         self.only_in_regime = MarketRegime[config.get('only_in_regime', 'TREND')]
 
