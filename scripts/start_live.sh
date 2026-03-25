@@ -26,5 +26,5 @@ if [ "$confirm" != "YES" ]; then
     exit 0
 fi
 
-# Run the system (the main.py already contains the interactive menu)
-python3 src/main.py --env live
+# exec replaces the shell process with Python — no zombie shell parent, O(1) process start
+exec python3 -OO src/main.py --env live
