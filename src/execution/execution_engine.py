@@ -181,7 +181,8 @@ class ExecutionEngine:
                 stop_loss=signal.stop_loss,
                 side=signal.side,
                 current_positions=current_positions,
-                account_equity=account_equity
+                account_equity=account_equity,
+                signal_strength=float(signal.strength) if signal.strength is not None else None,
             )
             
             # Apply strategy-specific fixed lot override directly from the signal
@@ -508,18 +509,15 @@ class ExecutionEngine:
     
     def _find_order_by_prefix(self, prefix: str) -> Optional[Order]:
         """
-        Find order by ID prefix (from truncated comment).
-        
+        Find order by ID prefix (from truncated comment) — O(1) via prefix index.
+
         Args:
             prefix: First 8 chars of order UUID
-        
+
         Returns:
             Matching order or None
         """
-        for order in self.order_manager.get_active_orders():
-            if str(order.order_id).startswith(prefix):
-                return order
-        return None
+        return self.order_manager.get_order_by_prefix(prefix)
     
     def cancel_order(self, order_id: UUID) -> bool:
         """
