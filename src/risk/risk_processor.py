@@ -139,10 +139,9 @@ class RiskProcessor:
         if sl is not None:
             min_stop_distance = getattr(signal.symbol, 'min_stops_distance', Decimal('0'))
             actual_dist = abs(entry - sl)
-            if actual_dist < min_stop_distance:
+            if min_stop_distance > 0 and actual_dist < min_stop_distance:
                 self.logger.warning(
-                    "RiskProcessor [Carmack]: SL distance %s < broker min %s. Expanding SL.", 
-                    actual_dist, min_stop_distance
+                    f"RiskProcessor [Carmack]: SL distance {actual_dist} < broker min {min_stop_distance}. Expanding SL."
                 )
                 sl = entry - min_stop_distance if side == OrderSide.BUY else entry + min_stop_distance
 
