@@ -55,15 +55,15 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.rv_window = config.get('rv_window', 20)
         self.rv_ma_window = config.get('rv_ma_window', 100)
 
-        # OU z-score thresholds (range mode) — tightened from 2.0 to 2.5 for quality
+        # OU z-score thresholds (range mode) — raised to 2.8 to require genuine extremes
         self.zscore_window = config.get('zscore_window', 20)
-        self.entry_threshold = config.get('entry_threshold', 2.5)
+        self.entry_threshold = config.get('entry_threshold', 2.8)
 
         # ATR-based risk management delegates to RiskProcessor
         self.atr_period = config.get('atr_period', 14)
 
-        # ADX gate raised from 15 to 22 — avoids choppy/low-trend markets
-        self.trend_adx_min = config.get('trend_adx_min', 22)
+        # ADX gate raised to 25 — eliminates borderline trend signals (ADX 22-25 are noisy)
+        self.trend_adx_min = config.get('trend_adx_min', 25)
 
         # Require N consecutive bars on the correct side of Kalman before entry
         self.kalman_confirm_bars = config.get('kalman_confirm_bars', 2)
@@ -134,7 +134,7 @@ class KalmanRegimeStrategy(BaseStrategy):
         if is_trend:
             # ── TREND MODE ───────────────────────────────────────────────
             # Core rule: Close > Kalman → BUY, Close < Kalman → SELL
-            # ADX gate: avoid flat/dead markets (raised to 22)
+            # ADX gate: avoid flat/dead markets (raised to 25)
             if current_adx < self.trend_adx_min:
                 self._log_no_signal(
                     f"TREND mode: ADX too low ({current_adx:.1f} < {self.trend_adx_min})"
@@ -152,11 +152,20 @@ class KalmanRegimeStrategy(BaseStrategy):
             price_above_kalman = current_close > current_kalman
             price_below_kalman = current_close < current_kalman
 
+            # Kalman slope gate: filter signals where trend is flattening
+            # Slope = difference of last 3 Kalman values
+            kalman_slope = float(kalman_full.iloc[-1] - kalman_full.iloc[-3])
+
             if price_above_kalman:
                 # All recent bars must also have been above Kalman
                 if not (recent_closes > recent_kalman).all():
                     self._log_no_signal(
                         f"TREND BUY: not {confirm_n} consecutive bars above Kalman")
+                    return None
+                # Require Kalman sloping upward (trend not flattening)
+                if kalman_slope <= 0:
+                    self._log_no_signal(
+                        f"TREND BUY: Kalman slope flat/down ({kalman_slope:.4f}), skipping")
                     return None
                 side = OrderSide.BUY
                 strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
@@ -165,17 +174,22 @@ class KalmanRegimeStrategy(BaseStrategy):
                     self._log_no_signal(
                         f"TREND SELL: not {confirm_n} consecutive bars below Kalman")
                     return None
+                # Require Kalman sloping downward
+                if kalman_slope >= 0:
+                    self._log_no_signal(
+                        f"TREND SELL: Kalman slope flat/up ({kalman_slope:.4f}), skipping")
+                    return None
                 side = OrderSide.SELL
                 strength = min(abs(current_close - current_kalman) / current_atr, 1.0)
 
         else:
             # ── RANGE MODE (OU mean-reversion) ───────────────────────────
             # Core rule: Z < -threshold → BUY (oversold), Z > +threshold → SELL (overbought)
-            # RSI confirmation: mildly aligned with direction (< 45 or > 55)
-            if current_z < -self.entry_threshold and current_rsi < 45.0:
+            # RSI confirmation tightened: < 42 (BUY) and > 58 (SELL) for genuine extremes
+            if current_z < -self.entry_threshold and current_rsi < 42.0:
                 side = OrderSide.BUY
                 strength = min(abs(current_z) / (self.entry_threshold * 1.5), 1.0)
-            elif current_z > self.entry_threshold and current_rsi > 55.0:
+            elif current_z > self.entry_threshold and current_rsi > 58.0:
                 side = OrderSide.SELL
                 strength = min(abs(current_z) / (self.entry_threshold * 1.5), 1.0)
 
