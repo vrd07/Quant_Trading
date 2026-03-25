@@ -22,7 +22,9 @@ class OrderManager:
     
     def __init__(self):
         self.orders: Dict[UUID, Order] = {}
-        
+        # O(1) prefix lookup: first 8 chars of UUID → order_id
+        self._prefix_index: Dict[str, UUID] = {}
+
         from ..monitoring.logger import get_logger
         self.logger = get_logger(__name__)
     
@@ -41,7 +43,8 @@ class OrderManager:
             return
         
         self.orders[order.order_id] = order
-        
+        self._prefix_index[str(order.order_id)[:8]] = order.order_id
+
         self.logger.debug(
             "Order added to registry",
             order_id=str(order.order_id),
@@ -63,6 +66,17 @@ class OrderManager:
         
         self.orders[order.order_id] = order
     
+    def get_order_by_prefix(self, prefix: str) -> Optional[Order]:
+        """O(1) lookup by first 8 chars of UUID (fallback to linear scan for other lengths)."""
+        order_id = self._prefix_index.get(prefix)
+        if order_id:
+            return self.orders.get(order_id)
+        # Fallback for non-8-char prefixes
+        for order in self.orders.values():
+            if str(order.order_id).startswith(prefix):
+                return order
+        return None
+
     def get_active_orders(self) -> List[Order]:
         """Get all non-terminal orders."""
         return [
@@ -90,20 +104,21 @@ class OrderManager:
     
     def get_statistics(self) -> Dict:
         """
-        Get order statistics.
-        
+        Get order statistics — single pass, O(n).
+
         Returns:
             Dict with order counts by status
         """
-        stats = {
+        by_status: Dict[str, int] = {}
+        active_count = 0
+        for order in self.orders.values():
+            key = order.status.value
+            by_status[key] = by_status.get(key, 0) + 1
+            if order.is_active():
+                active_count += 1
+
+        return {
             'total': len(self.orders),
-            'active': len(self.get_active_orders()),
-            'by_status': {}
+            'active': active_count,
+            'by_status': by_status,
         }
-        
-        for status in OrderStatus:
-            count = len(self.get_orders_by_status(status))
-            if count > 0:
-                stats['by_status'][status.value] = count
-        
-        return stats
