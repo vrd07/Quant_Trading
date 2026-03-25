@@ -39,8 +39,8 @@ class MomentumStrategy(BaseStrategy):
         self.only_in_regime = MarketRegime[config.get('only_in_regime', 'TREND')]
 
         # RSI thresholds
-        self.rsi_bull_threshold = config.get('rsi_bull_threshold', 50)
-        self.rsi_bear_threshold = config.get('rsi_bear_threshold', 50)
+        self.rsi_bull_threshold = config.get('rsi_bull_threshold', 52)
+        self.rsi_bear_threshold = config.get('rsi_bear_threshold', 48)
         self.rsi_overbought = config.get('rsi_overbought', 75)
         self.rsi_oversold = config.get('rsi_oversold', 25)
 
@@ -134,18 +134,20 @@ class MomentumStrategy(BaseStrategy):
         current_close = bars['close'].iloc[-1]
         current_rsi = rsi.iloc[-1]
         current_ema = ema.iloc[-1]
+        prev_ema = ema.iloc[-2]
         current_ema_fast = ema_fast.iloc[-1]
         current_ema_mid = ema_mid.iloc[-1]
         current_ema_slow = ema_slow.iloc[-1]
         current_histogram = histogram.iloc[-1]
         prev_histogram = histogram.iloc[-2]
+        prev2_histogram = histogram.iloc[-3]
         current_atr = atr.iloc[-1]
         current_adx = adx.iloc[-1]
         current_rsi_slope = rsi_slope.iloc[-1]
 
-        if any(pd.isna([current_rsi, current_ema, current_histogram, prev_histogram,
-                         current_atr, current_adx, current_ema_fast, current_ema_mid,
-                         current_ema_slow, current_rsi_slope])):
+        if any(pd.isna([current_rsi, current_ema, prev_ema, current_histogram, prev_histogram,
+                         prev2_histogram, current_atr, current_adx, current_ema_fast,
+                         current_ema_mid, current_ema_slow, current_rsi_slope])):
             self._log_no_signal("Indicator calculation failed")
             return None
 
@@ -172,13 +174,17 @@ class MomentumStrategy(BaseStrategy):
         rsi_bullish = current_rsi > self.rsi_bull_threshold
         rsi_not_overbought = current_rsi < self.rsi_overbought
         rsi_rising = current_rsi_slope > 0   # RSI slope must be positive
-        macd_positive = current_histogram > 0
+        # MACD histogram must be on correct side for ≥3 bars AND accelerating
+        # (3-bar persistence filters whipsaws that 2-bar misses)
+        macd_positive = current_histogram > 0 and prev_histogram > 0 and prev2_histogram > 0
         macd_accelerating = abs(current_histogram) > abs(prev_histogram)
         price_above_ema = current_close > current_ema
+        # EMA20 itself must be rising — ensures we're in a genuine uptrend, not a pullback
+        ema_rising = current_ema > prev_ema
 
         if (ema_stack_bullish and rsi_bullish and rsi_not_overbought and
                 rsi_rising and macd_positive and macd_accelerating and
-                price_above_ema and volume_ok):
+                price_above_ema and ema_rising and volume_ok):
 
             rsi_strength = min(abs(current_rsi - 50) / 30, 0.4)
             adx_strength = min(current_adx / 100.0, 0.35)
@@ -219,13 +225,15 @@ class MomentumStrategy(BaseStrategy):
         rsi_bearish = current_rsi < self.rsi_bear_threshold
         rsi_not_oversold = current_rsi > self.rsi_oversold
         rsi_falling = current_rsi_slope < 0   # RSI slope must be negative
-        macd_negative = current_histogram < 0
+        macd_negative = current_histogram < 0 and prev_histogram < 0 and prev2_histogram < 0
         macd_deepening = abs(current_histogram) > abs(prev_histogram)
         price_below_ema = current_close < current_ema
+        # EMA20 itself must be falling — confirms genuine downtrend
+        ema_falling = current_ema < prev_ema
 
         if (ema_stack_bearish and rsi_bearish and rsi_not_oversold and
                 rsi_falling and macd_negative and macd_deepening and
-                price_below_ema and volume_ok):
+                price_below_ema and ema_falling and volume_ok):
 
             rsi_strength = min(abs(50 - current_rsi) / 30, 0.4)
             adx_strength = min(current_adx / 100.0, 0.35)
