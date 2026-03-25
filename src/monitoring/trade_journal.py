@@ -34,17 +34,20 @@ class TradeJournal:
     def __init__(self, journal_file: str = "data/logs/trade_journal.csv"):
         """
         Initialize trade journal.
-        
+
         Args:
             journal_file: Path to journal CSV file
         """
         self.journal_file = Path(journal_file)
         self.journal_file.parent.mkdir(parents=True, exist_ok=True)
-        
+
         # Initialize CSV if doesn't exist
         if not self.journal_file.exists():
             self._initialize_csv()
-        
+
+        # O(1) deduplication — built once at init, maintained on every write
+        self._recorded_tickets: set = self._load_recorded_tickets()
+
         from .logger import get_logger
         self.logger = get_logger(__name__)
     
@@ -94,7 +97,11 @@ class TradeJournal:
                 
                 # P&L
                 'realized_pnl': float(realized_pnl),
-                'pnl_pct': float((realized_pnl / (position.entry_price * position.quantity * position.symbol.value_per_lot)) * 100),
+                'pnl_pct': float(
+                    (realized_pnl / (position.entry_price * position.quantity * position.symbol.value_per_lot)) * 100
+                    if position.entry_price and position.quantity and position.symbol.value_per_lot
+                    else 0.0
+                ),
                 
                 # Risk metrics
                 'stop_loss': float(position.stop_loss) if position.stop_loss else None,
@@ -112,7 +119,11 @@ class TradeJournal:
             
             # Append to CSV
             self._append_to_csv(trade_record)
-            
+
+            # Keep O(1) set in sync
+            if mt5_ticket:
+                self._recorded_tickets.add(str(mt5_ticket))
+
             self.logger.info(
                 "Trade recorded",
                 trade_id=trade_record['trade_id'],
@@ -223,17 +234,91 @@ class TradeJournal:
         with open(self.journal_file, 'a', newline='') as f:
             writer = csv.DictWriter(f, fieldnames=trade_record.keys())
             writer.writerow(trade_record)
-    
-    def _is_ticket_recorded(self, mt5_ticket: str) -> bool:
-        """Check if a trade with this MT5 ticket has already been recorded."""
+
+    def _load_recorded_tickets(self) -> set:
+        """Build in-memory set of recorded MT5 tickets from existing journal (called once at init)."""
+        tickets: set = set()
         if not self.journal_file.exists():
-            return False
+            return tickets
         try:
             with open(self.journal_file, 'r') as f:
                 reader = csv.DictReader(f)
                 for row in reader:
-                    if row.get('mt5_ticket') == mt5_ticket:
-                        return True
+                    t = row.get('mt5_ticket')
+                    if t:
+                        tickets.add(t)
         except Exception:
             pass
-        return False
+        return tickets
+
+    def _is_ticket_recorded(self, mt5_ticket: str) -> bool:
+        """O(1) check via in-memory set."""
+        return mt5_ticket in self._recorded_tickets
+
+    def record_raw_trade(
+        self,
+        strategy: str,
+        symbol: str,
+        side: str,
+        entry_price,
+        exit_price,
+        quantity,
+        realized_pnl,
+        entry_time,
+        exit_time,
+        metadata: Optional[Dict] = None
+    ) -> None:
+        """
+        Record a trade from raw deal fields (used by fill poller which has no Position object).
+
+        Skips duplicates via the same O(1) ticket set used by record_trade.
+        """
+        try:
+            mt5_ticket = str(metadata.get('mt5_ticket', '')) if metadata else ''
+            if mt5_ticket and self._is_ticket_recorded(mt5_ticket):
+                return
+
+            now_iso = (exit_time or datetime.now(timezone.utc)).isoformat()
+            entry_iso = (entry_time or now_iso) if not isinstance(entry_time, str) else entry_time
+            if hasattr(entry_iso, 'isoformat'):
+                entry_iso = entry_iso.isoformat()
+
+            from decimal import Decimal as _Dec
+            entry_p = float(entry_price) if entry_price else 0.0
+            exit_p = float(exit_price) if exit_price else 0.0
+            qty = float(quantity) if quantity else 0.0
+
+            trade_record = {
+                'trade_id': mt5_ticket or 'raw',
+                'symbol': symbol,
+                'strategy': strategy,
+                'side': side,
+                'entry_time': entry_iso,
+                'entry_price': entry_p,
+                'quantity': qty,
+                'exit_time': now_iso,
+                'exit_price': exit_p,
+                'exit_reason': (metadata or {}).get('source', 'fill_poll'),
+                'realized_pnl': float(realized_pnl),
+                'pnl_pct': 0.0,  # not computable without symbol multiplier
+                'stop_loss': None,
+                'take_profit': None,
+                'initial_risk': None,
+                'duration_seconds': 0,
+                'regime': 'unknown',
+                'signal_strength': 0,
+                'mt5_ticket': mt5_ticket,
+            }
+
+            self._append_to_csv(trade_record)
+            if mt5_ticket:
+                self._recorded_tickets.add(mt5_ticket)
+
+            self.logger.info(
+                "Raw trade recorded",
+                mt5_ticket=mt5_ticket,
+                symbol=symbol,
+                pnl=float(realized_pnl),
+            )
+        except Exception as e:
+            self.logger.error(f"Error recording raw trade: {e}", exc_info=True)
