@@ -227,13 +227,19 @@ class ExecutionEngine:
                 }
             )
             
+            sl_val = float(signal.stop_loss) if signal.stop_loss else None
+            tp_val = float(signal.take_profit) if signal.take_profit else None
+            rr = round(abs(tp_val - float(signal.entry_price)) / abs(sl_val - float(signal.entry_price)), 2) if (sl_val and tp_val and signal.entry_price and sl_val != float(signal.entry_price)) else None
             self.logger.info(
                 "Order created from signal",
                 order_id=str(order.order_id),
                 strategy=signal.strategy_name,
                 symbol=signal.symbol.ticker if signal.symbol else None,
                 side=signal.side.value if signal.side else None,
-                quantity=float(position_size)
+                quantity=float(position_size),
+                sl=sl_val,
+                tp=tp_val,
+                rr=rr
             )
             
             # 3. Validate with risk engine

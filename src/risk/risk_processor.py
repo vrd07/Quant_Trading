@@ -76,8 +76,14 @@ class RiskProcessor:
             sl_dist = stop_mult * atr
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
 
-            # Take profit is reversion to VWAP
+            # Take profit is reversion to VWAP — but enforce minimum 1.0×ATR distance
+            # so we never have near-zero TP when VWAP is very close to entry
             tp = vwap
+            min_tp_dist = atr * Decimal("1.0")
+            if side == OrderSide.BUY and (tp - entry) < min_tp_dist:
+                tp = entry + min_tp_dist
+            elif side == OrderSide.SELL and (entry - tp) < min_tp_dist:
+                tp = entry - min_tp_dist
 
         elif strategy_name == 'donchian_breakout':
             atr = Decimal(str(signal.metadata.get('atr', 0)))
@@ -109,11 +115,12 @@ class RiskProcessor:
             tp = vwap
 
             # Safety bounds from original logic
+            # Ensure TP is on the correct side with at least 1.0× ATR (min 1:0.4 RR vs 2.5 SL)
             if side == OrderSide.BUY:
-                if tp <= entry: tp = entry + (atr * Decimal("0.5"))
+                if tp <= entry: tp = entry + (atr * Decimal("1.0"))
                 if sl >= entry: sl = entry - sl_dist
             else:
-                if tp >= entry: tp = entry - (atr * Decimal("0.5"))
+                if tp >= entry: tp = entry - (atr * Decimal("1.0"))
                 if sl <= entry: sl = entry + sl_dist
 
         elif strategy_name == 'mini_medallion':
