@@ -14,13 +14,20 @@ class PositionSizer:
     def __init__(self, config: Dict):
         """
         Initialize position sizer.
-        
+
         Args:
             config: Configuration dictionary
         """
         self.config = config
         risk_config = config.get('risk', {})
         self.default_risk_pct = Decimal(str(risk_config.get('risk_per_trade_pct', '0.0025')))
+        sizing_cfg = risk_config.get('position_sizing', {})
+        self.method = sizing_cfg.get('method', 'dynamic_atr')
+        # Fixed lot map: {ticker: Decimal(lot)} — only used when method == 'fixed'
+        raw_fixed = sizing_cfg.get('fixed_lots', {})
+        self._fixed_lots: Dict[str, Decimal] = {
+            k: Decimal(str(v)) for k, v in raw_fixed.items()
+        }
     
     def calculate_position_size(
         self,
@@ -56,6 +63,13 @@ class PositionSizer:
         Returns:
             Position size in lots, rounded to symbol lot step
         """
+        # Fixed lot mode — return a constant lot per symbol, ignore stop distance.
+        # Used for prop firm accounts where consistent sizing is required.
+        if self.method == 'fixed':
+            ticker = symbol.ticker if symbol else 'default'
+            lot = self._fixed_lots.get(ticker) or self._fixed_lots.get('default', symbol.min_lot)
+            return max(symbol.min_lot, min(symbol.max_lot, lot))
+
         risk_pct = risk_pct or self.default_risk_pct
 
         # Scale risk% by signal strength when provided

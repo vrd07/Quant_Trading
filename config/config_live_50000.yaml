@@ -28,7 +28,7 @@ symbols:
 
 
   BTCUSD:
-    enabled: true
+    enabled: false
     pip_value: 0.1
     min_lot: 0.01
     max_lot: 0.02             # Increased slightly for 50K margin
@@ -96,7 +96,11 @@ risk:
   max_daily_wins: 8               # Stop trading once 8 wins hit
 
   position_sizing:
-    method: dynamic_atr
+    method: fixed                 # GFT account — fixed lot, no martingale/dynamic scaling
+    fixed_lots:
+      XAUUSD: 0.04                # 0.04 lot × ~100 pip stop × $10/pip = ~$40 risk
+      EURUSD: 0.01                # 0.01 lot — conservative fixed size for FX
+      default: 0.01               # Fallback for any other symbol
   circuit_breaker:
     enabled: true
     max_consecutive_losses: 5      # Kill switch (hard stop)
