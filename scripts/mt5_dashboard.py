@@ -120,12 +120,34 @@ def fetch_all(connector, days: int, symbol_filter: str = None):
 def _parse_strategy(comment: str) -> str:
     if not comment:
         return "unknown"
-    for kw in ("kalman", "breakout", "momentum", "vwap", "mean_rev", "zscore"):
-        if kw in comment.lower():
-            return kw
-    if "|" in comment:
-        return comment.split("|")[0]
-    return "mt5"
+
+    extracted = comment.split("|")[0].strip().lower() if "|" in comment else comment.strip().lower()
+
+    known_strategies = {
+        "kalman_regime",
+        "vwap_deviation",
+        "momentum_scalp",
+        "donchian_breakout",
+        "zscore_mean_reversion",
+        "mini_medallion",
+    }
+    if extracted in known_strategies:
+        return extracted
+
+    partial_map = [
+        ("kalman", "kalman_regime"),
+        ("vwap", "vwap_deviation"),
+        ("momentum", "momentum_scalp"),
+        ("breakout", "donchian_breakout"),
+        ("mean_rev", "zscore_mean_reversion"),
+        ("zscore", "zscore_mean_reversion"),
+        ("medallion", "mini_medallion"),
+    ]
+    for keyword, canonical in partial_map:
+        if keyword in extracted:
+            return canonical
+
+    return extracted if extracted else "unknown"
 
 
 # ── Sections ──────────────────────────────────────────────────────────────────

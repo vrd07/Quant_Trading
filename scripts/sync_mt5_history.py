@@ -57,31 +57,41 @@ def parse_mt5_comment(comment: str):
     """Extract strategy from MT5 comment if possible."""
     if not comment or comment == "PythonBridge":
         return "unknown"
-    
+
     # Format typically: strategy|uuid
     if "|" in comment:
-        parts = comment.split("|", 1)
-        extracted = parts[0].strip().lower()
+        extracted = comment.split("|", 1)[0].strip().lower()
     else:
         extracted = comment.strip().lower()
 
-    # Known strategies to match against (even if truncated)
-    known_strategies = [
+    # Exact strategy names as returned by strategy_name properties
+    known_strategies = {
         "kalman_regime",
-        "vwap",
-        "momentum",
-        "breakout",
-        "mean_reversion",
-        "zscore_mean_reversion"
+        "vwap_deviation",
+        "momentum_scalp",
+        "donchian_breakout",
+        "zscore_mean_reversion",
+        "mini_medallion",
+    }
+
+    if extracted in known_strategies:
+        return extracted
+
+    # Fallback: partial match for old/truncated comments
+    partial_map = [
+        ("kalman", "kalman_regime"),
+        ("vwap", "vwap_deviation"),
+        ("momentum", "momentum_scalp"),
+        ("breakout", "donchian_breakout"),
+        ("mean_rev", "zscore_mean_reversion"),
+        ("zscore", "zscore_mean_reversion"),
+        ("medallion", "mini_medallion"),
     ]
+    for keyword, canonical in partial_map:
+        if keyword in extracted:
+            return canonical
 
-    for strat in known_strategies:
-        # If the extracted part is a substring of the known strategy (e.g., 'kalman_req' -> 'kalman_regime')
-        # OR if the known strategy is a substring of the extracted part
-        if extracted in strat or strat in extracted:
-            return strat
-
-    return extracted
+    return extracted if extracted else "unknown"
 
 def sync_journal(deals: list):
     """Read existing journal, backfill/update data, and save."""
@@ -107,8 +117,13 @@ def sync_journal(deals: list):
     
     # Iterate through journal and update
     for idx, row in df.iterrows():
-        ticket = str(row.get("mt5_ticket", ""))
-        
+        raw_ticket = row.get("mt5_ticket", "")
+        # pandas reads integer tickets as floats (e.g. 79806481.0) when NaN rows exist;
+        # convert to integer string to match MT5's integer position_ticket keys.
+        if pd.isna(raw_ticket) or str(raw_ticket).strip() in ("", "nan"):
+            continue
+        ticket = str(int(float(raw_ticket)))
+
         if ticket in deal_map:
             deal = deal_map[ticket]
             
