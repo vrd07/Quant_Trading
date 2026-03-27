@@ -149,16 +149,20 @@ class RegimeFilter:
         # Hurst contribution
         score += hurst_score
         
-        # Classification
-        if score >= 1:
+        # Classification — require both ADX and Hurst to agree (score ±2 minimum).
+        # score=1 means only one signal fired (e.g. ATR rising alone); that is not
+        # enough evidence to classify TREND on a noisy 1m chart. Treat it as UNKNOWN
+        # so the strategy does not enter on ambiguous conditions.
+        if score >= 2:
             regime = MarketRegime.TREND
-        elif score <= -1:
+        elif score <= -2:
             regime = MarketRegime.RANGE
         else:
-            # If score is 0, check ADX as tie-breaker
-            if adx_trend:
+            # Ambiguous — fall back to ADX as a weak tie-breaker but
+            # only if the signal is unambiguous (both adx flags mutually exclusive).
+            if adx_trend and not adx_range:
                 regime = MarketRegime.TREND
-            elif adx_range:
+            elif adx_range and not adx_trend:
                 regime = MarketRegime.RANGE
             else:
                 regime = MarketRegime.UNKNOWN

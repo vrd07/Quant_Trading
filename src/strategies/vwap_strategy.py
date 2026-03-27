@@ -36,6 +36,9 @@ class VWAPStrategy(BaseStrategy):
         self.atr_multiplier = config.get('atr_multiplier', 2.5)
         self.min_volume_ratio = config.get('min_volume_ratio', 1.0)
         self.only_in_regime = MarketRegime[config.get('only_in_regime', 'RANGE')]
+        # VWAP reversion is a short-duration thesis: if price hasn't returned to VWAP
+        # within this window, the mean-reversion assumption was wrong. Default 45 min.
+        self.max_hold_minutes = config.get('max_hold_minutes', 45)
 
         # RSI confirmation thresholds for entries (tighter — genuinely extreme)
         self.rsi_oversold_entry = config.get('rsi_oversold_entry', 35)   # BUY below this
@@ -79,26 +82,73 @@ class VWAPStrategy(BaseStrategy):
             return None
         self._vwap_logged_warmup = False
 
-        # --- LATENCY FIX (Jeff Dean / Jonathan Blow) ---
-        # Recalculating indicators on 2000+ bars every minute is O(N).
-        # We only need the trailing window. 800 bars is roughly one full active session.
+        # --- LATENCY FIX ---
+        # Only need the trailing window. 800 bars ≈ one full active session on 1m.
         bars = bars.tail(800)
 
-
-        # Check regime on a higher timeframe if possible to avoid intraday noise overriding the daily setup
+        # ── ICT Kill Zone guard ───────────────────────────────────────────────
+        # VWAP mean reversion requires a ranging session.
+        # London open (07–10 UTC) and NY open (12–15 UTC) are institutional kill zones
+        # where price trends aggressively — mean reversion has no edge there.
         try:
-            from ..data.data_engine import DataEngine
-            # Wait, DataEngine is not directly accessible here. Let's look up if there's a reference or pass current bars
-            # I will just use the current bars since `bars` passed into `on_bar` are what we have.
-            pass
-        except ImportError:
-            pass
+            bar_hour = bars.index[-1].hour
+            if any(start <= bar_hour < end for start, end in ((7, 10), (12, 15))):
+                self._log_no_signal(f"Kill zone active (hour={bar_hour} UTC) — no mean reversion")
+                return None
+        except AttributeError:
+            pass  # index not datetime — skip check
 
-        # Check regime using the strategy's regular bars for now, but in the future we'll consider MTF.
+        # ── HTF regime check (1H resampled from 1m bars) ─────────────────────
+        # The same bars resampled to 1H give a noise-free regime read.
+        # If the 1H regime is TREND, mean reversion on 1m has no edge.
+        try:
+            h1_bars = (
+                bars
+                .resample('1h')
+                .agg({'open': 'first', 'high': 'max', 'low': 'min',
+                      'close': 'last', 'volume': 'sum'})
+                .dropna(subset=['open', 'close'])
+            )
+            if len(h1_bars) >= 20:
+                h1_regime = self.regime_filter.classify(h1_bars)
+                if h1_regime == MarketRegime.TREND:
+                    self._log_no_signal(f"H1 regime is TREND — skipping mean reversion entry")
+                    return None
+        except Exception:
+            pass  # resampling not possible (e.g. integer index) — fall through to 1m check
+
+        # ── 1m regime check (final gate) ─────────────────────────────────────
         regime = self.regime_filter.classify(bars)
         if regime != self.only_in_regime:
             self._log_no_signal(f"Regime is {regime.value}, need {self.only_in_regime.value}")
             return None
+
+        # ── HTF directional bias check ────────────────────────────────────────
+        # Only take LONG signals when price is in the lower half of the recent 4H range
+        # (ICT: buy discount, sell premium). Buying above the 4H midpoint into a
+        # VWAP deviation = buying premium, which contradicts mean reversion thesis.
+        try:
+            h4_bars = (
+                bars
+                .resample('4h')
+                .agg({'open': 'first', 'high': 'max', 'low': 'min',
+                      'close': 'last', 'volume': 'sum'})
+                .dropna(subset=['open', 'close'])
+            )
+            if len(h4_bars) >= 2:
+                h4_high = h4_bars['high'].iloc[-1]
+                h4_low  = h4_bars['low'].iloc[-1]
+                h4_mid  = (h4_high + h4_low) / 2
+                current_close_raw = bars['close'].iloc[-1]
+                # Block longs above H4 midpoint (premium) and shorts below it (discount)
+                _bias_ok = True
+                if current_close_raw > h4_mid:
+                    _bias_ok = False  # will block BUY signal below
+                self._h4_bias_ok    = _bias_ok
+                self._h4_bias_above = current_close_raw > h4_mid
+        except Exception:
+            self._h4_bias_ok    = True
+            self._h4_bias_above = None
 
         # Dynamic ML-driven VWAP Standard Deviation Overrides
         effective_multiplier = self.atr_multiplier
@@ -142,6 +192,11 @@ class VWAPStrategy(BaseStrategy):
         # --- Oversold BUY signal ---
         if current_close < current_lower:
 
+            # H4 bias: only buy in discount (below H4 midpoint)
+            if getattr(self, '_h4_bias_above', None) is True:
+                self._log_no_signal("H4 premium zone — no BUY in VWAP discount")
+                return None
+
             # RSI must be genuinely oversold
             if current_rsi >= self.rsi_oversold_entry:
                 self._log_no_signal(
@@ -171,12 +226,18 @@ class VWAPStrategy(BaseStrategy):
                     'rsi': float(current_rsi),
                     'cci': float(current_cci),
                     'atr': float(current_atr),
-                    'entry_reason': 'oversold_rsi_cci_below_vwap_band'
+                    'entry_reason': 'oversold_rsi_cci_below_vwap_band',
+                    'max_hold_minutes': self.max_hold_minutes,
                 }
             )
 
         # --- Overbought SELL signal ---
         if current_close > current_upper:
+
+            # H4 bias: only sell in premium (above H4 midpoint)
+            if getattr(self, '_h4_bias_above', None) is False:
+                self._log_no_signal("H4 discount zone — no SELL in VWAP premium")
+                return None
 
             # RSI must be genuinely overbought
             if current_rsi <= self.rsi_overbought_entry:
@@ -207,7 +268,8 @@ class VWAPStrategy(BaseStrategy):
                     'rsi': float(current_rsi),
                     'cci': float(current_cci),
                     'atr': float(current_atr),
-                    'entry_reason': 'overbought_rsi_cci_above_vwap_band'
+                    'entry_reason': 'overbought_rsi_cci_above_vwap_band',
+                    'max_hold_minutes': self.max_hold_minutes,
                 }
             )
 
