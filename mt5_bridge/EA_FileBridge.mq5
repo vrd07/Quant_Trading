@@ -599,44 +599,84 @@ void HandleGetHistory(string json)
 {
    int minutes = (int)StringToInteger(ExtractJsonValue(json, "minutes"));
    if (minutes <= 0) minutes = 1440; // Default 24h
-   
+
    datetime endTime = TimeCurrent();
    datetime startTime = endTime - (minutes * 60);
-   
+
    if(!HistorySelect(startTime, endTime))
    {
       WriteResponse("{\"status\":\"ERROR\",\"message\":\"Failed to select history\"}");
       return;
    }
-   
-   string resp = "{\"status\":\"SUCCESS\",\"deals\":[";
+
    int total = HistoryDealsTotal();
-   int count = 0;
-   
+
+   // Pass 1: build position_id → entry_price/entry_time map from IN deals
+   ulong   in_pos_ids[];
+   double  in_prices[];
+   long    in_times[];
+   ArrayResize(in_pos_ids, total);
+   ArrayResize(in_prices,  total);
+   ArrayResize(in_times,   total);
+   int in_count = 0;
+
+   for(int i = 0; i < total; i++)
+   {
+      ulong tk = HistoryDealGetTicket(i);
+      if(tk > 0 && HistoryDealGetInteger(tk, DEAL_ENTRY) == DEAL_ENTRY_IN
+                && HistoryDealGetInteger(tk, DEAL_MAGIC) == 55555)
+      {
+         in_pos_ids[in_count] = (ulong)HistoryDealGetInteger(tk, DEAL_POSITION_ID);
+         in_prices [in_count] = HistoryDealGetDouble (tk, DEAL_PRICE);
+         in_times  [in_count] = HistoryDealGetInteger(tk, DEAL_TIME);
+         in_count++;
+      }
+   }
+
+   // Pass 2: emit OUT deals enriched with entry data
+   string resp  = "{\"status\":\"SUCCESS\",\"deals\":[";
+   int    count = 0;
+
    for(int i = 0; i < total; i++)
    {
       ulong ticket = HistoryDealGetTicket(i);
       if(ticket > 0)
       {
          long entryType = HistoryDealGetInteger(ticket, DEAL_ENTRY);
-         long magic = HistoryDealGetInteger(ticket, DEAL_MAGIC);
-         
+         long magic     = HistoryDealGetInteger(ticket, DEAL_MAGIC);
+
          if(entryType == DEAL_ENTRY_OUT && magic == 55555)
          {
+            ulong pos_id     = (ulong)HistoryDealGetInteger(ticket, DEAL_POSITION_ID);
+            double ep        = 0;
+            long   et        = 0;
+
+            // Linear search for matching IN deal (arrays are small, <1000 entries typical)
+            for(int j = 0; j < in_count; j++)
+            {
+               if(in_pos_ids[j] == pos_id)
+               {
+                  ep = in_prices[j];
+                  et = in_times [j];
+                  break;
+               }
+            }
+
             if(count > 0) resp += ",";
-            
             resp += "{";
-            resp += "\"ticket\":" + IntegerToString(ticket) + ",";
-            resp += "\"position_ticket\":" + IntegerToString(HistoryDealGetInteger(ticket, DEAL_POSITION_ID)) + ",";
-            resp += "\"symbol\":\"" + HistoryDealGetString(ticket, DEAL_SYMBOL) + "\",";
-            resp += "\"type\":" + IntegerToString(HistoryDealGetInteger(ticket, DEAL_TYPE)) + ",";
-            resp += "\"volume\":" + DoubleToString(HistoryDealGetDouble(ticket, DEAL_VOLUME), 2) + ",";
-            resp += "\"price\":" + DoubleToString(HistoryDealGetDouble(ticket, DEAL_PRICE), _Digits) + ",";
-            resp += "\"profit\":" + DoubleToString(HistoryDealGetDouble(ticket, DEAL_PROFIT), 2) + ",";
-            resp += "\"swap\":" + DoubleToString(HistoryDealGetDouble(ticket, DEAL_SWAP), 2) + ",";
-            resp += "\"commission\":" + DoubleToString(HistoryDealGetDouble(ticket, DEAL_COMMISSION), 2) + ",";
-            resp += "\"comment\":\"" + HistoryDealGetString(ticket, DEAL_COMMENT) + "\",";
-            resp += "\"time\":" + IntegerToString(HistoryDealGetInteger(ticket, DEAL_TIME));
+            resp += "\"ticket\":"         + IntegerToString(ticket)                                        + ",";
+            resp += "\"position_ticket\":" + IntegerToString(pos_id)                                       + ",";
+            resp += "\"symbol\":\""       + HistoryDealGetString (ticket, DEAL_SYMBOL)              + "\",";
+            resp += "\"type\":"           + IntegerToString(HistoryDealGetInteger(ticket, DEAL_TYPE))      + ",";
+            resp += "\"volume\":"         + DoubleToString (HistoryDealGetDouble (ticket, DEAL_VOLUME), 2) + ",";
+            resp += "\"price\":"          + DoubleToString (HistoryDealGetDouble (ticket, DEAL_PRICE),  _Digits) + ",";
+            resp += "\"entry_price\":"    + DoubleToString (ep, _Digits)                                   + ",";
+            resp += "\"profit\":"         + DoubleToString (HistoryDealGetDouble (ticket, DEAL_PROFIT),  2) + ",";
+            resp += "\"swap\":"           + DoubleToString (HistoryDealGetDouble (ticket, DEAL_SWAP),    2) + ",";
+            resp += "\"commission\":"     + DoubleToString (HistoryDealGetDouble (ticket, DEAL_COMMISSION), 2) + ",";
+            resp += "\"comment\":\""      + HistoryDealGetString (ticket, DEAL_COMMENT)             + "\",";
+            resp += "\"entry_time\":"     + IntegerToString(et)                                            + ",";
+            resp += "\"time\":"           + IntegerToString(HistoryDealGetInteger(ticket, DEAL_TIME));
             resp += "}";
             count++;
          }
