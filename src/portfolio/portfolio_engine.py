@@ -140,44 +140,49 @@ class PortfolioEngine:
         self,
         position_id: UUID,
         exit_price: Decimal,
-        exit_time: Optional[datetime] = None
+        exit_time: Optional[datetime] = None,
+        override_pnl: Optional[Decimal] = None,
     ) -> Decimal:
         """
         Close position and calculate realized P&L.
-        
+
         Args:
             position_id: Position ID to close
             exit_price: Exit price
             exit_time: Exit timestamp (defaults to now)
-        
+            override_pnl: If set, use this exact PnL instead of calculating
+                          (used when actual MT5 PnL is known from history)
+
         Returns:
             Realized P&L
         """
         position = self.position_tracker.get_position(position_id)
-        
+
         if not position:
             self.logger.error(
                 "Cannot close unknown position",
                 position_id=str(position_id)
             )
             return Decimal("0")
-        
-        # Calculate realized P&L
-        realized_pnl = self.pnl_calculator.calculate_realized_pnl(
-            position=position,
-            exit_price=exit_price
-        )
-        
+
+        # Use override PnL if provided (e.g. from MT5 history), else calculate
+        if override_pnl is not None:
+            realized_pnl = override_pnl
+        else:
+            realized_pnl = self.pnl_calculator.calculate_realized_pnl(
+                position=position,
+                exit_price=exit_price
+            )
+
         # Update totals
         self.total_realized_pnl += realized_pnl
         self.daily_realized_pnl += realized_pnl
-        
+
         # Record to trade journal BEFORE mutating position fields
-        # (record_trade needs original quantity and side to compute pnl_pct)
         if self.trade_journal:
             if exit_time is None:
                 exit_time = datetime.now(timezone.utc)
-            
+
             self.trade_journal.record_trade(
                 position=position,
                 exit_price=exit_price,
@@ -185,15 +190,15 @@ class PortfolioEngine:
                 realized_pnl=realized_pnl,
                 exit_reason=position.metadata.get('exit_reason', 'manual') if hasattr(position, 'metadata') and position.metadata else 'manual'
             )
-        
+
         # Mark position as closed (after journal recording)
         position.realized_pnl = realized_pnl
         position.side = PositionSide.FLAT
         position.quantity = Decimal("0")
-        
+
         # Remove from active positions
         self.position_tracker.remove_position(position_id)
-        
+
         self.logger.info(
             "Position closed",
             position_id=str(position_id),
@@ -203,7 +208,7 @@ class PortfolioEngine:
             realized_pnl=float(realized_pnl),
             total_realized_pnl=float(self.total_realized_pnl)
         )
-        
+
         return realized_pnl
     
     def get_position(self, position_id: UUID) -> Optional[Position]:
@@ -350,23 +355,21 @@ class PortfolioEngine:
                             profit=matching_deal.get('profit'),
                             price=matching_deal.get('price')
                         )
-                        
-                        # Close the position in our system
+
+                        # Compute actual PnL BEFORE close_position
+                        # so the journal records the correct value
+                        actual_pnl = (
+                            Decimal(str(matching_deal.get('profit', 0)))
+                            + Decimal(str(matching_deal.get('swap', 0)))
+                            + Decimal(str(matching_deal.get('commission', 0)))
+                        )
+
                         self.close_position(
                             position_id=position.position_id,
                             exit_price=Decimal(str(matching_deal.get('price', 0))),
-                            exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc)
+                            exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc),
+                            override_pnl=actual_pnl,
                         )
-                        
-                        # Correct the P&L with exact realized amount
-                        # (Note: close_position calculates approx P&L, we overwrite with actual)
-                        realized_pnl = Decimal(str(matching_deal.get('profit', 0))) + Decimal(str(matching_deal.get('swap', 0))) + Decimal(str(matching_deal.get('commission', 0)))
-                        
-                        # Adjust totals
-                        diff = realized_pnl - position.realized_pnl
-                        self.total_realized_pnl += diff
-                        self.daily_realized_pnl += diff
-                        position.realized_pnl = realized_pnl # Update the closed position record
                         
                     else:
                         # History unavailable — still record the trade using last known price

@@ -30,8 +30,8 @@ symbols:
   BTCUSD:
     enabled: false
     pip_value: 0.1
-    min_lot: 0.01
-    max_lot: 0.02             # Increased slightly for 50K margin
+    min_lot: 0.04
+    max_lot: 0.04             # Increased slightly for 50K margin
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
@@ -41,7 +41,7 @@ symbols:
 
 
   EURUSD:
-    enabled: true
+    enabled: false
     pip_value: 0.00001
     min_lot: 0.01
     max_lot: 0.04
