@@ -25,7 +25,7 @@ import pytz
 
 
 def load_ff_events(
-    csv_path: str = "news/FEB_news.csv",
+    csv_path: str = "news/MAR_news.csv",
     currency: str = "USD",
     impacts: Optional[list] = None,
 ) -> pd.DataFrame:

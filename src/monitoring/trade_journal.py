@@ -138,6 +138,92 @@ class TradeJournal:
         except Exception as e:
             self.logger.error(f"Error recording trade: {e}", exc_info=True)
 
+    def record_raw_trade(
+        self,
+        strategy: str,
+        symbol: str,
+        side: str,
+        entry_price: Decimal,
+        exit_price: Decimal,
+        quantity: Decimal,
+        realized_pnl: Decimal,
+        entry_time: Optional[datetime] = None,
+        exit_time: Optional[datetime] = None,
+        metadata: Optional[Dict] = None,
+    ) -> None:
+        """Record a trade from raw fields (used by _process_fills poll path).
+
+        Unlike record_trade() which requires a Position object, this method
+        accepts explicit parameters so the fill-poll loop can record trades
+        with the correct strategy name extracted from the MT5 deal comment.
+
+        Args:
+            strategy: Strategy name (e.g. 'vwap_deviation', 'kalman_regime').
+            symbol: Instrument ticker string.
+            side: Position direction ('LONG', 'SHORT', or 'UNKNOWN').
+            entry_price: Trade open price.
+            exit_price: Trade close price.
+            quantity: Lot size.
+            realized_pnl: Net P&L including swap/commission.
+            entry_time: Entry timestamp (defaults to now).
+            exit_time: Exit timestamp (defaults to now).
+            metadata: Extra fields (must include 'mt5_ticket' for dedup).
+        """
+        try:
+            metadata = metadata or {}
+            mt5_ticket = str(metadata.get('mt5_ticket', ''))
+
+            if mt5_ticket and self._is_ticket_recorded(mt5_ticket):
+                self.logger.debug(
+                    "Raw trade already recorded, skipping duplicate",
+                    mt5_ticket=mt5_ticket,
+                )
+                return
+
+            now = datetime.now(timezone.utc)
+            if entry_time is None:
+                entry_time = now
+            if exit_time is None:
+                exit_time = now
+
+            trade_record = {
+                'trade_id': mt5_ticket or f"raw_{now.timestamp():.0f}",
+                'symbol': symbol,
+                'strategy': strategy or 'unknown',
+                'side': side,
+                'entry_time': entry_time.isoformat() if isinstance(entry_time, datetime) else str(entry_time),
+                'entry_price': float(entry_price),
+                'quantity': float(quantity),
+                'exit_time': exit_time.isoformat() if isinstance(exit_time, datetime) else str(exit_time),
+                'exit_price': float(exit_price),
+                'exit_reason': metadata.get('source', 'fill_poll'),
+                'realized_pnl': float(realized_pnl),
+                'pnl_pct': 0.0,
+                'stop_loss': None,
+                'take_profit': None,
+                'initial_risk': None,
+                'duration_seconds': 0,
+                'regime': metadata.get('regime', 'unknown'),
+                'signal_strength': 0,
+                'mt5_ticket': mt5_ticket,
+            }
+
+            self._append_to_csv(trade_record)
+
+            if mt5_ticket:
+                self._recorded_tickets.add(mt5_ticket)
+
+            self.logger.info(
+                "Raw trade recorded",
+                mt5_ticket=mt5_ticket,
+                symbol=symbol,
+                strategy=strategy,
+                pnl=float(realized_pnl),
+            )
+
+        except Exception as e:
+            self.logger.error(f"Error recording raw trade: {e}", exc_info=True)
+
     def get_trades(
         self,
         symbol: Optional[str] = None,
