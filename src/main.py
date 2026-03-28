@@ -262,10 +262,12 @@ class TradingSystem:
                 # 3. Fall back to csv_path in config
                 today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 yesterday_str = (datetime.now(timezone.utc) - timedelta(days=1)).strftime("%Y-%m-%d")
+                month_abbr = datetime.now(timezone.utc).strftime("%b").upper()  # e.g. MAR
                 
                 candidates = [
                     f"news/{today_str}_news.csv",
                     f"news/{yesterday_str}_news.csv",
+                    f"news/{month_abbr}_news.csv",
                     nf_cfg.get('csv_path', 'news/MAR_news.csv'),
                 ]
                 
@@ -683,14 +685,28 @@ class TradingSystem:
 
         def _run():
             try:
-                # ── Dump live bars for the ML script ────────────────
+                # ── Dump live bars from ALL XAUUSD variants for ML ────
                 try:
-                    store = self.data_engine.candle_stores.get("XAUUSD", {}).get("5m")
-                    if store:
-                        csv_path = PROJECT_ROOT / "data" / "logs" / "candle_store_XAUUSD_5m.csv"
+                    dumped_total = 0
+                    for sym_key, tf_stores in self.data_engine.candle_stores.items():
+                        if not sym_key.upper().startswith("XAUUSD"):
+                            continue
+                        store = tf_stores.get("5m")
+                        if not store or len(store) == 0:
+                            continue
+                        # Sanitize symbol key for filename (e.g. XAUUSD.x → XAUUSD.x)
+                        safe_key = sym_key.replace("/", "_")
+                        csv_path = PROJECT_ROOT / "data" / "logs" / f"candle_store_{safe_key}_5m.csv"
                         csv_path.parent.mkdir(parents=True, exist_ok=True)
                         store.to_csv(str(csv_path))
-                        self.logger.info(f"[RegimeML] Dumped {len(store)} live 5m bars for ML processing")
+                        dumped_total += len(store)
+                        self.logger.info(
+                            f"[RegimeML] Dumped {len(store)} live 5m bars from {sym_key}"
+                        )
+                    if dumped_total == 0:
+                        self.logger.warning(
+                            "[RegimeML] No XAUUSD candle stores found to dump"
+                        )
                 except Exception as data_err:
                     self.logger.warning(f"[RegimeML] Failed to dump live bars: {data_err}")
 
