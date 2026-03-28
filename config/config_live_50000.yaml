@@ -147,13 +147,17 @@ strategies:
     atr_stop_multiplier: 1.5  # Targets ~45 pip stop on XAUUSD 1m
     adx_min_threshold: 25
     volume_confirmation: true
-    volume_ratio_min: 1.2
+    volume_ratio_min: 1.35        # Raised from 1.2 — aggressive flow detection (arXiv:2405.08101)
     rsi_overbought: 75
     rsi_oversold: 25
     bb_squeeze_lookback: 10       # Reduced from 20 → min_bars = 35 (was 45, was blocking with 44 bars!)
     stoch_overbought: 80
     stoch_oversold: 20
     min_signal_strength: 0.65
+    min_body_atr_ratio: 0.45      # Raised from 0.35 — quality breakout bar filter (arXiv:2602.18912)
+    min_breakout_atr_dist: 0.15   # Minimum close distance beyond channel in ATR units
+    atr_spike_mult: 1.5           # Suppress entries when ATR > 1.5× 20-bar mean (fear regime)
+    atr_ma_period: 20
 
   mean_reversion:
     enabled: false               # DISABLED: Too risky for prop firm challenge — XAUUSD trends strongly
@@ -167,20 +171,21 @@ strategies:
 
   vwap:
     enabled: true
-    timeframe: 1m                 # VWAP works best on 1m (fine-grained entries)
-    atr_multiplier: 1.5
-    stop_atr_multiplier: 1.5  # Targets ~45 pip stop on XAUUSD 1m
+    timeframe: 1m
+    # StdDev bands (research: Chaudhary 2024, Zarattini & Aziz SSRN 4631351)
+    # 2.0σ for XAUUSD (higher vol instrument); 1.5σ for EURUSD
+    band_std_mult: 2.0
+    partial_std_mult: 0.5         # TP at 0.5σ convergence — not waiting for full VWAP tag
+    stop_atr_multiplier: 1.5
     atr_period: 14
     min_volume_ratio: 1.0
-    rsi_oversold_entry: 30
-    rsi_overbought_entry: 70
-    cci_oversold_entry: -120
-    cci_overbought_entry: 120
+    rsi_oversold_entry: 35
+    rsi_overbought_entry: 65
+    cci_oversold_entry: -100
+    cci_overbought_entry: 100
     cci_period: 20
     only_in_regime: RANGE
-    # Mean reversion thesis is short-lived: if VWAP not reclaimed in 45 min,
-    # the thesis is wrong (price is trending, not reverting). Exit unconditionally.
-    max_hold_minutes: 45
+    max_hold_minutes: 45          # Reversion thesis expires — exit unconditionally
 
   momentum:
     enabled: true
@@ -205,6 +210,8 @@ strategies:
     rsi_slope_bars: 3
     min_signal_strength: 0.70
     only_in_regime: TREND
+    atr_spike_mult: 1.5           # Suppress entries when ATR > 1.5× 20-bar mean (arXiv:2602.18912)
+    atr_ma_period: 20
 
   kalman_regime:
     enabled: true
