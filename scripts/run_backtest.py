@@ -46,7 +46,7 @@ def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
     for data_file in data_files:
         if data_file.exists():
             print(f"  Loading data from {data_file}")
-            df = pd.read_csv(data_file, parse_dates=['timestamp'])
+            df = pd.read_csv(data_file, parse_dates=['timestamp'], index_col='timestamp')
             return df
 
     print(f"  No historical data found for {symbol}")
@@ -182,7 +182,8 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
         initial_capital=initial_capital,
         risk_config=config,
         commission_per_trade=Decimal(str(args.commission)),
-        slippage_model=args.slippage
+        slippage_model=args.slippage,
+        bypass_risk_limits=not args.enforce_risk
     )
 
     result = engine.run(
@@ -213,6 +214,8 @@ def main():
                         choices=['fixed', 'realistic', 'aggressive'], help='Slippage model')
     parser.add_argument('--output', default='data/backtests/backtest_result',
                         help='Output file prefix')
+    parser.add_argument('--enforce-risk', action='store_true', default=False,
+                        help='Enforce kill-switch/circuit-breaker during backtest (default: bypassed)')
 
     args = parser.parse_args()
 
@@ -251,7 +254,7 @@ def main():
     print("\nLoading historical data...")
     bars = load_historical_data(args.symbol, args.timeframe)
     print(f"  Loaded {len(bars)} bars")
-    print(f"  Date range: {bars['timestamp'].min()} to {bars['timestamp'].max()}")
+    print(f"  Date range: {bars.index.min()} to {bars.index.max()}")
 
     strategies_to_run = (
         ['breakout', 'momentum', 'kalman_regime', 'vwap', 'mini_medallion']

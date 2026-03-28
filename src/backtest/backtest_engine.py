@@ -72,7 +72,8 @@ class BacktestEngine:
         initial_capital: Decimal,
         risk_config: Dict,
         commission_per_trade: Decimal = Decimal("0"),
-        slippage_model: str = "realistic"
+        slippage_model: str = "realistic",
+        bypass_risk_limits: bool = True
     ):
         """
         Initialize backtest engine.
@@ -100,6 +101,11 @@ class BacktestEngine:
         self.risk_engine.equity_high_water_mark = initial_capital
         self.risk_engine.daily_start_equity = initial_capital
 
+        # When True, skip kill-switch / circuit-breaker / daily-loss-limit checks.
+        # This lets us evaluate the strategy's raw signal quality without protective
+        # overrides permanently halting a backtest after early losses.
+        self.bypass_risk_limits = bypass_risk_limits
+
         # Risk processor: computes SL/TP from signal metadata
         self.risk_processor = RiskProcessor(risk_config)
         
@@ -120,7 +126,8 @@ class BacktestEngine:
         bars: pd.DataFrame,
         start_date: Optional[str] = None,
         end_date: Optional[str] = None,
-        min_history: int = 50
+        min_history: int = 50,
+        max_window: int = 1000
     ) -> BacktestResult:
         """
         Run backtest on historical data.
@@ -142,19 +149,24 @@ class BacktestEngine:
         self.logger.info(f"Initial Capital: ${self.initial_capital}")
         self.logger.info(f"Total Bars Available: {len(bars)}")
         
-        # Ensure timestamp column is datetime
+        # Normalise: ensure the index is a DatetimeIndex so strategies that use
+        # .resample() / .index.hour work correctly.  If timestamp is a column we
+        # set it as the index; if it's already the index we just ensure it's datetime.
+        bars = bars.copy()
         if 'timestamp' in bars.columns:
-            bars = bars.copy()
             bars['timestamp'] = pd.to_datetime(bars['timestamp'])
-        
+            bars = bars.set_index('timestamp')
+        elif not isinstance(bars.index, pd.DatetimeIndex):
+            bars.index = pd.to_datetime(bars.index)
+
         # Filter by date range
         if start_date:
-            bars = bars[bars['timestamp'] >= pd.to_datetime(start_date)]
+            bars = bars[bars.index >= pd.to_datetime(start_date)]
         if end_date:
-            bars = bars[bars['timestamp'] <= pd.to_datetime(end_date)]
-        
+            bars = bars[bars.index <= pd.to_datetime(end_date)]
+
         self.logger.info(f"Bars After Date Filter: {len(bars)}")
-        self.logger.info(f"Date Range: {bars['timestamp'].iloc[0]} to {bars['timestamp'].iloc[-1]}")
+        self.logger.info(f"Date Range: {bars.index[0]} to {bars.index[-1]}")
         
         # Reset state
         self.broker.reset()
@@ -165,16 +177,20 @@ class BacktestEngine:
         # Process each bar
         for i in range(len(bars)):
             self.current_bar_index = i
-            
-            # Get data available up to this bar (no lookahead)
-            available_bars = bars.iloc[:i+1]
+
+            # Get data available up to this bar (no lookahead).
+            # Limit window to max_window bars to avoid O(n²) indicator recompute.
+            # All strategies' maximum lookback fits well within 1000 bars.
+            window_start = max(0, i + 1 - max_window)
+            available_bars = bars.iloc[window_start:i+1]
             
             if len(available_bars) < min_history:
                 continue  # Need minimum history for indicators
             
             # Check for new day (reset daily metrics)
             current_bar = available_bars.iloc[-1]
-            bar_date = pd.to_datetime(current_bar['timestamp']).date()
+            # Index is now DatetimeIndex; use .name to get the timestamp of the last bar
+            bar_date = pd.to_datetime(current_bar.name).date()
             
             if self._current_day is None:
                 self._current_day = bar_date
@@ -251,7 +267,7 @@ class BacktestEngine:
             if signal is None:
                 # No signal, just track equity
                 self.metrics.update_equity(
-                    timestamp=current_bar['timestamp'],
+                    timestamp=current_bar.name,
                     equity=float(self.broker.get_equity())
                 )
                 return
@@ -305,23 +321,26 @@ class BacktestEngine:
             )
             
             # 7. Validate via risk engine (same rules as live)
-            try:
-                is_valid, reason = self.risk_engine.validate_order(
-                    order=order,
-                    account_balance=self.broker.get_balance(),
-                    account_equity=self.broker.get_equity(),
-                    current_positions={str(p.position_id): p for p in current_positions},
-                    daily_pnl=daily_pnl
-                )
-                
-                if not is_valid:
-                    self.logger.debug(f"Order rejected by risk engine: {reason}")
+            # In bypass_risk_limits mode we skip kill-switch / circuit-breaker
+            # checks so a single bad streak doesn't halt the entire backtest.
+            if not self.bypass_risk_limits:
+                try:
+                    is_valid, reason = self.risk_engine.validate_order(
+                        order=order,
+                        account_balance=self.broker.get_balance(),
+                        account_equity=self.broker.get_equity(),
+                        current_positions={str(p.position_id): p for p in current_positions},
+                        daily_pnl=daily_pnl
+                    )
+
+                    if not is_valid:
+                        self.logger.debug(f"Order rejected by risk engine: {reason}")
+                        return
+
+                except Exception as e:
+                    # Risk engine exceptions (kill switch, etc.) - don't trade
+                    self.logger.debug(f"Risk engine exception: {e}")
                     return
-                    
-            except Exception as e:
-                # Risk engine exceptions (kill switch, etc.) - don't trade
-                self.logger.debug(f"Risk engine exception: {e}")
-                return
             
             # 8. Execute order via simulated broker
             fill_price = self.broker.execute_order(
@@ -334,7 +353,7 @@ class BacktestEngine:
                 trade_idx = len(self.metrics.trades)
                 self.metrics.add_trade({
                     'trade_idx': trade_idx,
-                    'timestamp': str(current_bar['timestamp']),
+                    'timestamp': str(current_bar.name),
                     'symbol': signal.symbol.ticker if signal.symbol else 'unknown',
                     'side': signal.side.value if signal.side else 'unknown',
                     'entry_price': float(fill_price),
@@ -356,7 +375,7 @@ class BacktestEngine:
             
             # 10. Track equity
             self.metrics.update_equity(
-                timestamp=current_bar['timestamp'],
+                timestamp=current_bar.name,
                 equity=float(self.broker.get_equity())
             )
             
@@ -374,7 +393,7 @@ class BacktestEngine:
         Args:
             final_bar: Last bar in backtest
         """
-        final_price = Decimal(str(final_bar.get('close', 0)))
+        final_price = Decimal(str(final_bar['close'] if 'close' in final_bar.index else 0))
         positions = list(self.broker.positions.items())
         
         for pos_id, position in positions:
@@ -400,7 +419,7 @@ class BacktestEngine:
                 'commission': float(self.broker.commission_per_trade),
                 'net_pnl': float(pnl - self.broker.commission_per_trade),
                 'exit_reason': 'backtest_end',
-                'exit_time': str(final_bar.get('timestamp', '')),
+                'exit_time': str(final_bar.name),
                 'strategy': position.metadata.get('strategy', 'unknown')
             })
             

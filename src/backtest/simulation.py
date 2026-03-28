@@ -96,34 +96,42 @@ class SimulatedBroker:
         
         return fill_price
     
-    def update_positions(self, current_bar: Bar) -> None:
+    def update_positions(self, current_bar) -> None:
         """Update all positions with current bar prices."""
+        # current_bar may be a pandas Series or Bar dataclass
+        try:
+            close = Decimal(str(current_bar['close']))
+        except (KeyError, TypeError):
+            close = Decimal(str(current_bar.close))
         for position in self.positions.values():
-            if position.symbol.ticker == current_bar.symbol.ticker:
-                position.update_price(current_bar.close)
-    
-    def check_exits(self, current_bar: Bar) -> None:
+            position.update_price(close)
+
+    def check_exits(self, current_bar) -> None:
         """Check if any positions hit stop loss or take profit."""
+        try:
+            bar_low = Decimal(str(current_bar['low']))
+            bar_high = Decimal(str(current_bar['high']))
+        except (KeyError, TypeError):
+            bar_low = Decimal(str(current_bar.low))
+            bar_high = Decimal(str(current_bar.high))
+
         positions_to_close = []
-        
+
         for pos_id, position in self.positions.items():
-            if position.symbol.ticker != current_bar.symbol.ticker:
-                continue
-            
             # Check stop loss
             if position.stop_loss:
-                if position.side == PositionSide.LONG and current_bar.low <= position.stop_loss:
+                if position.side == PositionSide.LONG and bar_low <= position.stop_loss:
                     positions_to_close.append((pos_id, position.stop_loss, 'stop_loss'))
-                elif position.side == PositionSide.SHORT and current_bar.high >= position.stop_loss:
+                elif position.side == PositionSide.SHORT and bar_high >= position.stop_loss:
                     positions_to_close.append((pos_id, position.stop_loss, 'stop_loss'))
-            
+
             # Check take profit
             if position.take_profit:
-                if position.side == PositionSide.LONG and current_bar.high >= position.take_profit:
+                if position.side == PositionSide.LONG and bar_high >= position.take_profit:
                     positions_to_close.append((pos_id, position.take_profit, 'take_profit'))
-                elif position.side == PositionSide.SHORT and current_bar.low <= position.take_profit:
+                elif position.side == PositionSide.SHORT and bar_low <= position.take_profit:
                     positions_to_close.append((pos_id, position.take_profit, 'take_profit'))
-        
+
         # Close positions
         for pos_id, exit_price, exit_reason in positions_to_close:
             self._close_position(pos_id, exit_price, exit_reason)
@@ -163,16 +171,26 @@ class SimulatedBroker:
         # Remove position
         del self.positions[position_id]
     
-    def _calculate_fill_price(self, order: Order, current_bar: Bar) -> Decimal:
+    def _calculate_fill_price(self, order: Order, current_bar) -> Decimal:
         """Calculate fill price with slippage."""
-        base_price = order.price if order.price else current_bar.close
-        
+        # current_bar may be a pandas Series or Bar dataclass
+        try:
+            bar_close = Decimal(str(current_bar['close']))
+            bar_high = Decimal(str(current_bar['high']))
+            bar_low = Decimal(str(current_bar['low']))
+        except (KeyError, TypeError):
+            bar_close = Decimal(str(current_bar.close))
+            bar_high = Decimal(str(current_bar.high))
+            bar_low = Decimal(str(current_bar.low))
+
+        base_price = order.price if order.price else bar_close
+
         if self.slippage_model == 'fixed':
             # Fixed slippage of 1 pip
             slippage = order.symbol.pip_value
         elif self.slippage_model == 'realistic':
-            # Slippage based on volatility (0-2 pips)
-            bar_range = current_bar.high - current_bar.low
+            # Slippage based on bar range (0-10% of range, max 2 pips)
+            bar_range = bar_high - bar_low
             slippage = min(bar_range * Decimal("0.1"), order.symbol.pip_value * 2)
         elif self.slippage_model == 'aggressive':
             # Worst-case slippage (0-5 pips)
