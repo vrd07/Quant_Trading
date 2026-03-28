@@ -27,6 +27,16 @@ from ..core.constants import MarketRegime, OrderSide
 from ..data.indicators import Indicators
 
 
+def _parse_ml_regime(regime_str: Optional[str]) -> Optional[MarketRegime]:
+    """Convert ML override regime string to MarketRegime, or None if unrecognised."""
+    if not regime_str:
+        return None
+    try:
+        return MarketRegime[regime_str.upper()]
+    except KeyError:
+        return None
+
+
 class BaseStrategy(ABC):
     """
     Abstract base class for all trading strategies.
@@ -47,7 +57,11 @@ class BaseStrategy(ABC):
         self.symbol = symbol
         self.config = config
         self.enabled = config.get('enabled', True)
-        
+
+        # ML regime override: set by _apply_regime_override() in main.py.
+        # When not None, strategies use this instead of rule-based regime detection.
+        self.ml_regime: Optional[MarketRegime] = None
+
         # Logging
         from ..monitoring.logger import get_logger
         self.logger = get_logger(f"strategy.{self.get_name()}")
@@ -89,6 +103,15 @@ class BaseStrategy(ABC):
         """Disable strategy."""
         self.enabled = False
         self.logger.info(f"{self.get_name()} disabled")
+
+    def set_ml_regime(self, regime: Optional[MarketRegime]) -> None:
+        """
+        Inject the ML-predicted market regime.
+
+        When set, strategies bypass their rule-based RegimeFilter and use this
+        value directly.  Pass None to revert to rule-based detection.
+        """
+        self.ml_regime = regime
     
     def _create_signal(
         self,
