@@ -29,6 +29,7 @@ from ..core.types import Symbol, Signal, Order, Position
 from ..core.constants import OrderSide, OrderStatus, PositionSide
 from ..strategies.base_strategy import BaseStrategy
 from ..risk.risk_engine import RiskEngine
+from ..risk.risk_processor import RiskProcessor
 from .simulation import SimulatedBroker
 from .metrics import PerformanceMetrics
 
@@ -98,6 +99,9 @@ class BacktestEngine:
         self.risk_engine = RiskEngine(risk_config)
         self.risk_engine.equity_high_water_mark = initial_capital
         self.risk_engine.daily_start_equity = initial_capital
+
+        # Risk processor: computes SL/TP from signal metadata
+        self.risk_processor = RiskProcessor(risk_config)
         
         # Performance tracking
         self.metrics = PerformanceMetrics()
@@ -252,7 +256,14 @@ class BacktestEngine:
                 )
                 return
             
-            # 4. Validate signal has required fields
+            # 4. Calculate SL/TP via risk processor (strategies emit signals without stops)
+            if signal.entry_price and not signal.stop_loss:
+                try:
+                    signal = self.risk_processor.calculate_stops(signal)
+                except Exception as e:
+                    self.logger.debug(f"RiskProcessor.calculate_stops failed: {e}")
+
+            # Validate signal has required fields after stop calculation
             if not signal.entry_price or not signal.stop_loss:
                 self.logger.debug(
                     f"Signal missing entry_price or stop_loss",
