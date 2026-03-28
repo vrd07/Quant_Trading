@@ -657,8 +657,15 @@ class TradingSystem:
             )
             self._regime_override = override
 
-            # Apply enable/disable to each symbol's strategy manager
+            # Parse ML regime for injection into strategies
+            from .strategies.base_strategy import _parse_ml_regime
+            ml_regime = _parse_ml_regime(regime)
+
+            # Apply enable/disable + ML regime to each symbol's strategy manager
             for symbol_ticker, strategies in self.strategy_manager.strategies.items():
+                # Push ML regime so strategies use it instead of rule-based detection
+                self.strategy_manager.set_ml_regime_all(symbol_ticker, ml_regime)
+
                 for strat_name, strategy_obj in strategies.items():
                     if strat_name in overrides:
                         should_enable = overrides[strat_name]

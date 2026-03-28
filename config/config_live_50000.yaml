@@ -160,7 +160,7 @@ strategies:
     atr_ma_period: 20
 
   mean_reversion:
-    enabled: false               # DISABLED: Too risky for prop firm challenge — XAUUSD trends strongly
+    enabled: true                # ML-gated: regime_classifier enables only when RANGE regime detected
     zscore_lookback: 20
     entry_threshold: 2.0
     exit_threshold: 0.5
