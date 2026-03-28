@@ -140,10 +140,11 @@ class MomentumStrategy(BaseStrategy):
         # Trim to 400 bars — enough to warm up all EMAs (O(N) indicator cost mitigation)
         bars = bars.tail(400)
 
-        # Regime check (ADX + Hurst, score ≥ 2)
-        regime = self.regime_filter.classify(bars)
+        # Regime check — use ML prediction when available, else fall back to rule-based.
+        regime = self.ml_regime if self.ml_regime is not None else self.regime_filter.classify(bars)
         if regime != self.only_in_regime:
-            self._log_no_signal(f"Regime is {regime.value}, need {self.only_in_regime.value}")
+            source = "ML" if self.ml_regime is not None else "rule"
+            self._log_no_signal(f"Regime is {regime.value} ({source}), need {self.only_in_regime.value}")
             return None
 
         # Calculate indicators

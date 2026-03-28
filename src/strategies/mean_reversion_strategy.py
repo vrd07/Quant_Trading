@@ -84,14 +84,12 @@ class MeanReversionStrategy(BaseStrategy):
             self._log_no_signal(f"Insufficient data: {len(bars)} < {min_required}")
             return None
         
-        # 1. Calculate Market Regime
-        regime = self.regime_filter.classify(bars)
-        
-        # Filter by regime (optional, can be relaxed in config)
+        # 1. Calculate Market Regime — use ML prediction when available, else rule-based.
+        regime = self.ml_regime if self.ml_regime is not None else self.regime_filter.classify(bars)
+
         if self.only_in_regime and regime != self.only_in_regime:
-            # Allow trading if regime is UNKNOWN but specific conditions met?
-            # For now, stick to user config but typically we want RANGE
-            self._log_no_signal(f"Regime {regime.value} != {self.only_in_regime.value}")
+            source = "ML" if self.ml_regime is not None else "rule"
+            self._log_no_signal(f"Regime {regime.value} ({source}) != {self.only_in_regime.value}")
             return None
         
         # 2. Calculate Half-Life
