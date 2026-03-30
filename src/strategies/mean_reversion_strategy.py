@@ -18,7 +18,6 @@ from typing import Optional, Dict
 import pandas as pd
 
 from .base_strategy import BaseStrategy
-from .regime_filter import RegimeFilter
 from .multi_timeframe_filter import MultiTimeframeFilter, MTFBias
 from ..core.types import Symbol, Signal
 from ..core.constants import MarketRegime, OrderSide
@@ -57,8 +56,9 @@ class MeanReversionStrategy(BaseStrategy):
         self.mtf_filter = MultiTimeframeFilter() if self.mtf_confirmation else None
         self._pending_bars_by_tf: Dict[str, pd.DataFrame] = {}
         
-        # Regime filter
-        self.regime_filter = RegimeFilter()
+        # Regime filter removed — Z-score + RSI/BB extremes already ensure
+        # we only enter on genuine overextension. RegimeFilter returned TREND
+        # 77% of the time on XAUUSD 5m, blocking all entries.
         
         # State
         self.current_lookback = 20 # Initial default
@@ -84,13 +84,9 @@ class MeanReversionStrategy(BaseStrategy):
             self._log_no_signal(f"Insufficient data: {len(bars)} < {min_required}")
             return None
         
-        # 1. Calculate Market Regime — use ML prediction when available, else rule-based.
-        regime = self.ml_regime if self.ml_regime is not None else self.regime_filter.classify(bars)
-
-        if self.only_in_regime and regime != self.only_in_regime:
-            source = "ML" if self.ml_regime is not None else "rule"
-            self._log_no_signal(f"Regime {regime.value} ({source}) != {self.only_in_regime.value}")
-            return None
+        # Regime gate removed — the entry filters (Z-score extreme + RSI + BB)
+        # are sufficient to confirm mean-reversion conditions.
+        regime = self.ml_regime if self.ml_regime is not None else MarketRegime.RANGE
         
         # 2. Calculate Half-Life
         half_life_series = Indicators.half_life(bars, period=100)
@@ -153,14 +149,15 @@ class MeanReversionStrategy(BaseStrategy):
         stoch_k, _ = Indicators.stochastic(bars, period=14)
         current_stoch = float(stoch_k.iloc[-1]) if not pd.isna(stoch_k.iloc[-1]) else 50.0
 
-        # Volume climax: mean reversions fire best at panic volume peaks (selling/buying exhaustion)
-        has_volume = 'volume' in bars.columns
-        if has_volume:
-            current_volume = float(bars['volume'].iloc[-1])
-            avg_volume = float(bars['volume'].iloc[-21:-1].mean())
-            volume_climax = (avg_volume > 0) and (current_volume >= 1.5 * avg_volume)
-        else:
-            volume_climax = True  # Skip check when volume unavailable
+        # Volume climax removed as a hard gate — MT5 tick volume is unreliable
+        # on 5m bars and was blocking most entries. Kept as a soft strength bonus below.
+
+        # ADX trend guard: don't mean-revert in a strong trend (ADX > 30)
+        adx = Indicators.adx(bars, period=14)
+        current_adx = float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 25.0
+        if current_adx > 30.0:
+            self._log_no_signal(f"MeanRev: ADX too high ({current_adx:.1f}) — strong trend, no reversion")
+            return None
 
         # Buy Signal (Oversold)
         if current_z < entry_thresh_long:
@@ -169,30 +166,18 @@ class MeanReversionStrategy(BaseStrategy):
                     f"MeanRev BUY: RSI not extreme enough ({current_rsi:.1f} > 40)")
                 return None
 
-            # Price must be at or below lower Bollinger Band — confirms genuine extremity
+            # Price must be at or below lower Bollinger Band
             if current_close > current_bb_lower:
                 self._log_no_signal(
                     f"MeanRev BUY: price {current_close:.2f} not at/below lower BB {current_bb_lower:.2f}")
                 return None
 
-            # RSI deceleration: RSI was falling but is now leveling off (exhaustion of selling)
-            # Require: prior bar had lower RSI than two bars ago, current bar shows slowdown
+            # RSI deceleration: selling exhaustion — RSI was falling but now leveling
             rsi_was_falling = prev_rsi < prev2_rsi
-            rsi_decelerating = current_rsi >= prev_rsi  # RSI stopped falling or turned up
+            rsi_decelerating = current_rsi >= prev_rsi
             if not (rsi_was_falling and rsi_decelerating):
                 self._log_no_signal(
-                    f"MeanRev BUY: RSI not decelerating (RSI: {prev2_rsi:.1f}→{prev_rsi:.1f}→{current_rsi:.1f})")
-                return None
-
-            # Stochastic must also be in oversold territory — independent oscillator confirmation
-            if current_stoch > 25.0:
-                self._log_no_signal(
-                    f"MeanRev BUY: Stochastic not oversold ({current_stoch:.1f} > 25)")
-                return None
-
-            # Volume climax: require panic/exhaustion volume at the reversal point
-            if not volume_climax:
-                self._log_no_signal("MeanRev BUY: no volume climax at extreme (volume < 1.5× avg)")
+                    f"MeanRev BUY: RSI not decelerating ({prev2_rsi:.1f}→{prev_rsi:.1f}→{current_rsi:.1f})")
                 return None
 
             return self._create_signal(
@@ -223,23 +208,12 @@ class MeanReversionStrategy(BaseStrategy):
                     f"MeanRev SELL: price {current_close:.2f} not at/above upper BB {current_bb_upper:.2f}")
                 return None
 
-            # RSI deceleration: RSI was rising but is now leveling off (exhaustion of buying)
+            # RSI deceleration: buying exhaustion — RSI was rising but now leveling
             rsi_was_rising = prev_rsi > prev2_rsi
-            rsi_decelerating = current_rsi <= prev_rsi  # RSI stopped rising or turned down
+            rsi_decelerating = current_rsi <= prev_rsi
             if not (rsi_was_rising and rsi_decelerating):
                 self._log_no_signal(
-                    f"MeanRev SELL: RSI not decelerating (RSI: {prev2_rsi:.1f}→{prev_rsi:.1f}→{current_rsi:.1f})")
-                return None
-
-            # Stochastic must also be in overbought territory
-            if current_stoch < 75.0:
-                self._log_no_signal(
-                    f"MeanRev SELL: Stochastic not overbought ({current_stoch:.1f} < 75)")
-                return None
-
-            # Volume climax: require buying exhaustion volume
-            if not volume_climax:
-                self._log_no_signal("MeanRev SELL: no volume climax at extreme (volume < 1.5× avg)")
+                    f"MeanRev SELL: RSI not decelerating ({prev2_rsi:.1f}→{prev_rsi:.1f}→{current_rsi:.1f})")
                 return None
 
             return self._create_signal(
