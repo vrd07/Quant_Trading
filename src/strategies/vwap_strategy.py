@@ -210,24 +210,11 @@ class VWAPStrategy(BaseStrategy):
         except AttributeError:
             pass
 
-        # ── Regime check ─────────────────────────────────────────────────
-        # When ML regime is available use it for both checks; otherwise fall
-        # back to H1 cached + 1m rule-based classification.
-        if self.ml_regime is not None:
-            if self.ml_regime != self.only_in_regime:
-                self._log_no_signal(f"ML regime={self.ml_regime.value}, need {self.only_in_regime.value}")
-                return None
-        else:
-            # H1 regime check (cached — only recomputed every 60 bars)
-            if self._get_h1_regime(bars) == MarketRegime.TREND:
-                self._log_no_signal("H1 regime is TREND — no mean reversion")
-                return None
-
-            # 1m regime check
-            regime = self.regime_filter.classify(bars)
-            if regime != self.only_in_regime:
-                self._log_no_signal(f"1m regime={regime.value}, need {self.only_in_regime.value}")
-                return None
+        # ── Regime ────────────────────────────────────────────────────────
+        # Regime filter removed — the 2σ band + RSI/CCI extremes already
+        # ensure we only enter on extended moves. The RegimeFilter blocked
+        # 84% of bars as TREND on XAUUSD 2025-2026, leaving zero trades.
+        regime = self.ml_regime if self.ml_regime is not None else MarketRegime.RANGE
 
         # ── Session-anchored VWAP with StdDev bands ───────────────────────
         vwap, upper_band, lower_band, partial_lower = _compute_session_vwap(
@@ -252,6 +239,13 @@ class VWAPStrategy(BaseStrategy):
         if any(pd.isna(v) for v in (current_vwap, current_upper, current_lower,
                                      current_atr, current_rsi, current_cci)):
             self._log_no_signal("Indicator NaN")
+            return None
+
+        # ADX trend guard: don't mean-revert in a strong trend
+        adx = Indicators.adx(bars, period=14)
+        current_adx = float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 25.0
+        if current_adx > 30.0:
+            self._log_no_signal(f"VWAP: ADX too high ({current_adx:.1f}) — strong trend")
             return None
 
         # ── H4 directional bias (ICT premium/discount) ────────────────────
