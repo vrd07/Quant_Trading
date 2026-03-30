@@ -33,6 +33,8 @@ from ..core.types import Symbol, Signal
 from ..core.constants import MarketRegime, OrderSide
 from ..data.indicators import Indicators
 
+# RegimeFilter removed — ADX check inside signal logic is sufficient for 5m
+
 
 class BreakoutStrategy(BaseStrategy):
     """Donchian Channel breakout strategy — streamlined for intraday 5m."""
@@ -57,13 +59,6 @@ class BreakoutStrategy(BaseStrategy):
         self.volume_confirmation = config.get('volume_confirmation', False)
         self.volume_ratio_min = config.get('volume_ratio_min', 1.2)
 
-        # Regime filter — ADX-only, no Hurst (Hurst is unreliable on 5m)
-        from .regime_filter import RegimeFilter
-        self.regime_filter = RegimeFilter(
-            adx_trend_threshold=self.adx_min_threshold,
-            use_hurst=False,
-        )
-
         self.last_breakout_bar = None
 
     def get_name(self) -> str:
@@ -78,12 +73,10 @@ class BreakoutStrategy(BaseStrategy):
             self._log_no_signal("Insufficient data")
             return None
 
-        # Regime check — ADX-based (no Hurst)
-        regime = self.ml_regime if self.ml_regime is not None else self.regime_filter.classify(bars)
-        if regime != self.only_in_regime:
-            source = "ML" if self.ml_regime is not None else "rule"
-            self._log_no_signal(f"Regime is {regime.value} ({source}), need {self.only_in_regime.value}")
-            return None
+        # No separate regime filter — ADX > threshold inside the signal logic
+        # already confirms trend. The RegimeFilter's scoring system is too strict
+        # on 5m data (UNKNOWN 100% of the time).
+        regime = self.ml_regime if self.ml_regime is not None else MarketRegime.TREND
 
         # Indicators
         upper, middle, lower = Indicators.donchian_channel(bars, period=self.donchian_period)
