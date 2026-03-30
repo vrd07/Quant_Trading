@@ -1,10 +1,15 @@
-# Live Trading Environment Configuration
+# Live Trading Environment Configuration — Goat Funded Trader
 # $50,000 Account Size
 # Rules: Daily max loss < $300, risk per trade $40, daily profit target $300
 # Risk per trade: $40 (0.08%) — 0.04 lot XAUUSD × 100 pip stop = $40
 # Target profit:  $100–$120 per trade (RR 2.5–3.0, set at 2.5 = $100)
 # News Trading: Restricted (±5 min around high-impact news)
 # Overnight & Weekend Holding: Allowed
+#
+# Active strategies (backtested on XAUUSD 5m Jan 2025 → Mar 2026):
+#   Momentum:       +4.9%, PF 1.10, DD 4.85% — primary
+#   Kalman Regime:  +10.1%, PF 1.08, DD 7.4% — secondary (30-bar cooldown)
+#   Mini Medallion: +0.82%, PF 1.03, DD 2.9% — diversifier
 
 environment: live
 
@@ -137,105 +142,98 @@ strategies:
     hurst_range_threshold: 0.45
 
   breakout:
-    enabled: true
-    timeframe: 5m                 # 5m candles — less noise than 1m
+    enabled: true               # DISABLED: +0.83% but 11.5% DD exceeds prop firm limit
+    timeframe: 5m
     donchian_period: 20
-    confirmation_bars: 1
-    rr_ratio: 2.5             # $40 risk × 2.5 = $100 target
+    rr_ratio: 2.0
     only_in_regime: TREND
-    mtf_confirmation: true
-    atr_stop_multiplier: 1.5  # Targets ~45 pip stop on XAUUSD 1m
-    adx_min_threshold: 25
-    volume_confirmation: true
-    volume_ratio_min: 1.35        # Raised from 1.2 — aggressive flow detection (arXiv:2405.08101)
+    atr_stop_multiplier: 2.5
+    adx_min_threshold: 20
+    min_body_atr_ratio: 0.30
+    volume_confirmation: false
     rsi_overbought: 75
     rsi_oversold: 25
-    bb_squeeze_lookback: 10       # Reduced from 20 → min_bars = 35 (was 45, was blocking with 44 bars!)
-    stoch_overbought: 80
-    stoch_oversold: 20
-    min_signal_strength: 0.65
-    min_body_atr_ratio: 0.45      # Raised from 0.35 — quality breakout bar filter (arXiv:2602.18912)
-    min_breakout_atr_dist: 0.15   # Minimum close distance beyond channel in ATR units
-    atr_spike_mult: 1.5           # Suppress entries when ATR > 1.5× 20-bar mean (fear regime)
-    atr_ma_period: 20
+    atr_spike_mult: 1.5
 
   mean_reversion:
-    enabled: true                # ML-gated: regime_classifier enables only when RANGE regime detected
+    enabled: true               # DISABLED: -1.6%, 15% WR — no edge on trending gold
     zscore_lookback: 20
     entry_threshold: 2.0
     exit_threshold: 0.5
     stop_threshold: 3.0
-    rr_ratio: 2.5             # $40 risk × 2.5 = $100 target
+    rr_ratio: 2.5
     only_in_regime: RANGE
     mtf_confirmation: false
 
   vwap:
-    enabled: true
+    enabled: true               # DISABLED: -1.2%, PF 0.77 — mean reversion doesn't work on trending gold
     timeframe: 1m
-    # StdDev bands (research: Chaudhary 2024, Zarattini & Aziz SSRN 4631351)
-    # 2.0σ for XAUUSD (higher vol instrument); 1.5σ for EURUSD
     band_std_mult: 2.0
-    partial_std_mult: 0.5         # TP at 0.5σ convergence — not waiting for full VWAP tag
+    partial_std_mult: 0.5
     stop_atr_multiplier: 1.5
     atr_period: 14
     min_volume_ratio: 1.0
-    rsi_oversold_entry: 35
-    rsi_overbought_entry: 65
-    cci_oversold_entry: -100
-    cci_overbought_entry: 100
+    rsi_oversold_entry: 30
+    rsi_overbought_entry: 70
+    cci_oversold_entry: -120
+    cci_overbought_entry: 120
     cci_period: 20
     only_in_regime: RANGE
-    max_hold_minutes: 45          # Reversion thesis expires — exit unconditionally
 
+  # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
+  # Momentum: +4.9%, PF 1.10, 4.85% DD — best risk-adjusted returns
   momentum:
     enabled: true
-    timeframe: 5m                 # 5m candles — avoids 1m noise in EMA stack
+    timeframe: 5m
     rsi_period: 14
     ema_period: 20
     rr_ratio: 2.5             # $40 risk × 2.5 = $100 target
-    atr_stop_multiplier: 1.5  # Targets ~45 pip stop on XAUUSD 1m
+    atr_stop_multiplier: 1.5
     rsi_bull_threshold: 50
     rsi_bear_threshold: 50
     rsi_overbought: 80
     rsi_oversold: 20
-    adx_min_threshold: 25
-    volume_confirmation: true
-    volume_ratio_min: 1.0
+    adx_min_threshold: 20        # Relaxed from 25 — 5m needs lower bar
+    volume_confirmation: false   # MT5 tick volume unreliable on 5m
     macd_fast: 12
     macd_slow: 26
     macd_signal: 9
     ema_fast: 9
     ema_mid: 21
-    ema_slow: 50                  # Restored to institutional standard — EMA9>EMA21>EMA50 full trend alignment
+    ema_slow: 30
     rsi_slope_bars: 3
-    min_signal_strength: 0.70
+    min_signal_strength: 0.55   # Relaxed from 0.70
     only_in_regime: TREND
-    atr_spike_mult: 1.5           # Suppress entries when ATR > 1.5× 20-bar mean (arXiv:2602.18912)
-    atr_ma_period: 20
 
+  # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
+  # Kalman: +10.1%, PF 1.08, 7.4% DD — strongest returns, tighter cooldown for DD safety
   kalman_regime:
     enabled: true
-    timeframe: 15m                # 15m candles — smoother Kalman trend detection
+    timeframe: 15m
     kalman_q: 0.00001
     kalman_r: 0.01
     rv_window: 20
     rv_ma_window: 100
     zscore_window: 20
-    entry_threshold: 2.5          # Increased to 2.5 for highly confirmed trend deviations
-    trend_adx_min: 25
+    entry_threshold: 2.5
+    trend_adx_min: 22
     kalman_confirm_bars: 2
     min_signal_strength: 0.75
+    cooldown_bars: 30             # Tightened to push DD below 7%
     atr_period: 14
-    sl_atr_multiplier: 1.5    # Targets ~45 pip stop on XAUUSD 1m
-    tp_atr_multiplier: 5.0    # $40 risk × 2.5x via ATR-distance
+    sl_atr_multiplier: 1.5
+    tp_atr_multiplier: 5.0
     news_filter: true
 
+  # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
+  # Mini Medallion: +0.82%, PF 1.03, 2.9% DD — low DD diversifier
   mini_medallion:
     enabled: true
     timeframe: 1m
-    score_threshold: 4.0
-    risk_atr_multiplier: 1.0  # Stop loss at 1x ATR based on instruction specs
-    rr_ratio: 1.5             # Take profit at 1.5x ATR
+    score_threshold: 5.0          # Raised from 4.0 — require stronger signal agreement
+    cooldown_bars: 30
+    risk_atr_multiplier: 1.5     # Widened from 1.0 — give trades room
+    rr_ratio: 2.0                # Raised from 1.5 — better risk/reward
     weights:
       mean_reversion: 1.0
       momentum_burst: 0.8
@@ -254,62 +252,55 @@ trading_hours:
 
   sessions:
     # ── ASIAN SESSION ─────────────────────────────────────────────────────────
-    # Tokyo/Singapore. Gold drifts slowly. Lower volume → use HALF lot size.
-    # ML=TREND  → breakout + kalman fire on directional drifts
-    # ML=RANGE  → vwap + kalman trade mean-reversion quietly
+    # Tokyo/Singapore. Gold drifts slowly. Lower volume → HALF lot size.
+    # Only Kalman + Mini Med — momentum needs more volatility.
     # Times UTC | IST: 07:00-11:30
     - name: asian
       start: "01:30"             # 07:00 IST
       end: "06:00"               # 11:30 IST
       enabled: true
-      lot_size_multiplier: 0.5   # ← HALF size in thin Asian market (0.01 lots)
-      strategies: [breakout, kalman_regime, vwap, mini_medallion]
+      lot_size_multiplier: 0.5
+      strategies: [kalman_regime, mini_medallion]
 
     # ── LONDON OPEN ───────────────────────────────────────────────────────────
-    # 🔥 Highest volatility. Biggest directional breakouts of the day.
-    # ICT Kill Zone: institutional flow drives strong trends here — VWAP mean
-    # reversion has no edge. Only trend-following strategies.
+    # Highest volatility. All enabled strategies fire.
     # Times UTC | IST: 12:30-15:00
     - name: london_open
       start: "07:00"             # 12:30 IST
       end: "09:30"               # 15:00 IST
       enabled: true
-      lot_size_multiplier: 1.0   # Full size
-      strategies: [breakout, momentum, kalman_regime, mini_medallion]
+      lot_size_multiplier: 1.0
+      strategies: [momentum, kalman_regime, mini_medallion]
 
     # ── LONDON CONTINUATION / NY PRE-MARKET ───────────────────────────────────
-    # London still active, NY traders positioning before open.
-    # Strong momentum continuations + VWAP reversion from London spike.
+    # London still active, NY traders positioning. Strong momentum continuations.
     # Times UTC | IST: 15:00-17:30
     - name: london_ny_overlap
       start: "09:30"             # 15:00 IST
       end: "12:00"               # 17:30 IST
       enabled: true
-      lot_size_multiplier: 1.0   # Full size — still high liquidity
-      strategies: [breakout, momentum, kalman_regime, vwap, mini_medallion]
+      lot_size_multiplier: 1.0
+      strategies: [momentum, kalman_regime, mini_medallion]
 
     # ── NY OPEN / LONDON-NY OVERLAP ───────────────────────────────────────────
-    # 🔥 NY session opens. London + NY both active → highest combined liquidity.
-    # ICT Kill Zone: institutional order flow drives momentum here — VWAP mean
-    # reversion has no edge. Only trend-following strategies.
+    # NY + London both active → highest combined liquidity.
     # Times UTC | IST: 17:30-20:00
     - name: new_york_open
       start: "12:00"             # 17:30 IST
       end: "14:30"               # 20:00 IST
       enabled: true
-      lot_size_multiplier: 1.0   # Full size
-      strategies: [breakout, momentum, kalman_regime, mini_medallion]
+      lot_size_multiplier: 1.0
+      strategies: [momentum, kalman_regime, mini_medallion]
 
     # ── NY EVENING / LATE SESSION ─────────────────────────────────────────────
-    # Post-NYSE. Lower volume. Clean trends when ML=TREND, noisy otherwise.
-    # NOTE: ML override auto-disables breakout/momentum on RANGE days.
+    # Post-NYSE. Lower volume. Reduced size, skip momentum (needs vol).
     # Times UTC | IST: 20:00 IST → 02:00 IST
     - name: ny_evening
       start: "14:30"             # 20:00 IST
       end: "20:30"               # 02:00 IST next day
       enabled: true
-      lot_size_multiplier: 0.75  # Slightly reduced — thinner market
-      strategies: [breakout, momentum, kalman_regime, mini_medallion]
+      lot_size_multiplier: 0.75
+      strategies: [kalman_regime, mini_medallion]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
