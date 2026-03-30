@@ -154,32 +154,32 @@ class RiskEngine:
                 )
                 return False, reason
 
-            # CHECK 3b: Absolute dollar loss limit (GFT account protection)
-            if self.absolute_max_loss_usd > 0 and self.initial_balance > 0:
-                total_loss = self.initial_balance - account_equity
-                if total_loss >= self.absolute_max_loss_usd:
-                    reason = f"ABSOLUTE LOSS LIMIT BREACHED: ${total_loss:.2f} >= ${self.absolute_max_loss_usd} (initial: ${self.initial_balance})"
+            # CHECK 3b: Absolute daily dollar loss limit (GFT account protection)
+            if self.absolute_max_loss_usd > 0 and self.daily_start_equity > 0:
+                daily_dollar_loss = self.daily_start_equity - account_equity
+                if daily_dollar_loss >= self.absolute_max_loss_usd:
+                    reason = f"ABSOLUTE DAILY LOSS LIMIT BREACHED: ${daily_dollar_loss:.2f} >= ${self.absolute_max_loss_usd} (daily start: ${self.daily_start_equity})"
                     self.logger.critical(
-                        "🚨 ABSOLUTE DOLLAR LOSS LIMIT HIT - GFT PROTECTION 🚨",
-                        total_loss=float(total_loss),
+                        "ABSOLUTE DAILY DOLLAR LOSS LIMIT HIT - GFT PROTECTION",
+                        daily_dollar_loss=float(daily_dollar_loss),
                         limit=float(self.absolute_max_loss_usd),
-                        initial_balance=float(self.initial_balance),
+                        daily_start_equity=float(self.daily_start_equity),
                         current_equity=float(account_equity),
                         order_id=str(order.order_id)
                     )
                     self._trigger_kill_switch(reason)
                     raise DrawdownLimitError(
                         reason,
-                        drawdown=total_loss / self.initial_balance,
-                        limit=self.absolute_max_loss_usd / self.initial_balance
+                        drawdown=daily_dollar_loss / self.daily_start_equity,
+                        limit=self.absolute_max_loss_usd / self.daily_start_equity
                     )
                 # Warn if approaching limit (80%)
-                elif total_loss >= self.absolute_max_loss_usd * Decimal("0.8"):
+                elif daily_dollar_loss >= self.absolute_max_loss_usd * Decimal("0.8"):
                     self.logger.warning(
-                        "⚠️ Approaching ABSOLUTE LOSS LIMIT",
-                        total_loss=float(total_loss),
+                        "Approaching ABSOLUTE DAILY LOSS LIMIT",
+                        daily_dollar_loss=float(daily_dollar_loss),
                         limit=float(self.absolute_max_loss_usd),
-                        pct_used=float(total_loss / self.absolute_max_loss_usd * 100)
+                        pct_used=float(daily_dollar_loss / self.absolute_max_loss_usd * 100)
                     )
 
             # CHECK 4: Daily loss limit
