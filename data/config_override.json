@@ -1,9 +1,9 @@
 {
-  "generated_at": "2026-03-30T07:38:56.652620+00:00",
-  "valid_until": "2026-03-31T07:38:56.652620+00:00",
+  "generated_at": "2026-03-31T05:58:43.700084+00:00",
+  "valid_until": "2026-04-01T05:58:43.700084+00:00",
   "regime": "RANGE",
-  "confidence": 0.9045,
-  "classifier": "RandomForest+Markov (n=278 samples)",
+  "confidence": 0.9099,
+  "classifier": "RandomForest+Markov (n=279 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -13,15 +13,15 @@
     "mini_medallion": true
   },
   "diagnostics": {
-    "adx_14": 31.350358,
-    "atr_pct": 0.038759,
-    "bb_width_ratio": 1.760432,
-    "close_ema20_pct": -0.036713,
-    "momentum_1d": 0.015949,
-    "momentum_5d": 0.016414,
-    "range_atr_ratio": 0.762966,
-    "vol_ratio": 0.086921,
-    "park_vol_zscore": -0.263461
+    "adx_14": 31.972325,
+    "atr_pct": 0.037359,
+    "bb_width_ratio": 1.655418,
+    "close_ema20_pct": -0.021512,
+    "momentum_1d": 0.014377,
+    "momentum_5d": 0.022556,
+    "range_atr_ratio": 0.810436,
+    "vol_ratio": 0.081905,
+    "park_vol_zscore": -0.296996
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -33,13 +33,13 @@
   },
   "performance_scores": {
     "kalman_regime": -0.16,
-    "mini_medallion": -0.1738,
+    "mini_medallion": -0.2038,
     "vwap_deviation": -0.3102
   },
   "regime_probabilities": {
-    "TREND": 0.0868,
-    "RANGE": 0.9045,
-    "VOLATILE": 0.0087
+    "TREND": 0.0828,
+    "RANGE": 0.9099,
+    "VOLATILE": 0.0072
   },
   "transition_matrix": {
     "TREND": {
@@ -48,8 +48,8 @@
       "VOLATILE": 0.129
     },
     "RANGE": {
-      "TREND": 0.1004,
-      "RANGE": 0.8916,
+      "TREND": 0.1,
+      "RANGE": 0.892,
       "VOLATILE": 0.008
     },
     "VOLATILE": {
