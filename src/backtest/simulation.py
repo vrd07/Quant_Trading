@@ -195,9 +195,13 @@ class SimulatedBroker:
 
         profit_distance = (current_price - entry) if is_long else (entry - current_price)
 
+        # Convert float multipliers to Decimal for arithmetic with Decimal atr_dist
+        lock_threshold = Decimal(str(self.lock_atr_mult)) * atr_dist
+        be_threshold = Decimal(str(self.breakeven_atr_mult)) * atr_dist
+        lock_offset = Decimal(str(self.lock_fraction)) * atr_dist
+
         # Stage 2: Lock in partial profit
-        if stage < 2 and profit_distance >= self.lock_atr_mult * atr_dist:
-            lock_offset = self.lock_fraction * atr_dist
+        if stage < 2 and profit_distance >= lock_threshold:
             new_sl = (entry + lock_offset) if is_long else (entry - lock_offset)
             if (is_long and new_sl > (position.stop_loss or Decimal(0))) or \
                (not is_long and new_sl < (position.stop_loss or Decimal("999999"))):
@@ -206,7 +210,7 @@ class SimulatedBroker:
             return
 
         # Stage 1: Move SL to breakeven
-        if stage < 1 and profit_distance >= self.breakeven_atr_mult * atr_dist:
+        if stage < 1 and profit_distance >= be_threshold:
             new_sl = entry
             if (is_long and new_sl > (position.stop_loss or Decimal(0))) or \
                (not is_long and new_sl < (position.stop_loss or Decimal("999999"))):
