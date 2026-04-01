@@ -14,7 +14,7 @@ title Quant Trading Bot - LIVE
 :: Change to the project root directory (parent of this script)
 cd /d "%~dp0.."
 
-set CONFIG=config\config_live_50000.yaml
+set CONFIG=
 set FORCE=false
 
 :: Parse args
@@ -31,9 +31,44 @@ if exist "venv\Scripts\activate.bat" (
     exit /b 1
 )
 
+:: ── Account Selection ───────────────────────────────────────
+if "%FORCE%"=="true" (
+    set CONFIG=config\config_live_50000.yaml
+    goto :account_selected
+)
+
 echo.
 echo ============================================================
-echo   Quant Trading Bot — GFT $50,000 Account
+echo   Select Account Size
+echo ============================================================
+echo.
+echo   1) $100
+echo   2) $1,000
+echo   3) $5,000
+echo   4) $10,000
+echo   5) $25,000
+echo   6) $50,000
+echo.
+set /p ACCOUNT_CHOICE="  Enter choice [1-6] (default: 6): "
+
+if "%ACCOUNT_CHOICE%"=="" set ACCOUNT_CHOICE=6
+if "%ACCOUNT_CHOICE%"=="1" set CONFIG=config\config_live_100.yaml
+if "%ACCOUNT_CHOICE%"=="2" set CONFIG=config\config_live_1000.yaml
+if "%ACCOUNT_CHOICE%"=="3" set CONFIG=config\config_live_5000.yaml
+if "%ACCOUNT_CHOICE%"=="4" set CONFIG=config\config_live_10000.yaml
+if "%ACCOUNT_CHOICE%"=="5" set CONFIG=config\config_live_25000.yaml
+if "%ACCOUNT_CHOICE%"=="6" set CONFIG=config\config_live_50000.yaml
+
+if "%CONFIG%"=="" (
+    echo   Invalid choice. Using default $50,000 account.
+    set CONFIG=config\config_live_50000.yaml
+)
+
+:account_selected
+
+echo.
+echo ============================================================
+echo   Quant Trading Bot — GFT Account
 echo   Config: %CONFIG%
 echo   Time:   %date% %time:~0,5% UTC
 echo ============================================================

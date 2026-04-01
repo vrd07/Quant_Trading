@@ -1,8 +1,8 @@
 {
-  "generated_at": "2026-04-01T08:57:01.681968+00:00",
-  "valid_until": "2026-04-02T08:57:01.681968+00:00",
+  "generated_at": "2026-04-01T09:00:11.623650+00:00",
+  "valid_until": "2026-04-02T09:00:11.623650+00:00",
   "regime": "RANGE",
-  "confidence": 0.9082,
+  "confidence": 0.9064,
   "classifier": "RandomForest+Markov (n=279 samples)",
   "strategy_overrides": {
     "breakout": true,
@@ -13,15 +13,15 @@
     "mini_medallion": true
   },
   "diagnostics": {
-    "adx_14": 30.647745,
-    "atr_pct": 0.035508,
-    "bb_width_ratio": 1.602848,
-    "close_ema20_pct": -0.007343,
-    "momentum_1d": -0.004192,
-    "momentum_5d": 0.04395,
-    "range_atr_ratio": 0.352651,
-    "vol_ratio": 0.054834,
-    "park_vol_zscore": -0.315781
+    "adx_14": 30.437042,
+    "atr_pct": 0.035536,
+    "bb_width_ratio": 1.598436,
+    "close_ema20_pct": 0.003174,
+    "momentum_1d": 0.007473,
+    "momentum_5d": 0.056179,
+    "range_atr_ratio": 0.480155,
+    "vol_ratio": 0.12318,
+    "park_vol_zscore": -0.296943
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -37,9 +37,9 @@
     "vwap_deviation": -0.3102
   },
   "regime_probabilities": {
-    "TREND": 0.0846,
-    "RANGE": 0.9082,
-    "VOLATILE": 0.0072
+    "TREND": 0.0864,
+    "RANGE": 0.9064,
+    "VOLATILE": 0.0073
   },
   "transition_matrix": {
     "TREND": {

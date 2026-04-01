@@ -15,7 +15,7 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
 
-CONFIG="config/config_live_50000.yaml"
+CONFIG=""
 FORCE=false
 
 # Parse args
@@ -33,9 +33,42 @@ else
     exit 1
 fi
 
+# ── Account Selection ───────────────────────────────────────
+if [ "$FORCE" = true ]; then
+    CONFIG="config/config_live_50000.yaml"
+else
+    echo ""
+    echo "============================================================"
+    echo "  Select Account Size"
+    echo "============================================================"
+    echo ""
+    echo "  1) \$100"
+    echo "  2) \$1,000"
+    echo "  3) \$5,000"
+    echo "  4) \$10,000"
+    echo "  5) \$25,000"
+    echo "  6) \$50,000"
+    echo ""
+    printf "  Enter choice [1-6] (default: 6): "
+    read -r ACCOUNT_CHOICE
+
+    case "${ACCOUNT_CHOICE:-6}" in
+        1) CONFIG="config/config_live_100.yaml" ;;
+        2) CONFIG="config/config_live_1000.yaml" ;;
+        3) CONFIG="config/config_live_5000.yaml" ;;
+        4) CONFIG="config/config_live_10000.yaml" ;;
+        5) CONFIG="config/config_live_25000.yaml" ;;
+        6) CONFIG="config/config_live_50000.yaml" ;;
+        *)
+            echo "  Invalid choice. Using default \$50,000 account."
+            CONFIG="config/config_live_50000.yaml"
+            ;;
+    esac
+fi
+
 echo ""
 echo "============================================================"
-echo "  Quant Trading Bot — GFT \$50,000 Account"
+echo "  Quant Trading Bot — GFT Account"
 echo "  Config: $CONFIG"
 echo "  Time:   $(date -u '+%Y-%m-%d %H:%M UTC')"
 echo "============================================================"
