@@ -171,7 +171,7 @@ trading_hours:
     impacts:
       - high
       - red
-    buffer_min: 10
+    buffer_min: 5               # 5-minute buffer
     timezone: Asia/Kolkata
 
 monitoring:

@@ -1,7 +1,7 @@
 #!/bin/bash
 # ============================================================
 # Quant Trading Bot — $50K GFT Account Launcher
-# Runs: health check → regime classifier → live trading
+# Runs: health check → news fetch → regime classifier → live trading
 #
 # Usage:
 #   chmod +x scripts/start_live.sh
@@ -42,7 +42,7 @@ echo "============================================================"
 echo ""
 
 # ── Step 1: Health Check ─────────────────────────────────────
-echo "─── [1/3] Pre-flight Health Check ───"
+echo "─── [1/4] Pre-flight Health Check ───"
 echo ""
 
 if python3 scripts/health_check.py --config "$CONFIG"; then
@@ -61,8 +61,20 @@ else
     fi
 fi
 
-# ── Step 2: Regime Classifier ────────────────────────────────
-echo "─── [2/3] Nightly Regime Classifier ───"
+# ── Step 2: Fetch Daily News ─────────────────────────────────
+echo "─── [2/4] Fetching Today's News Events ───"
+echo ""
+
+if python3 scripts/fetch_daily_news.py; then
+    echo "  ✓ News events fetched and configs updated"
+    echo ""
+else
+    echo "  ⚠ News fetch failed — news filter will use fallback CSV"
+    echo ""
+fi
+
+# ── Step 3: Regime Classifier ────────────────────────────────
+echo "─── [3/4] Nightly Regime Classifier ───"
 echo ""
 
 if python3 scripts/regime_classifier.py; then
@@ -73,8 +85,8 @@ else
     echo ""
 fi
 
-# ── Step 3: Launch Live Trading ──────────────────────────────
-echo "─── [3/3] Starting Live Trading ───"
+# ── Step 4: Launch Live Trading ──────────────────────────────
+echo "─── [4/4] Starting Live Trading ───"
 echo ""
 
 if [ "$FORCE" = true ]; then

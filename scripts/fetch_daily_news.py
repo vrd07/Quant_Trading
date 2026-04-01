@@ -35,7 +35,7 @@ from pathlib import Path
 # Project root (so we can run from anywhere)
 PROJECT_ROOT = Path(__file__).parent.parent
 NEWS_DIR = PROJECT_ROOT / "news"
-CONFIG_PATH = PROJECT_ROOT / "config" / "config_live.yaml"
+CONFIG_DIR = PROJECT_ROOT / "config"
 
 CURRENCIES_TO_TRACK = {"USD"}
 HIGH_IMPACT_KEYWORDS = {"high", "red"}   # ForexFactory impact levels we care about
@@ -196,43 +196,50 @@ def delete_old_news_files(max_age_days: int = MAX_FILE_AGE_DAYS) -> None:
 
 def update_config_csv_path(csv_path: Path) -> None:
     """
-    Update config_live.yaml's news_filter.csv_path to point to today's file.
-    This 'notifies' main.py about the new file — when the system restarts or
-    reloads config the new path is picked up automatically.
+    Update csv_path in ALL config_live*.yaml files under config/.
+    This ensures every config picks up today's news file on next restart.
     """
-    if not CONFIG_PATH.exists():
-        _log(f"Config not found at {CONFIG_PATH}, skipping config update")
+    if not CONFIG_DIR.exists():
+        _log(f"Config dir not found at {CONFIG_DIR}, skipping config update")
         return
 
-    try:
-        with open(CONFIG_PATH, "r") as f:
-            content = f.read()
+    rel_path = str(csv_path.relative_to(PROJECT_ROOT))
+    config_files = sorted(CONFIG_DIR.glob("config_live*.yaml"))
 
-        # Find and replace the csv_path line under news_filter
-        rel_path = str(csv_path.relative_to(PROJECT_ROOT))
-        # Replace csv_path: <anything> under news_filter section
-        new_content = re.sub(
-            r"(news_filter:.*?csv_path:\s*)[\w./\-]+\.csv",
-            rf"\g<1>{rel_path}",
-            content,
-            flags=re.DOTALL
-        )
+    if not config_files:
+        _log("No config_live*.yaml files found")
+        return
 
-        if new_content == content:
-            # Pattern didn't match — try simpler single-line replace
+    for config_file in config_files:
+        try:
+            with open(config_file, "r") as f:
+                content = f.read()
+
+            # Replace csv_path: <anything>.csv under news_filter section
             new_content = re.sub(
-                r"(csv_path:\s*)[\w./\-]+\.csv",
+                r"(news_filter:.*?csv_path:\s*)[\w./\-]+\.csv",
                 rf"\g<1>{rel_path}",
                 content,
+                flags=re.DOTALL
             )
 
-        with open(CONFIG_PATH, "w") as f:
-            f.write(new_content)
+            if new_content == content:
+                # Pattern didn't match — try simpler single-line replace
+                new_content = re.sub(
+                    r"(csv_path:\s*)[\w./\-]+\.csv",
+                    rf"\g<1>{rel_path}",
+                    content,
+                )
 
-        _log(f"Updated config_live.yaml csv_path → {rel_path}")
+            if new_content != content:
+                with open(config_file, "w") as f:
+                    f.write(new_content)
+                _log(f"Updated {config_file.name} csv_path → {rel_path}")
+            else:
+                _log(f"No csv_path found in {config_file.name}, skipped")
 
-    except Exception as e:
-        _log(f"Failed to update config: {e}")
+        except Exception as e:
+            _log(f"Failed to update {config_file.name}: {e}")
 
 
 def main():
@@ -252,7 +259,7 @@ def main():
     csv_path = save_events_csv(events, today)
 
     # 4. Update config so main.py picks up today's file
-    _log("Step 4: Updating config_live.yaml...")
+    _log("Step 4: Updating all config_live*.yaml files...")
     update_config_csv_path(csv_path)
 
     _log(f"=== Done! {len(events)} events saved to {csv_path.name} ===")

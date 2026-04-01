@@ -1,7 +1,12 @@
 @echo off
 :: ============================================================
-:: Quant Trading Bot — Windows 11 Live Trading Launcher
-:: Double-click this file to start the live trading bot.
+:: Quant Trading Bot — $50K GFT Account Launcher
+:: Runs: health check → news fetch → regime classifier → live trading
+::
+:: Usage:
+::   Double-click this file, or run from command prompt:
+::   scripts\start_live.bat              (interactive, default)
+::   scripts\start_live.bat --force      (skip confirmations, for scheduled tasks)
 :: ============================================================
 
 title Quant Trading Bot - LIVE
@@ -9,44 +14,88 @@ title Quant Trading Bot - LIVE
 :: Change to the project root directory (parent of this script)
 cd /d "%~dp0.."
 
-echo ============================================================
-echo  WARNING: LIVE TRADING MODE - REAL MONEY
-echo ============================================================
-echo.
-set /p CONFIRM="Are you ABSOLUTELY SURE you want to trade live? (type YES): "
+set CONFIG=config\config_live_50000.yaml
+set FORCE=false
 
-if /i not "%CONFIRM%"=="YES" (
-    echo Live trading cancelled.
+:: Parse args
+for %%a in (%*) do (
+    if /i "%%a"=="--force" set FORCE=true
+)
+
+:: Activate venv
+if exist "venv\Scripts\activate.bat" (
+    call venv\Scripts\activate.bat
+) else (
+    echo ERROR: venv not found. Run: python -m venv venv ^&^& pip install -r requirements.txt
     pause
-    exit /b 0
+    exit /b 1
 )
 
 echo.
 echo ============================================================
-echo  SELECT ACCOUNT SIZE CONFIG
+echo   Quant Trading Bot — GFT $50,000 Account
+echo   Config: %CONFIG%
+echo   Time:   %date% %time:~0,5% UTC
 echo ============================================================
-echo  1) $100
-echo  2) $1,000
-echo  3) $5,000
-echo  4) $10,000
-echo  5) $25,000
-echo ============================================================
-set /p CHOICE="Enter choice (1-5) [Default: 3]: "
-
-set CONFIG_FILE=config\config_live_5000.yaml
-if "%CHOICE%"=="1" set CONFIG_FILE=config\config_live_100.yaml
-if "%CHOICE%"=="2" set CONFIG_FILE=config\config_live_1000.yaml
-if "%CHOICE%"=="3" set CONFIG_FILE=config\config_live_5000.yaml
-if "%CHOICE%"=="4" set CONFIG_FILE=config\config_live_10000.yaml
-if "%CHOICE%"=="5" set CONFIG_FILE=config\config_live_25000.yaml
-
-echo.
-echo Starting trading bot...
-echo Config: %CONFIG_FILE%
 echo.
 
-:: Use 'python' (Windows standard) not 'python3'
-python src\main.py --config %CONFIG_FILE% --env live
+:: ── Step 1: Health Check ─────────────────────────────────────
+echo --- [1/4] Pre-flight Health Check ---
+echo.
+
+python scripts\health_check.py --config %CONFIG%
+if %errorlevel%==0 (
+    echo.
+    echo   [OK] Health check PASSED
+    echo.
+) else (
+    echo.
+    echo   [FAIL] Health check FAILED — fix issues above before trading
+    echo.
+    if "%FORCE%"=="false" (
+        pause
+        exit /b 1
+    ) else (
+        echo   --force flag set, continuing despite health check failure...
+        echo.
+    )
+)
+
+:: ── Step 2: Fetch Daily News ─────────────────────────────────
+echo --- [2/4] Fetching Today's News Events ---
+echo.
+
+python scripts\fetch_daily_news.py
+if %errorlevel%==0 (
+    echo   [OK] News events fetched and configs updated
+    echo.
+) else (
+    echo   [WARN] News fetch failed — news filter will use fallback CSV
+    echo.
+)
+
+:: ── Step 3: Regime Classifier ────────────────────────────────
+echo --- [3/4] Nightly Regime Classifier ---
+echo.
+
+python scripts\regime_classifier.py
+if %errorlevel%==0 (
+    echo   [OK] Regime classifier completed
+    echo.
+) else (
+    echo   [WARN] Regime classifier failed — strategies will use default weights
+    echo.
+)
+
+:: ── Step 4: Launch Live Trading ──────────────────────────────
+echo --- [4/4] Starting Live Trading ---
+echo.
+
+if "%FORCE%"=="true" (
+    python src\main.py --env live --config %CONFIG% --force-live
+) else (
+    python src\main.py --env live --config %CONFIG%
+)
 
 :: If the bot exits, pause so you can read any error messages
 echo.
