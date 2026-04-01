@@ -21,32 +21,50 @@ from ..core.constants import OrderSide, OrderStatus, PositionSide
 
 class SimulatedBroker:
     """Simulate broker for backtesting."""
-    
+
     def __init__(
         self,
         initial_capital: Decimal,
         commission_per_trade: Decimal = Decimal("0"),
-        slippage_model: str = "realistic"
+        slippage_model: str = "realistic",
+        trailing_stop_config: Optional[Dict] = None
     ):
         """
         Initialize simulated broker.
-        
+
         Args:
             initial_capital: Starting capital
             commission_per_trade: Commission per trade
             slippage_model: 'fixed', 'realistic', or 'aggressive'
+            trailing_stop_config: Trailing stop config from risk.trailing_stop section
         """
         self.initial_capital = initial_capital
         self.commission_per_trade = commission_per_trade
         self.slippage_model = slippage_model
-        
+
+        # Trailing stop config (mirrors TrailingStopManager stages)
+        ts_cfg = trailing_stop_config or {}
+        self.trailing_stop_enabled = ts_cfg.get('enabled', False)
+        self.breakeven_atr_mult = ts_cfg.get('breakeven_atr_mult', 0.5)
+        self.lock_atr_mult = ts_cfg.get('lock_atr_mult', 1.5)
+        self.lock_fraction = ts_cfg.get('lock_fraction', 0.5)
+        self.time_stop_minutes = ts_cfg.get('time_stop_minutes', None)
+
+        # Trailing stop tracking: pos_id -> stage (0=none, 1=breakeven, 2=locked)
+        self._trail_stage: Dict[str, int] = {}
+        self._trail_initial_sl: Dict[str, Decimal] = {}
+        self._trail_atr_dist: Dict[str, Decimal] = {}
+        self._trail_entry_bar_idx: Dict[str, int] = {}  # for time stop
+        self._current_bar_idx: int = 0
+        self._bar_interval_minutes: float = 5.0  # default 5m bars
+
         # Account state
         self.balance = initial_capital
         self.equity = initial_capital
-        
+
         # Positions
         self.positions: Dict[str, Position] = {}
-        
+
         # Trade history
         self.closed_trades: List[Dict] = []
         self.daily_pnl = Decimal("0")
@@ -92,8 +110,18 @@ class SimulatedBroker:
         self.balance -= commission
         
         # Add position
-        self.positions[str(position.position_id)] = position
-        
+        pos_id = str(position.position_id)
+        self.positions[pos_id] = position
+
+        # Register trailing stop tracking
+        if self.trailing_stop_enabled and position.stop_loss:
+            atr_dist = abs(fill_price - position.stop_loss)
+            if atr_dist > 0:
+                self._trail_stage[pos_id] = 0
+                self._trail_initial_sl[pos_id] = position.stop_loss
+                self._trail_atr_dist[pos_id] = atr_dist
+                self._trail_entry_bar_idx[pos_id] = self._current_bar_idx
+
         return fill_price
     
     def update_positions(self, current_bar) -> None:
@@ -107,25 +135,44 @@ class SimulatedBroker:
             position.update_price(close)
 
     def check_exits(self, current_bar) -> None:
-        """Check if any positions hit stop loss or take profit."""
+        """Check trailing stop updates, then SL/TP hits."""
         try:
             bar_low = Decimal(str(current_bar['low']))
             bar_high = Decimal(str(current_bar['high']))
+            bar_close = Decimal(str(current_bar['close']))
         except (KeyError, TypeError):
             bar_low = Decimal(str(current_bar.low))
             bar_high = Decimal(str(current_bar.high))
+            bar_close = Decimal(str(current_bar.close))
+
+        self._current_bar_idx += 1
+
+        # ── Trailing stop: update SL stages before checking exits ──
+        if self.trailing_stop_enabled:
+            for pos_id, position in list(self.positions.items()):
+                self._update_trailing_stop(pos_id, position, bar_close)
 
         positions_to_close = {}
 
         for pos_id, position in self.positions.items():
-            # Check stop loss (SL assumed hit first if both SL and TP触 on same bar)
+            # Time stop: close if position has been open too long
+            if self.trailing_stop_enabled and self.time_stop_minutes is not None:
+                entry_idx = self._trail_entry_bar_idx.get(pos_id)
+                if entry_idx is not None:
+                    bars_held = self._current_bar_idx - entry_idx
+                    minutes_held = bars_held * self._bar_interval_minutes
+                    if minutes_held >= self.time_stop_minutes:
+                        positions_to_close[pos_id] = (bar_close, 'time_stop')
+                        continue
+
+            # Check stop loss (SL assumed hit first if both SL and TP on same bar)
             if position.stop_loss:
                 if position.side == PositionSide.LONG and bar_low <= position.stop_loss:
                     positions_to_close[pos_id] = (position.stop_loss, 'stop_loss')
                 elif position.side == PositionSide.SHORT and bar_high >= position.stop_loss:
                     positions_to_close[pos_id] = (position.stop_loss, 'stop_loss')
 
-            # Check take profit (only if not already marked for SL)
+            # Check take profit (only if not already marked for SL/time_stop)
             if pos_id not in positions_to_close and position.take_profit:
                 if position.side == PositionSide.LONG and bar_high >= position.take_profit:
                     positions_to_close[pos_id] = (position.take_profit, 'take_profit')
@@ -135,26 +182,60 @@ class SimulatedBroker:
         # Close positions
         for pos_id, (exit_price, exit_reason) in positions_to_close.items():
             self._close_position(pos_id, exit_price, exit_reason)
+
+    def _update_trailing_stop(self, pos_id: str, position: Position, current_price: Decimal) -> None:
+        """Update trailing stop stage for a position (mirrors live TrailingStopManager)."""
+        if pos_id not in self._trail_atr_dist:
+            return
+
+        atr_dist = self._trail_atr_dist[pos_id]
+        stage = self._trail_stage.get(pos_id, 0)
+        entry = position.entry_price
+        is_long = position.side == PositionSide.LONG
+
+        profit_distance = (current_price - entry) if is_long else (entry - current_price)
+
+        # Stage 2: Lock in partial profit
+        if stage < 2 and profit_distance >= self.lock_atr_mult * atr_dist:
+            lock_offset = self.lock_fraction * atr_dist
+            new_sl = (entry + lock_offset) if is_long else (entry - lock_offset)
+            if (is_long and new_sl > (position.stop_loss or Decimal(0))) or \
+               (not is_long and new_sl < (position.stop_loss or Decimal("999999"))):
+                position.stop_loss = new_sl
+                self._trail_stage[pos_id] = 2
+            return
+
+        # Stage 1: Move SL to breakeven
+        if stage < 1 and profit_distance >= self.breakeven_atr_mult * atr_dist:
+            new_sl = entry
+            if (is_long and new_sl > (position.stop_loss or Decimal(0))) or \
+               (not is_long and new_sl < (position.stop_loss or Decimal("999999"))):
+                position.stop_loss = new_sl
+                self._trail_stage[pos_id] = 1
     
     def _close_position(self, position_id: str, exit_price: Decimal, reason: str) -> None:
         """Close position and calculate P&L."""
         position = self.positions[position_id]
-        
+
         # Calculate P&L
         price_diff = exit_price - position.entry_price
-        
+
         if position.side == PositionSide.LONG:
             pnl = price_diff * position.quantity * position.symbol.value_per_lot
         else:
             pnl = -price_diff * position.quantity * position.symbol.value_per_lot
-        
+
         # Subtract commission
         pnl -= self.commission_per_trade
-        
+
         # Update balance
         self.balance += pnl
         self.daily_pnl += pnl
-        
+
+        # Determine trailing stop stage at exit
+        trail_stage = self._trail_stage.get(position_id, 0)
+        stage_names = {0: 'none', 1: 'breakeven', 2: 'locked'}
+
         # Record trade
         self.closed_trades.append({
             'position_id': position_id,
@@ -165,9 +246,16 @@ class SimulatedBroker:
             'quantity': float(position.quantity),
             'pnl': float(pnl),
             'exit_reason': reason,
+            'trail_stage': stage_names.get(trail_stage, 'none'),
             'strategy': position.metadata.get('strategy')
         })
-        
+
+        # Cleanup trailing stop state
+        self._trail_stage.pop(position_id, None)
+        self._trail_initial_sl.pop(position_id, None)
+        self._trail_atr_dist.pop(position_id, None)
+        self._trail_entry_bar_idx.pop(position_id, None)
+
         # Remove position
         del self.positions[position_id]
     
@@ -230,6 +318,11 @@ class SimulatedBroker:
         self.positions = {}
         self.closed_trades = []
         self.daily_pnl = Decimal("0")
+        self._trail_stage = {}
+        self._trail_initial_sl = {}
+        self._trail_atr_dist = {}
+        self._trail_entry_bar_idx = {}
+        self._current_bar_idx = 0
     
     def reset_daily(self) -> None:
         """Reset daily metrics (called at start of each trading day)."""
