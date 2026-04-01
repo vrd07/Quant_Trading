@@ -89,11 +89,15 @@ class BacktestEngine:
         self.initial_capital = initial_capital
         self.commission_per_trade = commission_per_trade
         
+        # Trailing stop config from risk section
+        trailing_stop_config = risk_config.get('risk', {}).get('trailing_stop', {})
+
         # Simulated broker handles order execution
         self.broker = SimulatedBroker(
             initial_capital=initial_capital,
             commission_per_trade=commission_per_trade,
-            slippage_model=slippage_model
+            slippage_model=slippage_model,
+            trailing_stop_config=trailing_stop_config
         )
         
         # Risk engine (same as live trading)
@@ -173,6 +177,11 @@ class BacktestEngine:
         self.metrics.reset()
         self.bars_processed = 0
         self._current_day = None
+
+        # Detect bar interval for time stop calculation
+        if len(bars) >= 2:
+            delta = (bars.index[1] - bars.index[0]).total_seconds() / 60.0
+            self.broker._bar_interval_minutes = max(delta, 1.0)
         
         # Process each bar
         for i in range(len(bars)):
