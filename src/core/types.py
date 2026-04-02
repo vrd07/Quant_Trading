@@ -51,7 +51,8 @@ class Symbol:
     commission_per_lot: Decimal = Decimal("0.0")
     max_spread: Decimal = Decimal("999.0")
     min_stops_distance: Decimal = Decimal("0.0")
-    
+    leverage: Decimal = Decimal("1")
+
     def __str__(self) -> str:
         return self.ticker
     
