@@ -82,10 +82,11 @@ class SimulatedBroker:
         """
         # Simulate fill price with slippage
         fill_price = self._calculate_fill_price(order, current_bar)
-        
-        # Check if we have capital
-        required_margin = fill_price * order.quantity * order.symbol.value_per_lot
-        
+
+        # Check if we have capital (account for leverage)
+        leverage = getattr(order.symbol, 'leverage', None) or Decimal('1')
+        required_margin = (fill_price * order.quantity * order.symbol.value_per_lot) / leverage
+
         if required_margin > self.balance:
             return None  # Insufficient capital
         
