@@ -214,8 +214,8 @@ strategies:
     min_signal_strength: 0.60      # Tuned — moderate filter
     cooldown_bars: 80              # Tuned — 1-2 trades/day max
     atr_period: 14
-    sl_atr_multiplier: 2.5         # Tuned — wide stops, let trend develop
-    tp_atr_multiplier: 4.0         # Tuned — achievable TP (50K's 5.0x rarely hit)
+    sl_atr_multiplier: 1.5         # 50K value — tighter SL pairs well with long_only
+    tp_atr_multiplier: 4.0         # Tuned — achievable TP
     news_filter: true
 
   # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
@@ -294,7 +294,7 @@ trading_hours:
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
-    csv_path: news/2026-04-02_news.csv
+    csv_path: news/2026-04-03_news.csv
     currency: USD
     impacts:
       - high
