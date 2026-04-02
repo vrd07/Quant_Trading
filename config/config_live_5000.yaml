@@ -106,10 +106,10 @@ risk:
 
   trailing_stop:
     enabled: true
-    breakeven_atr_mult: 0.5        # Move SL to breakeven at +0.5× risk distance
-    lock_atr_mult: 1.5             # Move SL to partial lock at +1.5× risk distance
+    breakeven_atr_mult: 1.2        # Move SL to breakeven at +1.2× risk distance (was 0.5 — too tight, normal noise stopped out trades)
+    lock_atr_mult: 2.0             # Move SL to partial lock at +2.0× risk distance (was 1.5)
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
-    time_stop_minutes: 45          # Close position if open for more than 45 minutes
+    # time_stop_minutes removed — was 45 min, killed 30-59% of trades before TP could be reached
     ml_exhaustion_factor: 0.8      # (ML ONLY) If exhaustion pipeline generates predicted pips, tight_lock 80% of it immediately when reached
 
   # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
@@ -220,21 +220,18 @@ strategies:
   mini_medallion:
     enabled: true
     timeframe: 1m
-    score_threshold: 5.0
-    cooldown_bars: 30
+    score_threshold: 3.5           # Lowered from 5.0 — now 7 signals (max ~6.6) instead of 10
+    cooldown_bars: 45              # Increased from 30 to reduce overtrading
     risk_atr_multiplier: 1.5
     rr_ratio: 2.0
     weights:
-      mean_reversion: 1.0
-      momentum_burst: 0.8
+      mean_reversion: 1.2          # Increased — primary edge signal
+      momentum_burst: 1.0          # Increased from 0.8
       volatility_expansion: 1.2
-      vwap_reversion: 0.9
       order_flow: 1.1
       liquidity_sweep: 1.3
-      lead_lag: 0.7
       market_regime: 1.0
-      session_volatility: 0.6
-      volatility_spike: 0.8
+      volatility_regime: 0.8       # Merged session_volatility + volatility_spike
 
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
