@@ -192,7 +192,7 @@ strategies:
     ema_mid: 21
     ema_slow: 30
     rsi_slope_bars: 3
-    min_signal_strength: 0.60         # Raised from 0.55 — fewer but higher quality signals
+    min_signal_strength: 0.65         # Higher threshold = fewer trades, lower DD
     only_in_regime: TREND
 
   # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
