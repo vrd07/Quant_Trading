@@ -244,13 +244,25 @@ class BacktestEngine:
     def _on_new_day(self, new_date: datetime) -> None:
         """
         Handle transition to new trading day.
-        
+
+        In enforced-risk mode, reset kill switch and circuit breaker at each
+        new trading day.  This simulates a prop firm's daily restart — in live
+        trading you would manually reset after reviewing the breach, so the
+        backtest mirrors that workflow instead of permanently halting after
+        the first bad day.
+
         Args:
             new_date: New trading day
         """
         self.broker.reset_daily()
         self.risk_engine.reset_daily_metrics(self.broker.get_equity())
-        
+
+        # Reset protective mechanisms on each new day so the backtest can
+        # continue and produce per-day survival statistics.
+        if not self.bypass_risk_limits:
+            self.risk_engine.kill_switch.reset()
+            self.risk_engine.circuit_breaker.reset()
+
         self.logger.debug(f"New trading day: {new_date}")
     
     def _process_bar(self, available_bars: pd.DataFrame) -> None:
