@@ -174,9 +174,10 @@ class MomentumStrategy(BaseStrategy):
             self._log_no_signal("Indicator calculation failed")
             return None
 
-        # Inline regime classification using ADX only.
-        # ADX measures trend *strength* regardless of direction — high ADX means
-        # strong trend (up OR down), which is what momentum needs for both BUY and SELL.
+        # Inline regime classification using ADX + EMA direction.
+        # ADX confirms trend strength, EMA fast > mid confirms directional alignment.
+        # For SELL signals: the SELL path bypasses the regime gate (see below) since
+        # a bearish setup naturally has EMA fast < mid.
         if self.ml_regime is not None:
             regime = self.ml_regime
         elif current_adx >= self.adx_min_threshold:
