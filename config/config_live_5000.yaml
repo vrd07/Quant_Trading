@@ -209,7 +209,7 @@ strategies:
     trend_adx_min: 28              # Higher ADX = stronger trend confirmation, fewer false signals
     kalman_confirm_bars: 3         # Require 3 consecutive bars on correct side of Kalman
     min_signal_strength: 0.60      # Only take signals with meaningful Kalman separation
-    cooldown_bars: 80              # ~6.5 hours on 5m bars — only 1-2 trades per day max
+    cooldown_bars: 120             # ~10 hours on 5m bars — max ~1 trade per day
     atr_period: 14
     sl_atr_multiplier: 2.5         # Wide stops — let the trend develop without noise
     tp_atr_multiplier: 4.0         # 1.6:1 R:R — realistic for trend following
