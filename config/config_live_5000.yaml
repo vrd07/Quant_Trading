@@ -179,11 +179,11 @@ strategies:
     ema_period: 20
     rr_ratio: 2.5
     atr_stop_multiplier: 1.5
-    rsi_bull_threshold: 50
-    rsi_bear_threshold: 50
-    rsi_overbought: 80
-    rsi_oversold: 20
-    adx_min_threshold: 20
+    rsi_bull_threshold: 55            # Raised from 50 — require clearer bullish RSI
+    rsi_bear_threshold: 45            # Lowered from 50 — require clearer bearish RSI
+    rsi_overbought: 78                # Tightened from 80
+    rsi_oversold: 22                  # Tightened from 20
+    adx_min_threshold: 25             # Raised from 20 — stronger trend confirmation
     volume_confirmation: false
     macd_fast: 12
     macd_slow: 26
@@ -192,7 +192,7 @@ strategies:
     ema_mid: 21
     ema_slow: 30
     rsi_slope_bars: 3
-    min_signal_strength: 0.55
+    min_signal_strength: 0.60         # Raised from 0.55 — fewer but higher quality signals
     only_in_regime: TREND
 
   # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
@@ -206,13 +206,13 @@ strategies:
     rv_ma_window: 100
     zscore_window: 20
     entry_threshold: 2.5
-    trend_adx_min: 22
-    kalman_confirm_bars: 2
-    min_signal_strength: 0.75
-    cooldown_bars: 30             # Tightened from 20 → 30 to push DD below 7%
+    trend_adx_min: 25              # Raised from 22 — eliminate noisy borderline trends
+    kalman_confirm_bars: 3         # Raised from 2 — require 3 consecutive bars for confirmation
+    min_signal_strength: 0.55      # Lowered from 0.75 — was blocking too many valid trend signals
+    cooldown_bars: 45              # Raised from 30 — reduce overtrading
     atr_period: 14
-    sl_atr_multiplier: 1.5
-    tp_atr_multiplier: 5.0
+    sl_atr_multiplier: 2.0         # Raised from 1.5 — give trades more room (was getting stopped out too easily)
+    tp_atr_multiplier: 3.0         # Lowered from 5.0 — 5x ATR was unreachable, 3x is achievable
     news_filter: true
 
   # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
