@@ -137,9 +137,16 @@ class MomentumStrategy(BaseStrategy):
         # Trim to 400 bars — enough to warm up all EMAs (O(N) indicator cost mitigation)
         bars = bars.tail(400)
 
-        # Regime filter removed — ADX + EMA stack already confirm trend.
-        # RegimeFilter returned UNKNOWN/RANGE on 5m gold, blocking most entries.
-        regime = self.ml_regime if self.ml_regime is not None else MarketRegime.TREND
+        # Inline regime classification using ADX + EMA alignment (higher timeframe
+        # aware). The old RegimeFilter was too strict on 5m data (UNKNOWN 100%).
+        # This uses the same indicators already computed to determine regime without
+        # an external filter.
+        if self.ml_regime is not None:
+            regime = self.ml_regime
+        elif current_adx >= self.adx_min_threshold and (current_ema_fast > current_ema_mid):
+            regime = MarketRegime.TREND
+        else:
+            regime = MarketRegime.RANGE
 
         # Calculate indicators
         rsi = Indicators.rsi(bars, period=self.rsi_period)
@@ -176,6 +183,11 @@ class MomentumStrategy(BaseStrategy):
                          prev2_histogram, current_atr, current_adx, current_ema_fast,
                          current_ema_mid, current_ema_slow, current_rsi_slope])):
             self._log_no_signal("Indicator calculation failed")
+            return None
+
+        # Regime gate: momentum only fires in TREND regime
+        if regime != MarketRegime.TREND:
+            self._log_no_signal(f"Regime is {regime.name}, momentum requires TREND")
             return None
 
         # ATR vol-spike suppression (arXiv:2602.18912):
@@ -267,27 +279,21 @@ class MomentumStrategy(BaseStrategy):
             )
 
         # ── Bearish momentum confluence ──────────────────────────────────────
-        # Relaxed from full 3-EMA stack (EMA9 < EMA21 < EMA50) which almost never
-        # triggers on trending gold (1 SELL in 1309 trades). Now only requires
-        # EMA9 < EMA21 — confirms short-term downtrend without needing a full
-        # long-term trend reversal.
+        # Uses short-term indicators only — no H1 trend gate or EMA20 direction
+        # requirement, since those make SELL structurally impossible on trending Gold
+        # (previous version: 1544 BUY vs 3 SELL).
         ema_stack_bearish = (current_ema_fast < current_ema_mid)
         rsi_bearish = current_rsi < self.rsi_bear_threshold
         rsi_not_oversold = current_rsi > self.rsi_oversold
         rsi_falling = current_rsi_slope < 0
         macd_negative = (current_histogram < 0 and prev_histogram < 0)
-        # Deepening: current bar stronger than previous (relaxed from 3-bar chain)
         macd_deepening = abs(current_histogram) > abs(prev_histogram)
-        price_below_ema = current_close < current_ema
-        ema_falling = current_ema < prev_ema
         # Entry proximity: price must be within 2×ATR below EMA20 — avoids shorting into exhaustion
         not_overextended_sell = (current_ema - current_close) < (2.0 * float(current_atr))
-        # H1 must be bearish — allow None (when H1 unavailable, don't gate)
-        h1_aligned_sell = h1_trend is not True
 
         if (ema_stack_bearish and rsi_bearish and rsi_not_oversold and
                 rsi_falling and macd_negative and macd_deepening and
-                price_below_ema and ema_falling and not_overextended_sell and volume_ok and h1_aligned_sell):
+                not_overextended_sell and volume_ok):
 
             rsi_norm = min((50.0 - float(current_rsi)) / 30.0, 1.0)
             adx_norm = min((float(current_adx) - self.adx_min_threshold) / 50.0, 1.0)
