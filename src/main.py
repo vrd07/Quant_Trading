@@ -240,6 +240,18 @@ class TradingSystem:
             
             self.logger.info("8. Initializing strategies...")
             self.strategy_manager = StrategyManager(symbols, self.config)
+
+            # Mitnick Rule: Never allow test strategies on live accounts.
+            # Two 'test_strategy' trades leaked through in March, losing $27 on funded capital.
+            if self.env == 'live':
+                for sym_ticker, strats in self.strategy_manager.strategies.items():
+                    for strat_name in list(strats.keys()):
+                        if 'test' in strat_name.lower():
+                            strats[strat_name].disable()
+                            self.logger.error(
+                                f"[Mitnick] Refusing test strategy '{strat_name}' in live mode — disabled"
+                            )
+
             self.logger.info("✓ Strategies ready")
             
             # Read advanced session controls from config
