@@ -77,6 +77,10 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.cooldown_bars = config.get('cooldown_bars', 60)
         self._bars_since_signal = self.cooldown_bars  # Allow first trade immediately
 
+        # Long-only mode: backtest evidence shows Kalman SELL side loses money
+        # on XAUUSD due to persistent upward drift. BUY side: +$2,545, SELL side: -$1,539.
+        self.long_only = config.get('long_only', False)
+
         # News filter (optional)
         self.news_filter_enabled = config.get('news_filter', False)
         self._news_events = None
@@ -212,6 +216,11 @@ class KalmanRegimeStrategy(BaseStrategy):
                 f"(close={current_close:.2f}, kalman={current_kalman:.2f}, z={current_z:.2f}, "
                 f"adx={current_adx:.1f}, rsi={current_rsi:.1f})"
             )
+            return None
+
+        # Long-only gate: suppress SELL signals on instruments with upward drift
+        if self.long_only and side == OrderSide.SELL:
+            self._log_no_signal("Long-only mode: SELL signal suppressed")
             return None
 
         # Minimum signal strength gate
