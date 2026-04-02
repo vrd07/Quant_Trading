@@ -683,7 +683,7 @@ class TradingSystem:
             self._regime_override = override
 
             # Parse ML regime for injection into strategies
-            from .strategies.base_strategy import _parse_ml_regime
+            from src.strategies.base_strategy import _parse_ml_regime
             ml_regime = _parse_ml_regime(regime)
 
             # Apply enable/disable + ML regime to each symbol's strategy manager
