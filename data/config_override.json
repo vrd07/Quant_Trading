@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-04-02T17:40:58.957480+00:00",
-  "valid_until": "2026-04-03T17:40:58.957480+00:00",
+  "generated_at": "2026-04-03T00:00:01.724277+00:00",
+  "valid_until": "2026-04-04T00:00:01.724277+00:00",
   "regime": "RANGE",
   "confidence": 0.8819,
   "classifier": "RandomForest+Markov (n=278 samples)",
@@ -14,11 +14,11 @@
   },
   "diagnostics": {
     "adx_14": 29.083763,
-    "atr_pct": 0.04659,
-    "bb_width_ratio": 1.687773,
-    "close_ema20_pct": -0.018023,
-    "momentum_1d": -0.027886,
-    "momentum_5d": 0.044683,
+    "atr_pct": 0.046618,
+    "bb_width_ratio": 1.688225,
+    "close_ema20_pct": -0.018546,
+    "momentum_1d": -0.028457,
+    "momentum_5d": 0.04407,
     "range_atr_ratio": 1.117994,
     "vol_ratio": 0.341517,
     "park_vol_zscore": -0.068864
