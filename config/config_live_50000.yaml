@@ -255,6 +255,27 @@ strategies:
       session_volatility: 0.6
       volatility_spike: 0.8
 
+  # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
+  # Trades confirmed retests of broken Donchian channel structure.
+  # Unlike donchian_breakout (trades initial break), SBR waits for
+  # the higher-probability retest confirmation phase.
+  # DISABLED — pending backtest validation on XAUUSD 5m data
+  sbr:
+    enabled: false
+    timeframe: 5m
+    lookback_period: 20           # Donchian channel period for structure detection
+    retest_tolerance_atr: 0.5     # How close price must return to broken level (ATR units)
+    min_rejection_ratio: 0.6      # Minimum wick/body ratio for rejection confirmation
+    retest_window_bars: 30        # Max bars to wait for retest after break
+    adx_min_threshold: 20         # Trend strength required
+    rsi_overbought: 75
+    rsi_oversold: 25
+    atr_stop_multiplier: 1.5      # SL beyond the broken level (tight invalidation)
+    rr_ratio: 2.5                 # $40 risk × 2.5 = $100 target
+    cooldown_bars: 10
+    long_only: false              # Both sides — retest gives natural invalidation
+    only_in_regime: TREND
+
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
   # friday_cutoff_utc: "19:00"
