@@ -242,47 +242,34 @@ strategies:
       session_volatility: 0.6
       volatility_spike: 0.8
 
+  # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
+  # Trades confirmed retests of broken Donchian channel structure.
+  # Backtest (50K, Jan 2025–Mar 2026): +0.79%, PF 1.03, DD 4.07%, 708 trades
+  sbr:
+    enabled: true
+    timeframe: 5m
+    lookback_period: 20
+    retest_tolerance_atr: 0.5
+    min_rejection_ratio: 0.6
+    retest_window_bars: 30
+    adx_min_threshold: 20
+    rsi_overbought: 75
+    rsi_oversold: 25
+    atr_stop_multiplier: 1.5
+    rr_ratio: 2.5
+    cooldown_bars: 10
+    long_only: false
+    only_in_regime: TREND
+
 trading_hours:
   sessions:
-    # ── ASIAN SESSION ─────────────────────────────────────────────────────────
-    - name: asian
-      start: "01:30"
-      end: "06:00"
-      enabled: true
-      lot_size_multiplier: 0.5
-      strategies: [kalman_regime]
-
-    # ── LONDON OPEN ───────────────────────────────────────────────────────────
-    - name: london_open
-      start: "07:00"
-      end: "09:30"
+    # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
+    - name: all_day
+      start: "00:00"
+      end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── LONDON CONTINUATION / NY PRE-MARKET ───────────────────────────────────
-    - name: london_ny_overlap
-      start: "09:30"
-      end: "12:00"
-      enabled: true
-      lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── NY OPEN / LONDON-NY OVERLAP ───────────────────────────────────────────
-    - name: new_york_open
-      start: "12:00"
-      end: "14:30"
-      enabled: true
-      lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── NY EVENING / LATE SESSION ─────────────────────────────────────────────
-    - name: ny_evening
-      start: "14:30"
-      end: "20:30"
-      enabled: true
-      lot_size_multiplier: 0.75
-      strategies: [kalman_regime]
+      strategies: [momentum, kalman_regime, breakout, sbr]
 
   news_filter:
     enabled: true

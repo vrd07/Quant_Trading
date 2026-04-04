@@ -259,9 +259,9 @@ strategies:
   # Trades confirmed retests of broken Donchian channel structure.
   # Unlike donchian_breakout (trades initial break), SBR waits for
   # the higher-probability retest confirmation phase.
-  # DISABLED — pending backtest validation on XAUUSD 5m data
+  # Backtest (50K, Jan 2025–Mar 2026): +0.79%, PF 1.03, DD 4.07%, 708 trades
   sbr:
-    enabled: false
+    enabled: true
     timeframe: 5m
     lookback_period: 20           # Donchian channel period for structure detection
     retest_tolerance_atr: 0.5     # How close price must return to broken level (ATR units)
@@ -281,56 +281,14 @@ trading_hours:
   # friday_cutoff_utc: "19:00"
 
   sessions:
-    # ── ASIAN SESSION ─────────────────────────────────────────────────────────
-    # Tokyo/Singapore. Gold drifts slowly. Lower volume → HALF lot size.
-    # Only Kalman (long-only) — momentum needs more volatility.
-    # Times UTC | IST: 07:00-11:30
-    - name: asian
-      start: "01:30"             # 07:00 IST
-      end: "06:00"               # 11:30 IST
-      enabled: true
-      lot_size_multiplier: 0.5
-      strategies: [kalman_regime]
-
-    # ── LONDON OPEN ───────────────────────────────────────────────────────────
-    # Highest volatility. All 3 enabled strategies fire.
-    # Times UTC | IST: 12:30-15:00
-    - name: london_open
-      start: "07:00"             # 12:30 IST
-      end: "09:30"               # 15:00 IST
+    # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
+    # Single session covering the full day. All enabled strategies fire at all times.
+    - name: all_day
+      start: "00:00"
+      end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── LONDON CONTINUATION / NY PRE-MARKET ───────────────────────────────────
-    # London still active, NY traders positioning. Strong momentum continuations.
-    # Times UTC | IST: 15:00-17:30
-    - name: london_ny_overlap
-      start: "09:30"             # 15:00 IST
-      end: "12:00"               # 17:30 IST
-      enabled: true
-      lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── NY OPEN / LONDON-NY OVERLAP ───────────────────────────────────────────
-    # NY + London both active → highest combined liquidity.
-    # Times UTC | IST: 17:30-20:00
-    - name: new_york_open
-      start: "12:00"             # 17:30 IST
-      end: "14:30"               # 20:00 IST
-      enabled: true
-      lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout]
-
-    # ── NY EVENING / LATE SESSION ─────────────────────────────────────────────
-    # Post-NYSE. Lower volume. Reduced size, skip momentum (needs vol).
-    # Times UTC | IST: 20:00 IST → 02:00 IST
-    - name: ny_evening
-      start: "14:30"             # 20:00 IST
-      end: "20:30"               # 02:00 IST next day
-      enabled: true
-      lot_size_multiplier: 0.75
-      strategies: [kalman_regime]
+      strategies: [momentum, kalman_regime, breakout, sbr]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
