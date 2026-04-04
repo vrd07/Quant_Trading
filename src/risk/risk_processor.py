@@ -31,6 +31,7 @@ class RiskProcessor:
         'vwap_deviation': 'vwap',
         'kalman_regime': 'kalman_regime',
         'mini_medallion': 'mini_medallion',
+        'structure_break_retest': 'sbr',
     }
 
     def calculate_stops(self, signal: Signal) -> Signal:
@@ -143,6 +144,25 @@ class RiskProcessor:
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
 
             tp_dist = sl_dist * rr
+            tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
+
+        elif strategy_name == 'structure_break_retest':
+            # SBR uses the broken level as a natural SL anchor.
+            # SL sits beyond the broken level by atr_stop_multiplier × ATR.
+            atr = Decimal(str(signal.metadata.get('atr', 0)))
+            broken_level = Decimal(str(signal.metadata.get('broken_level', entry)))
+            atr_mult = Decimal(str(strat_cfg.get('atr_stop_multiplier', 1.5)))
+            rr = Decimal(str(strat_cfg.get('rr_ratio', 2.5)))
+
+            # SL beyond the broken level (invalidation of the retest thesis)
+            sl_buffer = atr_mult * atr
+            if side == OrderSide.BUY:
+                sl = broken_level - sl_buffer
+            else:
+                sl = broken_level + sl_buffer
+
+            risk = abs(entry - sl)
+            tp_dist = risk * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
         else:
