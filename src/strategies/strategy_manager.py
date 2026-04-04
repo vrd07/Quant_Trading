@@ -22,6 +22,7 @@ from .vwap_strategy import VWAPStrategy
 from .momentum_strategy import MomentumStrategy
 from .kalman_regime_strategy import KalmanRegimeStrategy
 from .mini_medallion_strategy import MiniMedallionStrategy
+from .structure_break_retest import StructureBreakRetestStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -85,6 +86,13 @@ class StrategyManager:
                 self.strategies[symbol.ticker]['mini_medallion'] = MiniMedallionStrategy(
                     symbol=symbol,
                     config=config.get('strategies', {}).get('mini_medallion', {})
+                )
+            
+            # Initialize Structure Break + Retest strategy if enabled
+            if config.get('strategies', {}).get('sbr', {}).get('enabled', False):
+                self.strategies[symbol.ticker]['sbr'] = StructureBreakRetestStrategy(
+                    symbol=symbol,
+                    config=config.get('strategies', {}).get('sbr', {})
                 )
         
         from ..monitoring.logger import get_logger
