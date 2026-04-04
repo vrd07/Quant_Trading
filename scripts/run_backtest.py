@@ -29,10 +29,11 @@ from src.strategies.momentum_strategy import MomentumStrategy
 from src.strategies.vwap_strategy import VWAPStrategy
 from src.strategies.kalman_regime_strategy import KalmanRegimeStrategy
 from src.strategies.mini_medallion_strategy import MiniMedallionStrategy
+from src.strategies.structure_break_retest import StructureBreakRetestStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'all']
+STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'all']
 
 
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
@@ -86,6 +87,8 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         return KalmanRegimeStrategy(symbol, strats.get('kalman_regime', {}))
     elif strategy_name == 'mini_medallion':
         return MiniMedallionStrategy(symbol, strats.get('mini_medallion', {}))
+    elif strategy_name == 'sbr':
+        return StructureBreakRetestStrategy(symbol, strats.get('sbr', {}))
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
@@ -258,7 +261,7 @@ def main():
     print(f"  Date range: {bars.index.min()} to {bars.index.max()}")
 
     strategies_to_run = (
-        ['breakout', 'momentum', 'kalman_regime', 'vwap', 'mini_medallion']
+        ['breakout', 'momentum', 'kalman_regime', 'vwap', 'mini_medallion', 'sbr']
         if args.strategy == 'all'
         else [args.strategy]
     )
