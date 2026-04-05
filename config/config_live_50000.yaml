@@ -148,17 +148,28 @@ strategies:
   breakout:
     enabled: true
     timeframe: 5m
-    donchian_period: 20
-    rr_ratio: 2.0
+    donchian_period: 15             # Tighter channel (75 min) catches more setups
+    rr_ratio: 2.5                   # Increased from 2.0 — higher payoff per win
     only_in_regime: TREND
-    atr_stop_multiplier: 2.5
+    atr_stop_multiplier: 2.0        # Tightened from 2.5 — tighter invalidation
     adx_min_threshold: 20
     min_body_atr_ratio: 0.30
     volume_confirmation: false
     rsi_overbought: 75
     rsi_oversold: 25
     atr_spike_mult: 1.5
-    cooldown_bars: 8               # New: breaks consecutive loss streaks (was 23 max)
+    cooldown_bars: 4                # Reduced from 8 — better filters allow more trades
+    # v2 filters: data-driven from 958-trade backtest analysis
+    bb_squeeze_enabled: true        # Only breakout after consolidation
+    bb_squeeze_period: 20
+    bb_squeeze_percentile: 60       # BB width must be below 60th %ile of last 50 bars
+    bb_squeeze_lookback: 50
+    htf_trend_enabled: true         # 1H EMA(21) trend must align with breakout direction
+    htf_ema_period: 21
+    session_filter_enabled: true    # Only trade during high-WR sessions
+    allowed_sessions: [[4,9],[13,16],[21,23]]  # London, NY open, late NY
+    close_position_pct: 0.30        # Close must be in top/bottom 30% of bar range
+    macd_confirmation: true         # MACD histogram must confirm direction
 
   mean_reversion:
     enabled: false              # -1.63%, PF 0.40, 15% WR — no edge on gold
@@ -292,7 +303,7 @@ trading_hours:
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
-    csv_path: news/2026-04-03_news.csv
+    csv_path: news/2026-04-06_news.csv
     currency: USD
     impacts:
       - high
