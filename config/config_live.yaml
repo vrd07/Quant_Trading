@@ -72,21 +72,32 @@ strategies:
   
   breakout:
     enabled: true
-    donchian_period: 20
-    confirmation_bars: 1
-    rr_ratio: 1.5
+    timeframe: 5m
+    donchian_period: 12             # v3: shorter channel (60 min) — faster breakout detection
+    rr_ratio: 3.0                   # v3: wider TP — gold trends well, capture more per winner
     only_in_regime: TREND
-    mtf_confirmation: true
-    atr_stop_multiplier: 2.5
-    adx_min_threshold: 25            # Raised from 20 — requires stronger trend
-    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
-    volume_ratio_min: 1.2
-    rsi_overbought: 75
-    rsi_oversold: 25
-    bb_squeeze_lookback: 20           # Require BB squeeze before breakout
-    stoch_overbought: 80              # Don't buy when Stochastic already overbought
-    stoch_oversold: 20                # Don't sell when Stochastic already oversold
-    min_signal_strength: 0.65         # Gate: skip weak signals
+    atr_stop_multiplier: 2.0        # v3: back to 2.0 — 1.5 was too tight, stops hit too early
+    adx_min_threshold: 20           # v3: back to 20 — quality over quantity
+    min_body_atr_ratio: 0.30        # v3: back to 0.30 — ensures quality breakout bars
+    volume_confirmation: false
+    rsi_overbought: 78              # v3: widened from 75 — let strong trends run
+    rsi_oversold: 22                # v3: widened from 25
+    atr_spike_mult: 1.8             # v3: relaxed from 1.5 — gold is volatile, allow more
+    cooldown_bars: 2                # v3: reduced from 4 — more trade frequency
+    # v3 filters: data-driven from 353-trade backtest analysis
+    bb_squeeze_enabled: true        # Only breakout after consolidation
+    bb_squeeze_period: 20
+    bb_squeeze_percentile: 70       # v3: relaxed from 60 — less restrictive entry
+    bb_squeeze_lookback: 50
+    htf_trend_enabled: true         # 1H EMA(21) trend must align with breakout direction
+    htf_ema_period: 21
+    session_filter_enabled: true    # Only trade during high-WR sessions
+    allowed_sessions: [[4,4],[7,8],[22,22]]  # v3: ONLY profitable hours — London pre (4), prime (7-8), late NY (22)
+    close_position_pct: 0.35        # v3: relaxed from 0.30 — fewer false rejections
+    macd_confirmation: true         # MACD histogram must confirm direction
+    ema_confirm_enabled: true       # v3: EMA fast/slow crossover alignment — improved WR to 33.5%
+    ema_fast_period: 9
+    ema_slow_period: 21
   
   mean_reversion:
     enabled: true

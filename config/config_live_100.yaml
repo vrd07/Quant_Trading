@@ -139,17 +139,30 @@ strategies:
   breakout:
     enabled: false               # Disabled on $100 — too small for 3-strategy portfolio
     timeframe: 5m
-    donchian_period: 20
-    rr_ratio: 2.0
+    donchian_period: 12             # v3: shorter channel (60 min) — faster breakout detection
+    rr_ratio: 3.0                   # v3: wider TP — gold trends well, capture more per winner
     only_in_regime: TREND
-    atr_stop_multiplier: 2.5
-    adx_min_threshold: 20
-    min_body_atr_ratio: 0.30
+    atr_stop_multiplier: 2.0        # v3: back to 2.0 — 1.5 was too tight, stops hit too early
+    adx_min_threshold: 20           # v3: back to 20 — quality over quantity
+    min_body_atr_ratio: 0.30        # v3: back to 0.30 — ensures quality breakout bars
     volume_confirmation: false
-    rsi_overbought: 75
-    rsi_oversold: 25
-    atr_spike_mult: 1.5
-    cooldown_bars: 8
+    rsi_overbought: 78              # v3: widened from 75 — let strong trends run
+    rsi_oversold: 22                # v3: widened from 25
+    atr_spike_mult: 1.8             # v3: relaxed from 1.5 — gold is volatile, allow more
+    cooldown_bars: 2                # v3: reduced from 4 — more trade frequency
+    bb_squeeze_enabled: true
+    bb_squeeze_period: 20
+    bb_squeeze_percentile: 70       # v3: relaxed from 60 — less restrictive entry
+    bb_squeeze_lookback: 50
+    htf_trend_enabled: true
+    htf_ema_period: 21
+    session_filter_enabled: true
+    allowed_sessions: [[4,4],[7,8],[22,22]]  # v3: ONLY profitable hours
+    close_position_pct: 0.35
+    macd_confirmation: true
+    ema_confirm_enabled: true
+    ema_fast_period: 9
+    ema_slow_period: 21
 
   mean_reversion:
     enabled: false
