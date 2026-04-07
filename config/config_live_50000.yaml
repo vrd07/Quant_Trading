@@ -148,28 +148,31 @@ strategies:
   breakout:
     enabled: true
     timeframe: 5m
-    donchian_period: 15             # Tighter channel (75 min) catches more setups
-    rr_ratio: 2.5                   # Increased from 2.0 — higher payoff per win
+    donchian_period: 12             # v3: shorter channel (60 min) — faster breakout detection
+    rr_ratio: 3.0                   # v3: wider TP — gold trends well, capture more per winner
     only_in_regime: TREND
-    atr_stop_multiplier: 2.0        # Tightened from 2.5 — tighter invalidation
-    adx_min_threshold: 20
-    min_body_atr_ratio: 0.30
+    atr_stop_multiplier: 2.0        # v3: back to 2.0 — 1.5 was too tight, stops hit too early
+    adx_min_threshold: 20           # v3: back to 20 — quality over quantity
+    min_body_atr_ratio: 0.30        # v3: back to 0.30 — ensures quality breakout bars
     volume_confirmation: false
-    rsi_overbought: 75
-    rsi_oversold: 25
-    atr_spike_mult: 1.5
-    cooldown_bars: 4                # Reduced from 8 — better filters allow more trades
-    # v2 filters: data-driven from 958-trade backtest analysis
+    rsi_overbought: 78              # v3: widened from 75 — let strong trends run
+    rsi_oversold: 22                # v3: widened from 25
+    atr_spike_mult: 1.8             # v3: relaxed from 1.5 — gold is volatile, allow more
+    cooldown_bars: 2                # v3: reduced from 4 — more trade frequency
+    # v3 filters: data-driven from 353-trade backtest analysis
     bb_squeeze_enabled: true        # Only breakout after consolidation
     bb_squeeze_period: 20
-    bb_squeeze_percentile: 60       # BB width must be below 60th %ile of last 50 bars
+    bb_squeeze_percentile: 70       # v3: relaxed from 60 — less restrictive entry
     bb_squeeze_lookback: 50
     htf_trend_enabled: true         # 1H EMA(21) trend must align with breakout direction
     htf_ema_period: 21
     session_filter_enabled: true    # Only trade during high-WR sessions
-    allowed_sessions: [[4,9],[13,16],[21,23]]  # London, NY open, late NY
-    close_position_pct: 0.30        # Close must be in top/bottom 30% of bar range
+    allowed_sessions: [[4,4],[7,8],[22,22]]  # v3: ONLY profitable hours — London pre (4), prime (7-8), late NY (22)
+    close_position_pct: 0.35        # v3: relaxed from 0.30 — fewer false rejections
     macd_confirmation: true         # MACD histogram must confirm direction
+    ema_confirm_enabled: true       # v3: EMA fast/slow crossover alignment — improved WR to 33.5%
+    ema_fast_period: 9
+    ema_slow_period: 21
 
   mean_reversion:
     enabled: false              # -1.63%, PF 0.40, 15% WR — no edge on gold
