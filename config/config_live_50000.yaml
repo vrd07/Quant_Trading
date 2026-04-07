@@ -227,26 +227,36 @@ strategies:
     only_in_regime: TREND
 
   # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
-  # Kalman: +11.95%, PF 1.15, DD 3.38% — best overall strategy
-  # Minimal changes — don't fix what isn't broken
+  # Kalman v2: pure Kalman + session filter on 15m — data-driven optimization
+  # v1 best hours: 20 (39% WR, $19/trade), 21 (32% WR, $36/trade), 4 (32%, $7), 3-6 profitable
+  # EMA/MACD filters HURT WR in best hours — removed. Session filter + Kalman purity wins.
   kalman_regime:
     enabled: true
     timeframe: 15m
-    long_only: true                 # Audit: SELL side lost -$1,539 vs BUY +$2,545. Gold upward drift.
+    long_only: true                 # SELL side lost -$3,106 even with MACD filters. Long-only.
     kalman_q: 0.00001
     kalman_r: 0.01
     rv_window: 20
     rv_ma_window: 100
     zscore_window: 20
-    entry_threshold: 2.5
-    trend_adx_min: 22
-    kalman_confirm_bars: 2
-    min_signal_strength: 0.75
-    cooldown_bars: 30
+    entry_threshold: 2.0            # v2: lowered from 2.5 — more range entries
+    trend_adx_min: 20               # v2: lowered from 22
+    kalman_confirm_bars: 2          # Keep 2-bar confirmation (proven in v1)
+    min_signal_strength: 0.50
+    cooldown_bars: 2                # v2: 30 min cooldown (was 30 bars = 7.5hr!)
     atr_period: 14
     sl_atr_multiplier: 1.5
-    tp_atr_multiplier: 5.0
+    tp_atr_multiplier: 8.0          # v2: 8x ATR TP — let big trends run ($128 per winner)
     news_filter: true
+    # v2: session filter only — EMA/MACD disabled (hurt WR in best hours)
+    session_filter_enabled: true
+    allowed_sessions: [[1,6],[15,15],[20,21]]  # v1 profitable hours only
+    ema_confirm_enabled: false
+    macd_confirmation: false
+    kalman_accel_enabled: false
+    stoch_confirm_enabled: false
+    range_rsi_buy: 42
+    range_rsi_sell: 58
 
   # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
   # Mini Medallion: DISABLED — audit: negative expectancy -$2.58/trade, PF 0.84, total loss -$1,816
