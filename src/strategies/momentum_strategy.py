@@ -88,6 +88,10 @@ class MomentumStrategy(BaseStrategy):
 
         self.ml_dynamic_exhaustion = config.get('ml_dynamic_exhaustion', False)
 
+        # Session filter: only trade during profitable hours (data-driven)
+        self.session_filter_enabled = config.get('session_filter_enabled', False)
+        self.allowed_hours = config.get('allowed_hours', [])
+
         # H1 HTF trend alignment cache
         self._h1_last_len: int = 0
         self._h1_trend_cached: Optional[bool] = None
@@ -123,6 +127,12 @@ class MomentumStrategy(BaseStrategy):
     def on_bar(self, bars: pd.DataFrame) -> Optional[Signal]:
         if not self.is_enabled():
             return None
+
+        # Session filter: skip bars outside profitable hours
+        if self.session_filter_enabled and self.allowed_hours:
+            bar_hour = bars.index[-1].hour if hasattr(bars.index[-1], 'hour') else 0
+            if bar_hour not in self.allowed_hours:
+                return None
 
         min_bars = max(self.macd_slow + self.macd_signal + 5,
                        self.rsi_period + 5,
