@@ -288,17 +288,22 @@ strategies:
     enabled: true
     timeframe: 5m
     lookback_period: 20           # Donchian channel period for structure detection
-    retest_tolerance_atr: 0.5     # How close price must return to broken level (ATR units)
-    min_rejection_ratio: 0.6      # Minimum wick/body ratio for rejection confirmation
-    retest_window_bars: 30        # Max bars to wait for retest after break
-    adx_min_threshold: 20         # Trend strength required
-    rsi_overbought: 75
-    rsi_oversold: 25
-    atr_stop_multiplier: 1.5      # SL beyond the broken level (tight invalidation)
-    rr_ratio: 2.5                 # $40 risk × 2.5 = $100 target
-    cooldown_bars: 10
-    long_only: false              # Both sides — retest gives natural invalidation
+    retest_tolerance_atr: 0.4     # Tighter retest zone (was 0.5)
+    min_rejection_ratio: 0.55     # Slightly relaxed to catch more valid retests
+    retest_window_bars: 20        # Tighter window (was 30) — stale breaks fail
+    adx_min_threshold: 22         # Slightly higher ADX floor
+    adx_max_threshold: 55         # Cap ADX — overheated trends whipsaw
+    rsi_overbought: 70            # Tighter RSI bands
+    rsi_oversold: 30
+    atr_stop_multiplier: 1.2      # Tighter SL (was 1.5) — broken level is strong invalidation
+    rr_ratio: 2.0                 # Lowered from 2.5 — improves TP hit rate
+    cooldown_bars: 6              # Faster re-entry — EMA+ADX filters handle quality
+    long_only: false
     only_in_regime: TREND
+    # v2 filters
+    ema_trend_period: 50          # 50-EMA trend alignment required
+    min_strength: 0.65            # Moderate strength gate
+    session_hours: [1, 3, 4, 5, 6, 7, 9, 10, 13, 16, 17, 19, 22]  # All profitable hours from analysis
 
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
