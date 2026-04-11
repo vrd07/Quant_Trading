@@ -241,12 +241,6 @@ class RiskEngine:
                     daily_loss=daily_loss,
                     limit=max_daily_loss
                 )
-            elif daily_loss > 0 and daily_loss >= max_daily_loss:
-                 # Case where limit is 0 but we have loss (should have been caught by balance check, but safe to keep)
-                reason = f"Daily loss limit reached (zero limit): ${daily_loss} >= ${max_daily_loss}"
-                self._trigger_kill_switch(reason)
-                raise DailyLossLimitError(reason, daily_loss=daily_loss, limit=max_daily_loss)
-            
             # CHECK 4b: Daily profit limit
             if self.max_daily_profit_usd > 0 and daily_pnl >= self.max_daily_profit_usd:
                 reason = f"🎯 Daily profit target reached: ${daily_pnl} >= ${self.max_daily_profit_usd}. Stopping for today."
@@ -273,7 +267,8 @@ class RiskEngine:
                 current_equity=account_equity
             )
             
-            bypass_drawdown = self.config.get('risk', {}).get('bypass_drawdown_limit', True) # Force bypass for user
+            # Mitnick: default to protection ON — opt-out must be explicit in config
+            bypass_drawdown = self.config.get('risk', {}).get('bypass_drawdown_limit', False)
             if current_drawdown >= self.max_drawdown_pct and not bypass_drawdown:
                 reason = f"Drawdown limit reached: {current_drawdown:.2%} >= {self.max_drawdown_pct:.2%}"
                 self.logger.error(
@@ -347,8 +342,12 @@ class RiskEngine:
                 return False, reason
             
             # CHECK 9: Risk per trade validation
+            # Knuth fix: must use value_per_lot to get actual dollar risk,
+            # consistent with CHECK 3c's worst-case SL calculation.
             if order.price and order.stop_loss:
-                risk_amount = abs(order.quantity * (order.price - order.stop_loss))
+                sl_distance = abs(order.price - order.stop_loss)
+                value_per_lot = order.symbol.value_per_lot if order.symbol else Decimal("1")
+                risk_amount = sl_distance * order.quantity * value_per_lot
                 max_risk = account_balance * self.risk_per_trade_pct
                 
                 if risk_amount > max_risk:
