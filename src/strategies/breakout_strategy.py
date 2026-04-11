@@ -107,8 +107,9 @@ class BreakoutStrategy(BaseStrategy):
         if not self.session_filter_enabled:
             return True
 
-        current_time = bars.index[-1]
-        hour = current_time.hour
+        hour = self._get_bar_hour(bars)
+        if hour is None:
+            return True  # Cannot determine session — don't block trading
 
         for start_hour, end_hour in self.allowed_sessions:
             if start_hour <= hour <= end_hour:
