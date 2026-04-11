@@ -384,6 +384,30 @@ class MT5Connector:
             logger.error("Error getting closed positions: %s", e, exc_info=True)
             return []
     
+    def get_bars(self, symbol: str, timeframe: str = "M1", count: int = 500) -> List[Dict]:
+        """
+        Fetch historical bars from MT5 via CopyRates (geohot: own your stack).
+
+        Args:
+            symbol: Instrument ticker
+            timeframe: MT5 timeframe (M1/M5/M15/H1/H4/D1)
+            count: Number of bars
+
+        Returns:
+            List of {time, open, high, low, close, volume} dicts
+        """
+        mapped = self._symbol_map.get(symbol, symbol)
+        logger.debug("Requesting %d %s bars for %s", count, timeframe, mapped)
+        try:
+            response = self.client.get_bars(symbol=mapped, timeframe=timeframe, count=count)
+            if response.get("status") == "ERROR":
+                logger.warning("GET_BARS failed: %s", response.get("message"))
+                return []
+            return response.get("bars", [])
+        except Exception as e:
+            logger.warning("GET_BARS error for %s: %s", symbol, e)
+            return []
+
     def get_current_tick(self, symbol: str) -> Optional[Tick]:
         """Get current tick for a symbol."""
         logger.debug("Getting current tick for %s", symbol)
