@@ -315,6 +315,33 @@ strategies:
     min_strength: 0.65            # Moderate strength gate
     session_hours: [5, 6, 7, 13, 16, 17, 22]  # High-WR hours: London open, NY afternoon, late session
 
+  # ── SUPPLY & DEMAND ZONE STRATEGY ─────────────────────────────────────────
+  # Trades confirmed retests of algorithmically-detected S&D zones.
+  # Zone = consolidation base immediately before a strong impulse move (>= 2.5× ATR body).
+  # Entry fires when price returns to the base zone with a rejection candle.
+  #
+  # Disabled by default — backtest on XAUUSD 5m before enabling live.
+  # To backtest: python scripts/run_backtest.py --strategy supply_demand
+  supply_demand:
+    enabled: false               # Enable only after backtest validates edge
+    timeframe: 5m
+    # Zone formation
+    min_impulse_atr_mult: 2.5   # Impulse bar body must be >= 2.5× ATR (strong move)
+    zone_lookback_bars: 5       # Candles before the impulse that form the zone base
+    zone_max_age_bars: 100      # Expire stale zones after 100 bars (~8 hrs on 5m)
+    max_active_zones: 3         # Cap to 3 per direction — oldest evicted when full
+    # Entry confirmation
+    zone_touch_tolerance_atr: 0.3   # Allow price to be within 0.3× ATR of zone edge
+    min_rejection_ratio: 0.55       # Rejection wick / bar range >= 0.55
+    adx_min_threshold: 18           # Trend must be at least mildly active
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50            # 50-EMA alignment filter
+    long_only: false                # Both demand (buy) and supply (sell) enabled
+    session_hours: [4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 22]  # London + NY + late NY
+    cooldown_bars: 10               # Minimum bars between signals
+
+
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
   # friday_cutoff_utc: "19:00"
