@@ -34,7 +34,7 @@ symbols:
     max_spread: 3.5
 
   BTCUSD:
-    enabled: false
+    enabled: true
     pip_value: 0.1
     min_lot: 0.01
     max_lot: 0.01
@@ -90,9 +90,9 @@ risk:
   risk_per_trade_pct: 0.0015      # 0.15% = $15 per trade
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
-  absolute_max_loss_usd: 145      # Daily loss limit — conservative below 1.5%
+  absolute_max_loss_usd: 200      # Daily loss limit — conservative below 1.5%
   max_drawdown_usd: 590           # Overall drawdown limit ($700 with buffer)
-  max_daily_profit_usd: 150       # Stop trading for the day once $150 profit hit
+  max_daily_profit_usd: 400       # Stop trading for the day once $150 profit hit
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
                                       # would push daily loss past 85% of $145 = $123.25
 
@@ -106,16 +106,16 @@ risk:
     fixed_lots:
       XAUUSD: 0.02
       EURUSD: 0.01
-      default: 0.01
+      default: 0.05
   circuit_breaker:
     enabled: true
     max_consecutive_losses: 3      # Tightened — audit standard
     cooldown_minutes: 30
-    loss_pause_consecutive: 2
+    loss_pause_consecutive: 3
     loss_pause_minutes: 30
 
   trailing_stop:
-    enabled: true
+    enabled: false
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
