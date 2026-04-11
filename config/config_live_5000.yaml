@@ -290,6 +290,25 @@ strategies:
     min_strength: 0.65
     session_hours: [5, 6, 7, 13, 16, 17, 22]
 
+  # ── SUPPLY & DEMAND ZONE STRATEGY ─────────────────────────────────────────
+  # Disabled by default — backtest before enabling live.
+  supply_demand:
+    enabled: false
+    timeframe: 5m
+    min_impulse_atr_mult: 2.5
+    zone_lookback_bars: 5
+    zone_max_age_bars: 100
+    max_active_zones: 3
+    zone_touch_tolerance_atr: 0.3
+    min_rejection_ratio: 0.55
+    adx_min_threshold: 18
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    long_only: false
+    session_hours: [4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 22]
+    cooldown_bars: 10
+
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
   # friday_cutoff_utc: "19:00"
