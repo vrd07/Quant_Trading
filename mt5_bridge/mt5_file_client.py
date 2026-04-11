@@ -255,16 +255,35 @@ class MT5FileClient:
     def get_history(self, minutes=1440):
         """
         Get trading history (deals) for the specified period.
-        
+
         Args:
             minutes: Number of minutes to look back (default 1440 = 24h)
-            
+
         Returns:
             dict: Histoy deals including profit
         """
         return self._send_command({
             "command": "GET_HISTORY",
             "minutes": str(minutes)
+        })
+
+    def get_bars(self, symbol, timeframe="M1", count=500):
+        """
+        Fetch historical bars via CopyRates (geohot: own your stack).
+
+        Args:
+            symbol: Instrument ticker (e.g. "XAUUSD")
+            timeframe: MT5 timeframe string (M1/M5/M15/H1/H4/D1)
+            count: Number of bars to fetch (max 5000)
+
+        Returns:
+            dict with 'bars' list of {time, open, high, low, close, volume}
+        """
+        return self._send_command({
+            "command": "GET_BARS",
+            "symbol": symbol,
+            "timeframe": timeframe,
+            "count": str(count)
         })
 
 
