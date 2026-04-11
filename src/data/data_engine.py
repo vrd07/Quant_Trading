@@ -88,94 +88,162 @@ class DataEngine:
     
     def preload_historical_bars(self, bars_count: int = 2000) -> Dict[str, int]:
         """
-        Preload historical bars from yfinance on startup.
-        
-        Fetches recent 1m candles so strategies can evaluate immediately
-        instead of waiting 22-130 minutes to build bars from live ticks.
-        
+        Preload historical bars on startup.
+
+        geohot: try local CSV cache first (written by the system itself),
+        then fall back to yfinance. We don't trust a single external dep
+        for the critical startup path.
+
         bars_count=2000 is required for kalman_regime:
           min_bars = rv_ma_window(100) + rv_window(20) + 10 = 130 * 15m bars
           130 15m bars × 15 min/bar = 1950 1m bars minimum.
-        
+
         Args:
-            bars_count: Number of 1m bars to preload (default 2000, enough for all strategies)
-            
+            bars_count: Number of 1m bars to preload (default 2000)
+
         Returns:
             Dict of {symbol: bars_loaded}
         """
-        # Map MT5 symbols to yfinance tickers
+        results = {}
+
+        for symbol_ticker, symbol in self.symbols.items():
+            # geohot: try local cache first — zero network dependency
+            loaded = self._preload_from_cache(symbol_ticker, symbol, bars_count)
+            if loaded > 0:
+                results[symbol_ticker] = loaded
+                continue
+
+            # Fallback: yfinance (external, may be slow or rate-limited)
+            loaded = self._preload_from_yfinance(symbol_ticker, symbol, bars_count)
+            if loaded > 0:
+                results[symbol_ticker] = loaded
+
+        return results
+
+    def _preload_from_cache(self, symbol_ticker: str, symbol, bars_count: int) -> int:
+        """
+        geohot: load from local CSV cache written by the system itself.
+        Zero network dependency. File written by _run_nightly_classifier.
+        """
+        from pathlib import Path
+        import os
+
+        base = symbol_ticker.split('.')[0] if '.' in symbol_ticker else symbol_ticker
+        candidates = [
+            Path(f"data/logs/candle_store_{symbol_ticker}_1m.csv"),
+            Path(f"data/logs/candle_store_{base}_1m.csv"),
+            Path(f"data/logs/candle_store_{symbol_ticker}_5m.csv"),
+            Path(f"data/logs/candle_store_{base}_5m.csv"),
+        ]
+
+        for csv_path in candidates:
+            if not csv_path.exists():
+                continue
+            try:
+                import pandas as _pd
+                df = _pd.read_csv(csv_path, parse_dates=['timestamp'])
+                if df.empty or len(df) < 50:
+                    continue
+
+                if len(df) > bars_count:
+                    df = df.iloc[-bars_count:]
+
+                # Determine which timeframe this CSV represents
+                tf = '5m' if '5m' in str(csv_path) else '1m'
+                loaded = 0
+                for _, row in df.iterrows():
+                    ts = row['timestamp']
+                    if hasattr(ts, 'to_pydatetime'):
+                        ts = ts.to_pydatetime()
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+
+                    bar = Bar(
+                        symbol=symbol,
+                        timestamp=ts,
+                        open=Decimal(str(round(float(row['open']), 6))),
+                        high=Decimal(str(round(float(row['high']), 6))),
+                        low=Decimal(str(round(float(row['low']), 6))),
+                        close=Decimal(str(round(float(row['close']), 6))),
+                        volume=Decimal(str(int(row.get('volume', 0))))
+                    )
+                    self.candle_stores[symbol_ticker][tf].add_bar(bar)
+                    loaded += 1
+
+                logger.info(
+                    f"Preloaded {loaded} {tf} bars for {symbol_ticker} from cache: {csv_path}"
+                )
+                if tf == '1m':
+                    self._build_higher_tf_from_1m(symbol_ticker)
+                return loaded
+
+            except Exception as e:
+                logger.debug(f"Cache preload failed for {csv_path}: {e}")
+
+        return 0
+
+    def _preload_from_yfinance(self, symbol_ticker: str, symbol, bars_count: int) -> int:
+        """Fallback: fetch from yfinance when no local cache exists."""
         yf_symbol_map = {
             'BTCUSD': 'BTC-USD',
             'ETHUSD': 'ETH-USD',
             'XAUUSD': 'GC=F',
             'EURUSD': 'EURUSD=X',
-            'US30': '^DJI',       # Dow Jones
-            'USOIL': 'CL=F',      # Crude Oil
+            'US30': '^DJI',
+            'USOIL': 'CL=F',
         }
-        
-        results = {}
-        
-        for symbol_ticker, symbol in self.symbols.items():
-            base_ticker = symbol_ticker.split('.')[0] if '.' in symbol_ticker else symbol_ticker
-            yf_ticker = yf_symbol_map.get(symbol_ticker) or yf_symbol_map.get(base_ticker)
-            
-            if not yf_ticker:
-                logger.warning(f"No yfinance mapping for {symbol_ticker} (base {base_ticker}), skipping preload")
-                continue
-            
-            try:
-                import yfinance as yf
-                
-                # Fetch 1m data (yfinance allows up to 7d for 1m interval)
-                # Use '5d' to ensure we get enough bars for all strategies,
-                # especially kalman_regime which needs 130 15m bars (= 1950 1m bars).
-                ticker = yf.Ticker(yf_ticker)
-                hist = ticker.history(period="5d", interval="1m")
-                
-                if hist.empty:
-                    logger.warning(f"No yfinance data for {symbol_ticker}")
-                    continue
-                
-                # Limit to requested bar count
-                if len(hist) > bars_count:
-                    hist = hist.iloc[-bars_count:]
-                
-                loaded = 0
-                for idx, row in hist.iterrows():
-                    ts = idx.to_pydatetime()
-                    if ts.tzinfo is None:
-                        ts = ts.replace(tzinfo=timezone.utc)
-                    
-                    bar = Bar(
-                        symbol=symbol,
-                        timestamp=ts,
-                        open=Decimal(str(round(row['Open'], 6))),
-                        high=Decimal(str(round(row['High'], 6))),
-                        low=Decimal(str(round(row['Low'], 6))),
-                        close=Decimal(str(round(row['Close'], 6))),
-                        volume=Decimal(str(int(row.get('Volume', 0))))
-                    )
-                    
-                    # Add to 1m store
-                    self.candle_stores[symbol_ticker]['1m'].add_bar(bar)
-                    loaded += 1
-                
-                results[symbol_ticker] = loaded
-                logger.info(
-                    f"Preloaded {loaded} bars for {symbol_ticker} from yfinance "
-                    f"({hist.index[0]} to {hist.index[-1]})"
+
+        base_ticker = symbol_ticker.split('.')[0] if '.' in symbol_ticker else symbol_ticker
+        yf_ticker = yf_symbol_map.get(symbol_ticker) or yf_symbol_map.get(base_ticker)
+
+        if not yf_ticker:
+            logger.warning(f"No yfinance mapping for {symbol_ticker}, skipping preload")
+            return 0
+
+        try:
+            import yfinance as yf
+
+            ticker = yf.Ticker(yf_ticker)
+            hist = ticker.history(period="5d", interval="1m")
+
+            if hist.empty:
+                logger.warning(f"No yfinance data for {symbol_ticker}")
+                return 0
+
+            if len(hist) > bars_count:
+                hist = hist.iloc[-bars_count:]
+
+            loaded = 0
+            for idx, row in hist.iterrows():
+                ts = idx.to_pydatetime()
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+
+                bar = Bar(
+                    symbol=symbol,
+                    timestamp=ts,
+                    open=Decimal(str(round(row['Open'], 6))),
+                    high=Decimal(str(round(row['High'], 6))),
+                    low=Decimal(str(round(row['Low'], 6))),
+                    close=Decimal(str(round(row['Close'], 6))),
+                    volume=Decimal(str(int(row.get('Volume', 0))))
                 )
-                
-                # Also build higher TF bars from 1m data
-                self._build_higher_tf_from_1m(symbol_ticker)
-                
-            except ImportError:
-                logger.warning("yfinance not installed, skipping preload")
-                break
-            except Exception as e:
-                logger.error(f"Failed to preload {symbol_ticker}: {e}", exc_info=True)
-        
-        return results
+                self.candle_stores[symbol_ticker]['1m'].add_bar(bar)
+                loaded += 1
+
+            logger.info(
+                f"Preloaded {loaded} bars for {symbol_ticker} from yfinance "
+                f"({hist.index[0]} to {hist.index[-1]})"
+            )
+            self._build_higher_tf_from_1m(symbol_ticker)
+            return loaded
+
+        except ImportError:
+            logger.warning("yfinance not installed, skipping preload")
+            return 0
+        except Exception as e:
+            logger.error(f"Failed to preload {symbol_ticker} from yfinance: {e}", exc_info=True)
+            return 0
     
     def _build_higher_tf_from_1m(self, symbol_ticker: str) -> None:
         """Build higher timeframe bars from preloaded 1m data."""
