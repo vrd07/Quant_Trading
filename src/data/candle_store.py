@@ -92,31 +92,34 @@ class CandleStore:
     ) -> pd.DataFrame:
         """
         Get bars from store.
-        
+
+        Blow: avoid .copy() on the hot path — strategies call this
+        every loop iteration for every timeframe.  When no filters are
+        applied (the common case), return a reset_index view without
+        copying the underlying data.
+
         Args:
             count: Number of most recent bars
             start_time: Filter by start time
             end_time: Filter by end time
-        
+
         Returns:
             DataFrame with OHLCV data
         """
-        df = self.df.copy()
-        
-        # Apply time filters
-        if start_time:
-            df = df[df.index >= start_time]
-        if end_time:
-            df = df[df.index <= end_time]
-        
-        # Apply count limit
-        if count and len(df) > count:
-            df = df.iloc[-count:]
-        
-        # Reset index to make timestamp a column
-        df = df.reset_index()
-        
-        return df
+        needs_filter = start_time or end_time or (count and len(self.df) > count)
+
+        if needs_filter:
+            df = self.df.copy()
+            if start_time:
+                df = df[df.index >= start_time]
+            if end_time:
+                df = df[df.index <= end_time]
+            if count and len(df) > count:
+                df = df.iloc[-count:]
+            return df.reset_index()
+
+        # Fast path: no filters — avoid full DataFrame copy
+        return self.df.reset_index()
     
     def get_latest_bar(self) -> Optional[Bar]:
         """Get most recent bar."""
