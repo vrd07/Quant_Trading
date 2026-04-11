@@ -110,8 +110,11 @@ class ExecutionEngine:
             Order object if submitted, None if rejected
         """
         try:
+            # Jeff Dean: instrument signal-to-order latency — you can't
+            # improve what you can't measure.
+            _t0 = time.monotonic()
             signal_id = str(signal.signal_id)
-            
+
             # 0. ONE-DIRECTION ONLY: Reject signals opposite to existing positions
             #    Prevents hedging (simultaneous BUY + SELL) which can blow the account
             if signal.symbol and current_positions:
@@ -263,7 +266,16 @@ class ExecutionEngine:
             
             # 4. Submit to MT5
             submitted_order = self._submit_order(order)
-            
+
+            # Jeff Dean: log signal-to-submission latency
+            _latency_ms = (time.monotonic() - _t0) * 1000
+            self.logger.info(
+                "Signal-to-submission latency",
+                latency_ms=round(_latency_ms, 1),
+                order_id=str(order.order_id),
+                strategy=signal.strategy_name
+            )
+
             return submitted_order
             
 
@@ -312,7 +324,8 @@ class ExecutionEngine:
                 attempt=retry_count + 1
             )
             
-            # Place order via connector
+            # Place order via connector — measure MT5 round-trip
+            _mt5_t0 = time.monotonic()
             result = self.connector.place_order(
                 symbol=order.symbol.ticker if order.symbol else "",
                 side=order.side,
@@ -324,19 +337,23 @@ class ExecutionEngine:
                 comment=f"{order.metadata.get('strategy', 'sys')}|{str(order.order_id)[:8]}"
             )
             
+            _mt5_latency_ms = (time.monotonic() - _mt5_t0) * 1000
+
             # Update order with MT5 response
             order.status = OrderStatus.ACCEPTED
             order.metadata['mt5_order_id'] = result.metadata.get('mt5_order_id')
             order.metadata['mt5_ticket'] = result.metadata.get('mt5_ticket')
+            order.metadata['mt5_latency_ms'] = round(_mt5_latency_ms, 1)
             self.order_manager.update_order(order)
-            
+
             # Increment daily trade count
             self.risk_engine.increment_daily_trade_count()
-            
+
             self.logger.info(
                 "Order accepted by MT5",
                 order_id=str(order.order_id),
-                mt5_ticket=result.metadata.get('mt5_ticket')
+                mt5_ticket=result.metadata.get('mt5_ticket'),
+                mt5_latency_ms=round(_mt5_latency_ms, 1)
             )
             
             return order
