@@ -1188,7 +1188,27 @@ class TradingSystem:
                 self.portfolio_engine.add_position(position)
             
             # Restore risk engine state
-            self.risk_engine.equity_high_water_mark = state.equity_high_water_mark
+            # Sanity-clamp stale HWM: if the restored high-water mark would
+            # imply a drawdown greater than the configured limit against the
+            # live account equity, it's almost certainly leftover from a
+            # different/larger account. Reset to current equity with a warning.
+            restored_hwm = state.equity_high_water_mark
+            current_equity = mt5_account.get('equity', Decimal("0"))
+            if (
+                restored_hwm > 0
+                and current_equity > 0
+                and restored_hwm > current_equity
+                and (restored_hwm - current_equity) / restored_hwm >= self.risk_engine.max_drawdown_pct
+            ):
+                self.logger.warning(
+                    "Stale equity HWM detected on restore — resetting to current equity",
+                    restored_hwm=float(restored_hwm),
+                    current_equity=float(current_equity),
+                    implied_drawdown=float((restored_hwm - current_equity) / restored_hwm),
+                    limit=float(self.risk_engine.max_drawdown_pct),
+                )
+                restored_hwm = current_equity
+            self.risk_engine.equity_high_water_mark = restored_hwm
             self.risk_engine.daily_start_equity = state.daily_start_equity
             self.risk_engine.daily_trades_count = state.daily_trades_count
             self.risk_engine.circuit_breaker.consecutive_losses = state.consecutive_losses
