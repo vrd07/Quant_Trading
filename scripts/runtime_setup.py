@@ -99,10 +99,18 @@ def main() -> int:
             print()
             continue
 
-        broker_ticker = _prompt_str(
-            f"    Broker ticker for {base_ticker}",
-            default=base_ticker,
-        )
+        while True:
+            broker_ticker = _prompt_str(
+                f"    Broker ticker for {base_ticker}",
+                default=base_ticker,
+            )
+            try:
+                float(broker_ticker)
+                print(f"    '{broker_ticker}' looks like a number — enter a symbol name (e.g. {base_ticker}, {base_ticker}.x).")
+                continue
+            except ValueError:
+                pass
+            break
 
         min_lot = float(sym_cfg.get("min_lot", 0.01))
         max_lot = float(sym_cfg.get("max_lot", 1.0))
@@ -112,8 +120,7 @@ def main() -> int:
             minimum=min_lot,
         )
         if lot > max_lot:
-            print(f"    Clamped to max_lot {max_lot}")
-            lot = max_lot
+            print(f"    WARNING: {lot} exceeds config max_lot ({max_lot}) — using your value anyway.")
 
         pip_usd = _usd_per_pip(sym_cfg, lot)
         print(f"    => 1 pip on {lot} lots {broker_ticker} ≈ ${pip_usd:.2f}")
