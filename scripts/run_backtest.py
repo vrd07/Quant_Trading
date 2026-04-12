@@ -83,7 +83,8 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
     elif strategy_name == 'momentum':
         return MomentumStrategy(symbol, strats.get('momentum', {}))
     elif strategy_name == 'vwap':
-        return VWAPStrategy(symbol, strats.get('vwap', {}))
+        cfg = dict(strats.get('vwap', {})); cfg['enabled'] = True
+        return VWAPStrategy(symbol, cfg)
     elif strategy_name == 'kalman_regime':
         return KalmanRegimeStrategy(symbol, strats.get('kalman_regime', {}))
     elif strategy_name == 'mini_medallion':
