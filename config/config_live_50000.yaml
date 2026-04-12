@@ -357,7 +357,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr]
+      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
