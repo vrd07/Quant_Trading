@@ -30,10 +30,11 @@ from src.strategies.vwap_strategy import VWAPStrategy
 from src.strategies.kalman_regime_strategy import KalmanRegimeStrategy
 from src.strategies.mini_medallion_strategy import MiniMedallionStrategy
 from src.strategies.structure_break_retest import StructureBreakRetestStrategy
+from src.strategies.supply_demand_strategy import SupplyDemandStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'all']
+STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'all']
 
 
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
@@ -89,6 +90,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         return MiniMedallionStrategy(symbol, strats.get('mini_medallion', {}))
     elif strategy_name == 'sbr':
         return StructureBreakRetestStrategy(symbol, strats.get('sbr', {}))
+    elif strategy_name == 'supply_demand':
+        cfg = dict(strats.get('supply_demand', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return SupplyDemandStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
