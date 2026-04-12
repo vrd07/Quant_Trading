@@ -194,6 +194,20 @@ def main() -> int:
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print("=" * 60)
     print()
+    print("!" * 60)
+    print("  IMPORTANT — MT5 chart attachment")
+    print("!" * 60)
+    print("  The EA only streams live quotes for the chart it's attached")
+    print("  to. Before signals can fire on a new symbol, open a chart of")
+    print("  that EXACT broker ticker and drag EA_FileBridge onto it:")
+    print()
+    for tkr in selected.keys():
+        print(f"    -> Open a {tkr} chart and attach the EA")
+    print()
+    print("  (In MT5: File > New Chart > pick ticker, then drag the EA")
+    print("   from Navigator > Expert Advisors onto the chart window.)")
+    print("!" * 60)
+    print()
     return 0
 
 
