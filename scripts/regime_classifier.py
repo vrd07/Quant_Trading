@@ -43,24 +43,49 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 from scripts.strategy_scorer import compute_strategy_scores, compute_regime_strategy_scores, adjust_weights
 
-OVERRIDE_FILE = PROJECT_ROOT / "data" / "config_override.json"
-DEFAULT_BARS = PROJECT_ROOT / "data" / "historical" / "XAUUSD_5m_real.csv"
+OVERRIDE_DIR = PROJECT_ROOT / "data"
+LEGACY_OVERRIDE_FILE = OVERRIDE_DIR / "config_override.json"  # kept as XAUUSD copy for back-compat
+HISTORICAL_DIR = PROJECT_ROOT / "data" / "historical"
 LIVE_LOG_DIR = PROJECT_ROOT / "data" / "logs"
 
 
-def _discover_live_candle_csvs() -> list:
-    """Auto-discover all XAUUSD-variant candle_store CSVs in data/logs/.
+def override_path_for(symbol: str) -> Path:
+    return OVERRIDE_DIR / f"config_override_{symbol.upper()}.json"
 
-    The bot may store bars under XAUUSD, XAUUSD.x, XAUUSD.e, XAUUSD.w, etc.
-    depending on which broker symbol variant is active. This function finds
-    all of them so the classifier always has the freshest live data.
 
-    Returns:
-        List of Path objects to candle_store CSV files.
+def historical_bars_for(symbol: str) -> Path:
+    return HISTORICAL_DIR / f"{symbol.upper()}_5m_real.csv"
+
+
+def discover_symbols() -> list:
+    """Find every symbol with usable data — historical CSV or live candle_store.
+
+    Returns a sorted list of base tickers (e.g. ["BTCUSD", "XAUUSD"]).
+    """
+    symbols = set()
+    if HISTORICAL_DIR.exists():
+        for p in HISTORICAL_DIR.glob("*_5m_real.csv"):
+            symbols.add(p.name.split("_5m_real.csv")[0].upper())
+    if LIVE_LOG_DIR.exists():
+        for p in LIVE_LOG_DIR.glob("candle_store_*_5m.csv"):
+            # candle_store_XAUUSD.x_5m.csv -> XAUUSD.x -> XAUUSD
+            mid = p.name[len("candle_store_"):-len("_5m.csv")]
+            base = mid.split(".")[0].upper()
+            if base:
+                symbols.add(base)
+    return sorted(symbols)
+
+
+def _discover_live_candle_csvs(symbol: str) -> list:
+    """Auto-discover all broker-variant candle_store CSVs for this symbol.
+
+    The bot may store bars under e.g. XAUUSD, XAUUSD.x, XAUUSD.e depending on
+    which broker ticker is active. Returns all of them so the classifier
+    always has the freshest live data for the given base symbol.
     """
     if not LIVE_LOG_DIR.exists():
         return []
-    return sorted(LIVE_LOG_DIR.glob("candle_store_XAUUSD*_5m.csv"))
+    return sorted(LIVE_LOG_DIR.glob(f"candle_store_{symbol.upper()}*_5m.csv"))
 
 
 # --- Feature Engineering ---------------------------------------------------
@@ -484,21 +509,19 @@ def classify_ml(
 
 # ─── Main ─────────────────────────────────────────────────────────────────────
 
-def run_classifier(bars_file: Path = None) -> dict:
+def run_classifier(symbol: str = "XAUUSD", bars_file: Path = None) -> dict:
     """
-    Run the full classification pipeline.
-    Returns the override dict (also written to disk).
+    Run the full classification pipeline for one symbol.
+    Returns the override dict (also written to disk as config_override_{SYMBOL}.json).
     """
+    symbol = symbol.upper()
     now_utc = datetime.now(timezone.utc)
     print(f"\n{'='*60}")
-    print(f"🤖  Nightly Regime Classifier — {now_utc.strftime('%Y-%m-%d %H:%M UTC')}")
+    print(f"🤖  Nightly Regime Classifier [{symbol}] — {now_utc.strftime('%Y-%m-%d %H:%M UTC')}")
     print(f"{'='*60}\n")
 
     # ── Load and Stitch bars ─────────────────────────────────────
-    # Combine long-term static history with all recent live candle_store
-    # CSVs. Live files are appended AFTER historical so that
-    # drop_duplicates(keep='last') preserves newer live data.
-    sources = [DEFAULT_BARS] + _discover_live_candle_csvs()
+    sources = [historical_bars_for(symbol)] + _discover_live_candle_csvs(symbol)
     if bars_file:
         sources.append(bars_file)
 
@@ -530,7 +553,7 @@ def run_classifier(bars_file: Path = None) -> dict:
     if df_5m is None or len(df_5m) < 50:
         print("⚠️  Insufficient data — using rule-based classification only.")
         regime, confidence = classify_rule_based({})
-        return _write_override(regime, confidence, {}, "rule-based (no data)", now_utc)
+        return _write_override(symbol, regime, confidence, {}, "rule-based (no data)", now_utc)
 
     # ── Aggregate to daily ────────────────────────────────────────
     daily = compute_daily_bars(df_5m)
@@ -550,7 +573,7 @@ def run_classifier(bars_file: Path = None) -> dict:
     if len(feat_df) == 0:
         print("⚠️  No valid feature rows — falling back to rule-based.")
         regime, confidence = classify_rule_based({})
-        return _write_override(regime, confidence, {}, "rule-based (no features)", now_utc)
+        return _write_override(symbol, regime, confidence, {}, "rule-based (no features)", now_utc)
 
     last_feat = feat_df.iloc[-1][FEATURE_COLS].to_dict()
     print(f"\n\U0001f4ca  Today's market features:")
@@ -560,14 +583,15 @@ def run_classifier(bars_file: Path = None) -> dict:
     # -- Compute Markov transition matrix -----------------------------------
     trans_matrix = compute_transition_matrix(labels)
     prev_regime = None
-    prev_override = _load_previous_override()
+    prev_override = _load_previous_override(symbol)
     if prev_override:
         prev_regime = prev_override.get("regime")
     print(f"\n\U0001f517  Markov chain: previous regime = {prev_regime or 'N/A'}")
 
     # -- Compute trade-performance scores (RL-lite feedback) ----------------
-    perf_scores = compute_strategy_scores(lookback_days=30)
-    regime_perf_scores = compute_regime_strategy_scores(lookback_days=30)
+    # Per-symbol scoring so BTC P&L doesn't distort XAU weights and vice versa.
+    perf_scores = compute_strategy_scores(lookback_days=30, symbol=symbol)
+    regime_perf_scores = compute_regime_strategy_scores(lookback_days=30, symbol=symbol)
     if perf_scores:
         print(f"\n\U0001f4c8  Trade performance scores (last 30d, global):")
         for strat, score in sorted(perf_scores.items(), key=lambda x: -x[1]):
@@ -600,7 +624,7 @@ def run_classifier(bars_file: Path = None) -> dict:
     print(f"    Classifier       : {clf_name}")
 
     return _write_override(
-        regime, confidence, last_feat, clf_name, now_utc,
+        symbol, regime, confidence, last_feat, clf_name, now_utc,
         transition_matrix=trans_matrix,
         performance_scores=perf_scores,
         regime_performance_scores=regime_perf_scores,
@@ -608,11 +632,12 @@ def run_classifier(bars_file: Path = None) -> dict:
     )
 
 
-def _load_previous_override() -> dict:
-    """Load the previous config_override.json for Markov chain prior."""
-    if OVERRIDE_FILE.exists():
+def _load_previous_override(symbol: str) -> dict:
+    """Load the previous config_override_{SYMBOL}.json for Markov chain prior."""
+    path = override_path_for(symbol)
+    if path.exists():
         try:
-            with open(OVERRIDE_FILE) as f:
+            with open(path) as f:
                 return json.load(f)
         except (json.JSONDecodeError, IOError):
             pass
@@ -620,6 +645,7 @@ def _load_previous_override() -> dict:
 
 
 def _write_override(
+    symbol: str,
     regime: str,
     confidence: float,
     diagnostics: dict,
@@ -644,6 +670,7 @@ def _write_override(
     base_weights = STRATEGY_WEIGHTS.get(regime, STRATEGY_WEIGHTS["RANGE"])
 
     override = {
+        "symbol": symbol,
         "generated_at": now_utc.isoformat(),
         "valid_until": (now_utc + timedelta(hours=24)).isoformat(),
         "regime": regime,
@@ -658,22 +685,29 @@ def _write_override(
         "transition_matrix": transition_matrix or {},
     }
 
-    OVERRIDE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    out_path = override_path_for(symbol)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
     # Atomic write: write to temp file then rename so main.py never reads partial JSON
     import tempfile
     import os
-    tmp_fd, tmp_path = tempfile.mkstemp(
-        dir=OVERRIDE_FILE.parent, prefix=".override_tmp_", suffix=".json"
-    )
-    try:
-        with os.fdopen(tmp_fd, "w") as f:
-            json.dump(override, f, indent=2)
-        Path(tmp_path).replace(OVERRIDE_FILE)   # POSIX-atomic rename
-    except Exception:
-        Path(tmp_path).unlink(missing_ok=True)
-        raise
+    def _atomic_write(target: Path, payload: dict) -> None:
+        tmp_fd, tmp_path = tempfile.mkstemp(
+            dir=target.parent, prefix=".override_tmp_", suffix=".json"
+        )
+        try:
+            with os.fdopen(tmp_fd, "w") as f:
+                json.dump(payload, f, indent=2)
+            Path(tmp_path).replace(target)   # POSIX-atomic rename
+        except Exception:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
 
-    print(f"\n\u2705  Written to: {OVERRIDE_FILE}")
+    _atomic_write(out_path, override)
+    # XAUUSD also refreshes the legacy unsuffixed file so older consumers keep working.
+    if symbol == "XAUUSD":
+        _atomic_write(LEGACY_OVERRIDE_FILE, override)
+
+    print(f"\n\u2705  Written to: {out_path}")
     print(f"\n\U0001f4cb  Strategy overrides for tomorrow (threshold={CONFIDENCE_THRESHOLD:.2f}):")
     for strat, enabled in strategy_overrides.items():
         w = base_weights.get(strat, 0.0)
@@ -687,9 +721,27 @@ def _write_override(
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Nightly ML Regime Classifier")
     parser.add_argument(
+        "--symbol",
+        default=None,
+        help="Base ticker to classify (e.g. XAUUSD, BTCUSD). "
+             "If omitted, runs for every symbol discovered in data/historical "
+             "and data/logs/candle_store_*.",
+    )
+    parser.add_argument(
         "--bars-file",
         default=None,
-        help="Path to 5m OHLCV CSV (default: auto-detect from data/)",
+        help="Optional extra 5m OHLCV CSV to stitch in (in addition to autodiscovered sources).",
     )
     args = parser.parse_args()
-    run_classifier(bars_file=args.bars_file)
+
+    if args.symbol:
+        targets = [args.symbol.upper()]
+    else:
+        targets = discover_symbols() or ["XAUUSD"]
+        print(f"🎯  Auto-discovered symbols: {', '.join(targets)}")
+
+    for sym in targets:
+        try:
+            run_classifier(symbol=sym, bars_file=args.bars_file)
+        except Exception as e:
+            print(f"\n❌  Classifier failed for {sym}: {e}")

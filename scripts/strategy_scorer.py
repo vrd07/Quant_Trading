@@ -76,8 +76,14 @@ def load_trade_journal(journal_path: Path = None) -> pd.DataFrame:
 def compute_strategy_scores(
     journal_path: Path = None,
     lookback_days: int = 30,
+    symbol: str = None,
 ) -> dict:
     """Compute per-strategy performance scores from recent trades.
+
+    Args:
+        symbol: If provided, filter journal to trades whose `symbol` column
+            starts with this base ticker (matches broker suffixes like
+            XAUUSD.x, BTCUSD.w). None = all symbols pooled.
 
     Returns:
         {strategy_name: score} where score is in [-1.0, 1.0].
@@ -88,7 +94,10 @@ def compute_strategy_scores(
     if df.empty or len(df) < 5:
         return {}
 
-    # Apply lookback filter
+    if symbol and "symbol" in df.columns:
+        base = symbol.upper()
+        df = df[df["symbol"].str.upper().str.startswith(base, na=False)]
+
     if "entry_time" in df.columns:
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)
         df = df[df["entry_time"] >= cutoff]
@@ -126,8 +135,12 @@ def compute_strategy_scores(
 def compute_regime_strategy_scores(
     journal_path: Path = None,
     lookback_days: int = 30,
+    symbol: str = None,
 ) -> dict:
     """Compute per-strategy scores broken down by market regime.
+
+    Args:
+        symbol: Optional base ticker filter (matches broker suffixes).
 
     Returns:
         {regime: {strategy: score}}  e.g. {"TREND": {"kalman_regime": 0.4}, ...}
@@ -137,6 +150,10 @@ def compute_regime_strategy_scores(
     df = load_trade_journal(journal_path)
     if df.empty or len(df) < 5:
         return {}
+
+    if symbol and "symbol" in df.columns:
+        base = symbol.upper()
+        df = df[df["symbol"].str.upper().str.startswith(base, na=False)]
 
     if "entry_time" in df.columns:
         cutoff = datetime.now(timezone.utc) - timedelta(days=lookback_days)

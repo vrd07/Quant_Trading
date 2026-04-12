@@ -1,0 +1,56 @@
+{
+  "symbol": "BTCUSD",
+  "generated_at": "2026-04-12T11:40:55.597233+00:00",
+  "valid_until": "2026-04-13T11:40:55.597233+00:00",
+  "regime": "TREND",
+  "confidence": 0.55,
+  "classifier": "rule-based",
+  "strategy_overrides": {
+    "breakout": true,
+    "momentum": true,
+    "kalman_regime": true,
+    "mean_reversion": false,
+    "vwap": false,
+    "mini_medallion": true
+  },
+  "diagnostics": {
+    "adx_14": 68.818965,
+    "atr_pct": 0.126079,
+    "bb_width_ratio": 0.845966,
+    "close_ema20_pct": -0.018757,
+    "momentum_1d": -0.048939,
+    "momentum_5d": -0.259699,
+    "range_atr_ratio": 0.496119,
+    "vol_ratio": 0.441536,
+    "park_vol_zscore": 1.397061
+  },
+  "strategy_weights": {
+    "breakout": 0.85,
+    "momentum": 0.8,
+    "kalman_regime": 0.9,
+    "mean_reversion": 0.0,
+    "vwap": 0.0,
+    "mini_medallion": 0.65
+  },
+  "performance_scores": {
+    "kalman_regime": -0.0015
+  },
+  "regime_probabilities": {},
+  "transition_matrix": {
+    "TREND": {
+      "TREND": 0.3333,
+      "RANGE": 0.5,
+      "VOLATILE": 0.1667
+    },
+    "RANGE": {
+      "TREND": 0.2857,
+      "RANGE": 0.5714,
+      "VOLATILE": 0.1429
+    },
+    "VOLATILE": {
+      "TREND": 0.3333,
+      "RANGE": 0.3333,
+      "VOLATILE": 0.3333
+    }
+  }
+}

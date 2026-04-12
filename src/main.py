@@ -556,72 +556,88 @@ class TradingSystem:
                 )
     
 
-    def _apply_regime_override(self) -> None:
-        """
-        Read data/config_override.json (written by scripts/regime_classifier.py)
-        and apply ML-recommended strategy enable/disable settings.
+    def _load_regime_override_for(self, symbol_ticker: str) -> dict:
+        """Load the best-available ML override for a broker symbol ticker.
 
-        Silently skips if:
-         - File doesn't exist (first run)
-         - File is stale (>24 hours old)
-         - Any parsing or strategy-manager error
+        Resolution order:
+          1. data/config_override_{BASE}.json  (BASE strips broker suffix, e.g. XAUUSD.x → XAUUSD)
+          2. data/config_override.json         (legacy, XAUUSD-shaped)
+        Returns {} if nothing is fresh (<=24h) or nothing exists.
         """
         import json as _json
         from datetime import timezone as _tz
 
-        override_path = PROJECT_ROOT / "data" / "config_override.json"
-        if not override_path.exists():
-            self.logger.info("[RegimeML] No config_override.json found — running without ML override")
-            return
+        base = symbol_ticker.split(".")[0].upper()
+        candidates = [
+            PROJECT_ROOT / "data" / f"config_override_{base}.json",
+            PROJECT_ROOT / "data" / "config_override.json",
+        ]
+        for path in candidates:
+            if not path.exists():
+                continue
+            try:
+                with open(path) as f:
+                    data = _json.load(f)
+                generated = datetime.fromisoformat(data.get("generated_at", "2000-01-01T00:00:00+00:00"))
+                if generated.tzinfo is None:
+                    generated = generated.replace(tzinfo=_tz.utc)
+                age_hours = (datetime.now(_tz.utc) - generated).total_seconds() / 3600
+                if age_hours > 24:
+                    continue
+                data["_age_hours"] = age_hours
+                data["_source_path"] = str(path)
+                return data
+            except Exception:
+                continue
+        return {}
 
-        try:
-            with open(override_path) as f:
-                override = _json.load(f)
+    def _apply_regime_override(self) -> None:
+        """
+        Apply per-symbol ML overrides written by scripts/regime_classifier.py.
+        Each symbol loads its own config_override_{SYMBOL}.json; falls back to
+        the legacy unsuffixed file. Silently skips on staleness or parse errors.
+        """
+        from src.strategies.base_strategy import _parse_ml_regime
 
-            # Staleness check (>24 h = ignore)
-            generated = datetime.fromisoformat(override.get("generated_at", "2000-01-01T00:00:00+00:00"))
-            if generated.tzinfo is None:
-                generated = generated.replace(tzinfo=_tz.utc)
-            age_hours = (datetime.now(_tz.utc) - generated).total_seconds() / 3600
-            if age_hours > 24:
-                self.logger.info(
-                    f"[RegimeML] config_override.json is {age_hours:.1f}h old — ignoring (run classifier to refresh)"
-                )
-                return
+        any_applied = False
+        last_override = {}
+        for symbol_ticker, strategies in self.strategy_manager.strategies.items():
+            override = self._load_regime_override_for(symbol_ticker)
+            if not override:
+                continue
+            any_applied = True
+            last_override = override
 
             regime = override.get("regime", "UNKNOWN")
             confidence = override.get("confidence", 0.0)
             overrides = override.get("strategy_overrides", {})
+            age_hours = override.get("_age_hours", 0.0)
 
             self.logger.info(
-                f"[RegimeML] Applying ML override: regime={regime} confidence={confidence:.0%} "
-                f"(generated {age_hours:.1f}h ago)"
+                f"[RegimeML][{symbol_ticker}] regime={regime} confidence={confidence:.0%} "
+                f"(src={Path(override['_source_path']).name}, age={age_hours:.1f}h)"
             )
-            self._regime_override = override
 
-            # Parse ML regime for injection into strategies
-            from src.strategies.base_strategy import _parse_ml_regime
             ml_regime = _parse_ml_regime(regime)
+            self.strategy_manager.set_ml_regime_all(symbol_ticker, ml_regime)
 
-            # Apply enable/disable + ML regime to each symbol's strategy manager
-            for symbol_ticker, strategies in self.strategy_manager.strategies.items():
-                # Push ML regime so strategies use it instead of rule-based detection
-                self.strategy_manager.set_ml_regime_all(symbol_ticker, ml_regime)
+            for strat_name, strategy_obj in strategies.items():
+                if strat_name in overrides:
+                    should_enable = overrides[strat_name]
+                    if should_enable:
+                        strategy_obj.enable()
+                    else:
+                        strategy_obj.disable()
+                    self.logger.info(
+                        f"[RegimeML][{symbol_ticker}]   {'✅' if should_enable else '❌'}  "
+                        f"{strat_name} → {'enabled' if should_enable else 'disabled'}"
+                    )
 
-                for strat_name, strategy_obj in strategies.items():
-                    if strat_name in overrides:
-                        should_enable = overrides[strat_name]
-                        if should_enable:
-                            strategy_obj.enable()
-                        else:
-                            strategy_obj.disable()
-                        self.logger.info(
-                            f"[RegimeML]   {'✅' if should_enable else '❌'}  {strat_name} → "
-                            f"{'enabled' if should_enable else 'disabled'}"
-                        )
-
-        except Exception as e:
-            self.logger.warning(f"[RegimeML] Could not apply override: {e} — continuing with config defaults")
+        if not any_applied:
+            self.logger.info("[RegimeML] No fresh per-symbol override found — running with config defaults")
+        else:
+            # Keep the most recent override around for introspection.
+            self._regime_override = last_override
 
     def _run_nightly_classifier(self) -> None:
         """
@@ -634,16 +650,14 @@ class TradingSystem:
 
         def _run():
             try:
-                # ── Dump live bars from ALL XAUUSD variants for ML ────
+                # ── Dump live 5m bars for every tracked symbol so the ML
+                # classifier has fresh data per symbol (not just XAUUSD). ──
                 try:
                     dumped_total = 0
                     for sym_key, tf_stores in self.data_engine.candle_stores.items():
-                        if not sym_key.upper().startswith("XAUUSD"):
-                            continue
                         store = tf_stores.get("5m")
                         if not store or len(store) == 0:
                             continue
-                        # Sanitize symbol key for filename (e.g. XAUUSD.x → XAUUSD.x)
                         safe_key = sym_key.replace("/", "_")
                         csv_path = PROJECT_ROOT / "data" / "logs" / f"candle_store_{safe_key}_5m.csv"
                         csv_path.parent.mkdir(parents=True, exist_ok=True)
@@ -654,7 +668,7 @@ class TradingSystem:
                         )
                     if dumped_total == 0:
                         self.logger.warning(
-                            "[RegimeML] No XAUUSD candle stores found to dump"
+                            "[RegimeML] No candle stores found to dump"
                         )
                 except Exception as data_err:
                     self.logger.warning(f"[RegimeML] Failed to dump live bars: {data_err}")
@@ -708,74 +722,69 @@ class TradingSystem:
         self._last_intraday_regime_check = now
 
         try:
-            # Get current regime from override
-            override_path = PROJECT_ROOT / "data" / "config_override.json"
-            if not override_path.exists():
-                return
-
-            with open(override_path) as f:
-                current = _json.load(f)
-            current_regime = current.get("regime", "RANGE")
-
-            # Build live features from candle store
-            store = self.data_engine.candle_stores.get("XAUUSD", {}).get("5m")
-            if not store or len(store) < 50:
-                return
-
-            # Use the rule-based classifier on live features
             sys.path.insert(0, str(PROJECT_ROOT))
             from scripts.regime_classifier import (
                 compute_daily_bars, compute_features,
                 classify_rule_based, resolve_strategy_overrides,
-                FEATURE_COLS,
+                FEATURE_COLS, override_path_for,
             )
             from scripts.strategy_scorer import compute_strategy_scores
 
-            df_5m = store.to_dataframe() if hasattr(store, "to_dataframe") else store
-            if len(df_5m) < 50:
-                return
+            shift_detected = False
+            for sym_key, tf_stores in self.data_engine.candle_stores.items():
+                base = sym_key.split(".")[0].upper()
+                override_path = override_path_for(base)
+                if not override_path.exists():
+                    continue
+                with open(override_path) as f:
+                    current = _json.load(f)
+                current_regime = current.get("regime", "RANGE")
 
-            daily = compute_daily_bars(df_5m)
-            if len(daily) < 5:
-                return
+                store = tf_stores.get("5m")
+                if not store or len(store) < 50:
+                    continue
 
-            feat_df = compute_features(daily)
-            valid = feat_df[FEATURE_COLS].dropna().index
-            if len(valid) == 0:
-                return
+                df_5m = store.to_dataframe() if hasattr(store, "to_dataframe") else store
+                if len(df_5m) < 50:
+                    continue
 
-            last_feat = feat_df.loc[valid].iloc[-1][FEATURE_COLS].to_dict()
-            new_regime, new_confidence = classify_rule_based(last_feat)
+                daily = compute_daily_bars(df_5m)
+                if len(daily) < 5:
+                    continue
 
-            # Only override if regime changed and confidence is high
-            if new_regime != current_regime and new_confidence >= 0.70:
-                self.logger.info(
-                    f"[RegimeML] Intra-day regime shift detected: "
-                    f"{current_regime} -> {new_regime} (confidence={new_confidence:.0%})"
-                )
+                feat_df = compute_features(daily)
+                valid = feat_df[FEATURE_COLS].dropna().index
+                if len(valid) == 0:
+                    continue
 
-                perf_scores = compute_strategy_scores(lookback_days=30)
-                overrides = resolve_strategy_overrides(
-                    new_regime, new_confidence, perf_scores,
-                )
+                last_feat = feat_df.loc[valid].iloc[-1][FEATURE_COLS].to_dict()
+                new_regime, new_confidence = classify_rule_based(last_feat)
 
-                # Update the override file
-                current["regime"] = new_regime
-                current["confidence"] = round(new_confidence, 4)
-                current["classifier"] = "intraday-rule-based"
-                current["strategy_overrides"] = overrides
-                current["generated_at"] = now.isoformat()
+                if new_regime != current_regime and new_confidence >= 0.70:
+                    self.logger.info(
+                        f"[RegimeML][{base}] Intra-day regime shift: "
+                        f"{current_regime} -> {new_regime} (confidence={new_confidence:.0%})"
+                    )
+                    perf_scores = compute_strategy_scores(lookback_days=30, symbol=base)
+                    overrides = resolve_strategy_overrides(
+                        new_regime, new_confidence, perf_scores,
+                    )
+                    current["regime"] = new_regime
+                    current["confidence"] = round(new_confidence, 4)
+                    current["classifier"] = "intraday-rule-based"
+                    current["strategy_overrides"] = overrides
+                    current["generated_at"] = now.isoformat()
+                    with open(override_path, "w") as f:
+                        _json.dump(current, f, indent=2)
+                    shift_detected = True
+                else:
+                    self.logger.debug(
+                        f"[RegimeML][{base}] Intra-day check: regime={new_regime} "
+                        f"(same={new_regime == current_regime}, conf={new_confidence:.0%})"
+                    )
 
-                with open(override_path, "w") as f:
-                    _json.dump(current, f, indent=2)
-
-                # Re-apply
+            if shift_detected:
                 self._apply_regime_override()
-            else:
-                self.logger.debug(
-                    f"[RegimeML] Intra-day check: regime={new_regime} "
-                    f"(same={new_regime == current_regime}, conf={new_confidence:.0%})"
-                )
 
         except Exception as e:
             self.logger.debug(f"[RegimeML] Intra-day check skipped: {e}")
