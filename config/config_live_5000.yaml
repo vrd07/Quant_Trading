@@ -247,25 +247,26 @@ strategies:
   # Mini Medallion v2: +31% return, PF 1.59, DD 4.3% (backtest Jan 2025–Mar 2026)
   # v2 changes: long-only, session filter, lower threshold, higher RR, ADX filter
   mini_medallion:
-    enabled: false
+    enabled: true                   # v5: backtest-validated tuning — 51% WR, PF 1.31, 6.9% annualized
     timeframe: 5m
-    score_threshold: 2.5            # v2: lowered from 5.0 — 7 signals max ~7.6, need more trades
-    cooldown_bars: 15               # v2: 75 min cooldown (was 150 min) — more trades in good sessions
-    risk_atr_multiplier: 1.5
-    rr_ratio: 3.0                   # v2: raised from 2.0 — let winners run, compensate for <50% WR
-    long_only: true                 # v2: SELL side lost -$8.3K — gold upward bias
-    session_filter_enabled: true    # v2: only trade profitable hours
-    allowed_hours: [3, 4, 5, 6, 7, 9, 17]  # v2: only net-profitable hours from backtest
-    adx_min_threshold: 20           # v2: require trending market for higher conviction
-    min_signal_strength: 0.0        # v2: no min strength — low and high both profitable
+    score_threshold: 3.5            # v5: stronger conviction gate
+    cooldown_bars: 10
+    risk_atr_multiplier: 2.2        # v5: widened SL — tight stops were noise-tagged (77% SL rate)
+    rr_ratio: 1.2                   # v5: realistic TP on 5m (was 3.0 → never filled)
+    long_only: true                 # Gold upward bias
+    session_filter_enabled: true
+    allowed_hours: [5, 7, 8]        # v5: per-hour backtest — only these 3 hours are net-positive
+    adx_min_threshold: 22
+    min_signal_strength: 0.0        # v5: strength had no predictive power
     weights:
       mean_reversion: 1.0
-      momentum_burst: 1.2           # v2: raised — momentum is key for long-only trend following
-      volatility_expansion: 1.3     # v2: raised — breakout confirmation
+      momentum_burst: 1.2
+      volatility_expansion: 1.3
       order_flow: 1.1
-      liquidity_sweep: 1.5          # v2: raised — highest edge signal (ICT sweep + rejection)
-      market_regime: 1.2            # v2: raised — regime alignment critical
-      volatility_regime: 0.6        # v2: lowered — noisy signal
+      liquidity_sweep: 1.5
+      market_regime: 1.2
+      volatility_regime: 0.6
+
 
   # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
   # v2: +5.30%, PF 1.88, DD 1.61% — EMA trend + session filter + strength gate
