@@ -122,6 +122,7 @@ def main() -> int:
         new_cfg["enabled"] = True
         new_cfg["min_lot"] = lot
         new_cfg["max_lot"] = lot
+        new_cfg["_user_lot"] = lot  # explicit copy for display, never read by main.py
         selected[broker_ticker] = new_cfg
 
         if broker_ticker != base_ticker:
@@ -142,12 +143,13 @@ def main() -> int:
         minimum=0.01,
     )
     print()
-    print("  Implied stop-loss distance per symbol:")
+    print("  Implied stop-loss distance (using YOUR lot size per symbol):")
     for tkr, scfg in selected.items():
-        pip_usd = _usd_per_pip(scfg, float(scfg["min_lot"]))
+        user_lot = float(scfg["_user_lot"])
+        pip_usd = _usd_per_pip(scfg, user_lot)
         if pip_usd > 0:
             pips = max_loss_trade / pip_usd
-            print(f"    {tkr:12s} {scfg['min_lot']} lots -> ~{pips:.0f} pip stop for ${max_loss_trade:.2f}")
+            print(f"    {tkr:12s} {user_lot} lots -> ~{pips:.0f} pip stop for ${max_loss_trade:.2f}")
     print()
 
     # ── Max daily loss ──
@@ -164,6 +166,23 @@ def main() -> int:
     print(f"  => {max_daily_loss:.2f} / {balance:,.2f} = {daily_pct:.2%} of balance")
     print()
 
+    # ── Max daily profit ──
+    print("--- Step 4: Max daily profit (stop trading once hit) ---")
+    default_profit_usd = round(
+        float(config["risk"].get("max_daily_profit_usd", balance * 0.01)), 2
+    )
+    max_daily_profit = _prompt_float(
+        "  Max daily profit target (USD, 0 to disable)",
+        default=default_profit_usd,
+        minimum=0.0,
+    )
+    if max_daily_profit > 0:
+        profit_pct = max_daily_profit / balance if balance else 0
+        print(f"  => {max_daily_profit:.2f} / {balance:,.2f} = {profit_pct:.2%} of balance")
+    else:
+        print("  => Daily profit target disabled")
+    print()
+
     # ── Build overrides ──
     risk_per_trade_pct = max_loss_trade / balance if balance else default_risk_pct
 
@@ -171,7 +190,8 @@ def main() -> int:
     for base in disabled_bases:
         symbols_override[base] = {"enabled": False}
     for tkr, scfg in selected.items():
-        symbols_override[tkr] = scfg
+        clean = {k: v for k, v in scfg.items() if not k.startswith("_")}
+        symbols_override[tkr] = clean
 
     overrides = {
         "symbols": symbols_override,
@@ -180,6 +200,7 @@ def main() -> int:
             "risk_per_trade_usd": max_loss_trade,
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
+            "max_daily_profit_usd": max_daily_profit,
         },
     }
 
@@ -192,6 +213,7 @@ def main() -> int:
     print(f"   Symbols         : {', '.join(selected.keys())}")
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
+    print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))
     print("=" * 60)
     print()
     print("!" * 60)
