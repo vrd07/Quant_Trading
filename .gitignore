@@ -75,3 +75,6 @@ Desktop.ini
 # Gemini AI artifacts (local only)
 # ============================================
 .gemini/
+
+# Per-user runtime risk overrides (written by scripts/runtime_setup.py)
+config/runtime_overrides.yaml

@@ -74,6 +74,15 @@ echo   Time:   %date% %time:~0,5% UTC
 echo ============================================================
 echo.
 
+:: ── Runtime Risk Setup (lot size / max loss per trade / daily loss) ─
+if "%FORCE%"=="false" (
+    python scripts\runtime_setup.py --config %CONFIG%
+    if errorlevel 1 (
+        echo   [WARN] Runtime setup failed or cancelled — using config defaults.
+        echo.
+    )
+)
+
 :: ── Step 1: Health Check ─────────────────────────────────────
 echo --- [1/4] Pre-flight Health Check ---
 echo.

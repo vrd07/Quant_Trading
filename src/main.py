@@ -78,6 +78,26 @@ class TradingSystem:
         # Load configuration
         with open(config_file, 'r') as f:
             self.config = yaml.safe_load(f)
+
+        # Merge interactive runtime overrides (written by scripts/runtime_setup.py)
+        override_path = "config/runtime_overrides.yaml"
+        try:
+            import os as _os
+            if _os.path.exists(override_path):
+                with open(override_path, 'r') as _of:
+                    overrides = yaml.safe_load(_of) or {}
+
+                def _deep_merge(base, over):
+                    for k, v in over.items():
+                        if isinstance(v, dict) and isinstance(base.get(k), dict):
+                            _deep_merge(base[k], v)
+                        else:
+                            base[k] = v
+
+                _deep_merge(self.config, overrides)
+                print(f"[runtime_setup] Applied overrides from {override_path}")
+        except Exception as _e:
+            print(f"[runtime_setup] Failed to apply overrides: {_e}")
         
         # Environment-specific paths
         self.env = self.config.get('environment', 'dev')

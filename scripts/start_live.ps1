@@ -48,6 +48,12 @@ Write-Host "   Config  : $config_file" -ForegroundColor Cyan
 Write-Host "   Log dir : data\logs\" -ForegroundColor Cyan
 Write-Host ""
 
+# Runtime risk setup: lot size, max loss per trade, max daily loss
+python scripts\runtime_setup.py --config $config_file
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [WARN] Runtime setup cancelled — using config defaults." -ForegroundColor Yellow
+}
+
 # Run the bot
 python src\main.py --config $config_file --env live
 

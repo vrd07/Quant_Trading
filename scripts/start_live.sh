@@ -74,6 +74,12 @@ echo "  Time:   $(date -u '+%Y-%m-%d %H:%M UTC')"
 echo "============================================================"
 echo ""
 
+# ── Runtime Risk Setup ───────────────────────────────────────
+if [ "$FORCE" = false ]; then
+    python3 scripts/runtime_setup.py --config "$CONFIG" || \
+        echo "  [WARN] Runtime setup cancelled — using config defaults."
+fi
+
 # ── Step 1: Health Check ─────────────────────────────────────
 echo "─── [1/4] Pre-flight Health Check ───"
 echo ""
