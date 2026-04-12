@@ -1,8 +1,9 @@
 """
 Interactive runtime setup. Prompts the user for:
-  1. Lot size per trade
-  2. Max loss per trade (USD) — shows the implied stop-loss in pips
-  3. Max daily loss (USD)
+  1. Which symbols to trade + broker ticker (e.g. XAUUSD.x, GOLDm)
+  2. Lot size per selected symbol
+  3. Max loss per trade (USD) — shows the implied stop-loss in pips per symbol
+  4. Max daily loss (USD)
 
 Writes the chosen values to config/runtime_overrides.yaml, which is merged
 on top of the selected config by src/main.py at startup.
@@ -14,6 +15,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import copy
 import sys
 from pathlib import Path
 
@@ -21,6 +23,19 @@ import yaml
 
 
 OVERRIDE_PATH = Path("config/runtime_overrides.yaml")
+
+
+def _prompt_str(prompt: str, default: str) -> str:
+    raw = input(f"{prompt} [default: {default}]: ").strip()
+    return raw or default
+
+
+def _prompt_yn(prompt: str, default: bool) -> bool:
+    d = "Y/n" if default else "y/N"
+    raw = input(f"{prompt} [{d}]: ").strip().lower()
+    if raw == "":
+        return default
+    return raw in ("y", "yes")
 
 
 def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> float:
@@ -39,16 +54,7 @@ def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> 
         return val
 
 
-def _primary_symbol(config: dict) -> tuple[str, dict]:
-    for ticker, cfg in config.get("symbols", {}).items():
-        if cfg.get("enabled"):
-            return ticker, cfg
-    ticker = next(iter(config.get("symbols", {})))
-    return ticker, config["symbols"][ticker]
-
-
 def _usd_per_pip(symbol_cfg: dict, lot_size: float) -> float:
-    # USD value of 1 pip = pip_value * value_per_lot * lot_size
     return float(symbol_cfg["pip_value"]) * float(symbol_cfg["value_per_lot"]) * lot_size
 
 
@@ -66,81 +72,114 @@ def main() -> int:
         config = yaml.safe_load(f)
 
     balance = float(config["account"]["initial_balance"])
-    symbol, sym_cfg = _primary_symbol(config)
-    min_lot = float(sym_cfg.get("min_lot", 0.01))
-    max_lot = float(sym_cfg.get("max_lot", 1.0))
-    lot_step = float(sym_cfg.get("lot_step", 0.01))
-
-    default_lot = min_lot
-    default_risk_pct = float(config["risk"].get("risk_per_trade_pct", 0.003))
-    default_risk_usd = round(balance * default_risk_pct, 2)
-    default_daily_pct = float(config["risk"].get("max_daily_loss_pct", 0.02))
-    default_daily_usd = round(
-        float(config["risk"].get("absolute_max_loss_usd", balance * default_daily_pct)), 2
-    )
+    all_symbols = config.get("symbols", {})
 
     print()
     print("=" * 60)
-    print("   Runtime Risk Setup")
+    print("   Runtime Trading Setup")
     print("=" * 60)
     print(f"   Account balance : ${balance:,.2f}")
-    print(f"   Primary symbol  : {symbol}")
-    print(f"   Lot range       : {min_lot} - {max_lot} (step {lot_step})")
+    print()
+    print("   Tip: your broker may add a suffix to the symbol.")
+    print("        e.g. XAUUSD may show as XAUUSD.x, XAUUSDm, or GOLD.")
+    print("        Check your MT5 Market Watch for the exact ticker.")
     print()
 
-    # 1. Lot size
-    lot_size = _prompt_float(
-        f"1) Lot size per trade ({symbol})",
-        default=default_lot,
-        minimum=min_lot,
-    )
-    if lot_size > max_lot:
-        print(f"   Clamped to max_lot {max_lot}")
-        lot_size = max_lot
+    selected: dict[str, dict] = {}  # broker_ticker -> symbol cfg (with lot_size applied)
+    disabled_bases: list[str] = []
 
-    usd_per_pip = _usd_per_pip(sym_cfg, lot_size)
-    print(f"   => 1 pip on {lot_size} lots {symbol} ≈ ${usd_per_pip:.2f}")
+    # ── Per-symbol: select + rename + lot size ──
+    print("--- Step 1: Select symbols to trade ---")
     print()
+    for base_ticker, sym_cfg in all_symbols.items():
+        default_on = bool(sym_cfg.get("enabled", False))
+        trade_it = _prompt_yn(f"  Trade {base_ticker}?", default=default_on)
+        if not trade_it:
+            disabled_bases.append(base_ticker)
+            print()
+            continue
 
-    # 2. Max loss per trade
+        broker_ticker = _prompt_str(
+            f"    Broker ticker for {base_ticker}",
+            default=base_ticker,
+        )
+
+        min_lot = float(sym_cfg.get("min_lot", 0.01))
+        max_lot = float(sym_cfg.get("max_lot", 1.0))
+        lot = _prompt_float(
+            f"    Lot size per trade ({broker_ticker})",
+            default=min_lot,
+            minimum=min_lot,
+        )
+        if lot > max_lot:
+            print(f"    Clamped to max_lot {max_lot}")
+            lot = max_lot
+
+        pip_usd = _usd_per_pip(sym_cfg, lot)
+        print(f"    => 1 pip on {lot} lots {broker_ticker} ≈ ${pip_usd:.2f}")
+
+        new_cfg = copy.deepcopy(sym_cfg)
+        new_cfg["enabled"] = True
+        new_cfg["min_lot"] = lot
+        new_cfg["max_lot"] = lot
+        selected[broker_ticker] = new_cfg
+
+        if broker_ticker != base_ticker:
+            disabled_bases.append(base_ticker)
+        print()
+
+    if not selected:
+        print("ERROR: no symbols selected. Aborting.", file=sys.stderr)
+        return 1
+
+    # ── Max loss per trade ──
+    print("--- Step 2: Max loss per trade ---")
+    default_risk_pct = float(config["risk"].get("risk_per_trade_pct", 0.003))
+    default_risk_usd = round(balance * default_risk_pct, 2)
     max_loss_trade = _prompt_float(
-        "2) Max loss per trade (USD)",
+        "  Max loss per trade (USD)",
         default=default_risk_usd,
         minimum=0.01,
     )
-    if usd_per_pip > 0:
-        implied_pips = max_loss_trade / usd_per_pip
-        print(
-            f"   => With {lot_size} lots, ${max_loss_trade:.2f} max loss "
-            f"= stop of ~{implied_pips:.0f} pips"
-        )
+    print()
+    print("  Implied stop-loss distance per symbol:")
+    for tkr, scfg in selected.items():
+        pip_usd = _usd_per_pip(scfg, float(scfg["min_lot"]))
+        if pip_usd > 0:
+            pips = max_loss_trade / pip_usd
+            print(f"    {tkr:12s} {scfg['min_lot']} lots -> ~{pips:.0f} pip stop for ${max_loss_trade:.2f}")
     print()
 
-    # 3. Max daily loss
+    # ── Max daily loss ──
+    print("--- Step 3: Max daily loss ---")
+    default_daily_usd = round(
+        float(config["risk"].get("absolute_max_loss_usd", balance * 0.02)), 2
+    )
     max_daily_loss = _prompt_float(
-        "3) Max daily loss (USD)",
+        "  Max daily loss (USD)",
         default=default_daily_usd,
         minimum=max_loss_trade,
     )
     daily_pct = max_daily_loss / balance if balance else 0
-    print(f"   => {max_daily_loss:.2f} / {balance:,.2f} = {daily_pct:.2%} of balance")
+    print(f"  => {max_daily_loss:.2f} / {balance:,.2f} = {daily_pct:.2%} of balance")
     print()
 
-    # Build overrides
+    # ── Build overrides ──
     risk_per_trade_pct = max_loss_trade / balance if balance else default_risk_pct
+
+    symbols_override: dict[str, dict] = {}
+    for base in disabled_bases:
+        symbols_override[base] = {"enabled": False}
+    for tkr, scfg in selected.items():
+        symbols_override[tkr] = scfg
+
     overrides = {
-        "symbols": {
-            symbol: {
-                "min_lot": lot_size,
-                "max_lot": lot_size,
-            }
-        },
+        "symbols": symbols_override,
         "risk": {
             "risk_per_trade_pct": risk_per_trade_pct,
             "risk_per_trade_usd": max_loss_trade,
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
-            "fixed_lot_size": lot_size,
         },
     }
 
@@ -150,7 +189,7 @@ def main() -> int:
 
     print("=" * 60)
     print(f"   Saved overrides -> {OVERRIDE_PATH}")
-    print(f"   Lot size        : {lot_size}")
+    print(f"   Symbols         : {', '.join(selected.keys())}")
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print("=" * 60)
