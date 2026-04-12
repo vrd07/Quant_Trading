@@ -298,7 +298,7 @@ strategies:
   # ── SUPPLY & DEMAND ZONE STRATEGY ─────────────────────────────────────────
   # Disabled by default — backtest before enabling live.
   supply_demand:
-    enabled: false
+    enabled: true
     timeframe: 5m
     # Zone formation — loosened to surface more setups on 5m XAUUSD
     min_impulse_atr_mult: 1.6   # Was 2.5
@@ -324,7 +324,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand]
 
   news_filter:
     enabled: true

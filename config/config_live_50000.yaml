@@ -326,7 +326,7 @@ strategies:
   # Disabled by default — backtest on XAUUSD 5m before enabling live.
   # To backtest: python scripts/run_backtest.py --strategy supply_demand
   supply_demand:
-    enabled: false               # Enable only after backtest validates edge
+    enabled: true               # Enable only after backtest validates edge
     timeframe: 5m
     # Zone formation — loosened to surface more setups on 5m XAUUSD
     min_impulse_atr_mult: 1.6   # Was 2.5 — 1.6× ATR body is still a decisive move
@@ -357,7 +357,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap]
+      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, supply_demand]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
