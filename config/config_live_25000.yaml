@@ -177,19 +177,21 @@ strategies:
     mtf_confirmation: false
 
   vwap:
-    enabled: false
-    timeframe: 1m
-    band_std_mult: 2.0
-    partial_std_mult: 0.5
-    stop_atr_multiplier: 1.5
+    enabled: true               # v4: enabled as low-freq diversifier — PF 1.85, 50% WR (6mo)
+    timeframe: 5m
+    band_std_mult: 1.0          # v4: 2σ rarely touched on 5m gold → 1σ
+    partial_std_mult: 0.3
+    stop_atr_multiplier: 1.8
     atr_period: 14
-    min_volume_ratio: 1.0
-    rsi_oversold_entry: 30
-    rsi_overbought_entry: 70
-    cci_oversold_entry: -120
-    cci_overbought_entry: 120
+    min_volume_ratio: 0.0
+    rsi_oversold_entry: 45
+    rsi_overbought_entry: 55
+    cci_oversold_entry: -60
+    cci_overbought_entry: 60
     cci_period: 20
     only_in_regime: RANGE
+    allowed_hours: [2, 11, 15, 19]   # v4: data-driven net-positive UTC hours
+
 
   # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
   # Momentum v3: Session-filtered, wider SL, optimized for profitability
