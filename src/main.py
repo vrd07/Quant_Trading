@@ -1476,10 +1476,66 @@ def main():
         print(f"  Risk Per Trade:      {float(_risk_pt)*100:.2f}% (${float(_balance)*float(_risk_pt):.0f})")
         print(f"  Max Positions:       {_max_pos}")
         print("=" * 60)
-        print("\033[93m  This will trade REAL MONEY on your GFT account.\033[0m")
+
+        try:
+            _trader_name = input("  Enter your name: ").strip() or "Trader"
+        except (EOFError, KeyboardInterrupt):
+            print("\n  Aborted.")
+            return
+
+        _quotes = [
+            ("The market can stay irrational longer than you can stay solvent.", "John Maynard Keynes"),
+            ("Risk comes from not knowing what you're doing.", "Warren Buffett"),
+            ("The goal of a successful trader is to make the best trades. Money is secondary.", "Alexander Elder"),
+            ("In trading, it's not about how much you make but how much you don't lose.", "Bernard Baruch"),
+            ("The trend is your friend until the end when it bends.", "Ed Seykota"),
+            ("Amateurs think about how much money they can make. Professionals think about how much they can lose.", "Jack Schwager"),
+            ("Discipline is the bridge between goals and accomplishment.", "Jim Rohn"),
+            ("The stock market is a device for transferring money from the impatient to the patient.", "Warren Buffett"),
+            ("Plan the trade and trade the plan.", "Unknown"),
+            ("Cut your losses short and let your profits run.", "David Ricardo"),
+            ("Every battle is won before it is ever fought.", "Sun Tzu"),
+            ("Patience is bitter, but its fruit is sweet.", "Aristotle"),
+            ("The four most dangerous words in investing are: 'this time it's different.'", "Sir John Templeton"),
+            ("Markets are never wrong; opinions are.", "Jesse Livermore"),
+            ("It's not whether you're right or wrong that's important, but how much money you make when you're right and how much you lose when you're wrong.", "George Soros"),
+            ("The elements of good trading are: cutting losses, cutting losses, and cutting losses.", "Ed Seykota"),
+            ("Don't focus on making money; focus on protecting what you have.", "Paul Tudor Jones"),
+            ("Losers average losers.", "Paul Tudor Jones"),
+            ("The key to trading success is emotional discipline. Making money has nothing to do with intelligence.", "Victor Sperandeo"),
+            ("I'm only rich because I know when I'm wrong.", "George Soros"),
+            ("If you can learn to create a state of mind that is not affected by the market's behavior, the struggle will cease to exist.", "Mark Douglas"),
+            ("Successful trading is about finding the rules that work and then sticking to those rules.", "William O'Neil"),
+            ("The hard work in trading comes in the preparation. The actual process of trading should be effortless.", "Jack Schwager"),
+            ("Do not anticipate and move without market confirmation — being a little late is your insurance.", "Jesse Livermore"),
+            ("A peak performance trader is totally committed to being the best and doing whatever it takes to be the best.", "Van K. Tharp"),
+            ("The goal is not to be right. The goal is to make money.", "Ray Dalio"),
+            ("Pain + Reflection = Progress.", "Ray Dalio"),
+            ("Every day I assume every position I have is wrong.", "Paul Tudor Jones"),
+            ("Don't be a hero. Don't have an ego. Always question yourself and your ability.", "Paul Tudor Jones"),
+            ("The best traders have no ego. You have to swallow your pride and get out of the losses.", "Tom Baldwin"),
+            ("Know what you own, and know why you own it.", "Peter Lynch"),
+            ("The secret to being successful from a trading perspective is to have an indefatigable and an undying and unquenchable thirst for information and knowledge.", "Paul Tudor Jones"),
+            ("Confidence is not 'I will profit on this trade.' Confidence is 'I will be fine if I don't profit on this trade.'", "Yvan Byeajee"),
+            ("Trade what's happening — not what you think is gonna happen.", "Doug Gregory"),
+            ("The goal of trading is to exchange risk for profit. You cannot make profit without taking risk.", "Unknown"),
+            ("Great traders manage risk — they don't avoid it.", "Unknown"),
+            ("A loss never bothers me after I take it. I forget it overnight. But being wrong and not taking the loss — that is what does damage to the pocketbook and to the soul.", "Jesse Livermore"),
+            ("Time is your friend; impulse is your enemy.", "Jack Bogle"),
+            ("Opportunities come infrequently. When it rains gold, put out the bucket, not the thimble.", "Warren Buffett"),
+            ("Your biggest enemy in trading is yourself.", "Unknown"),
+        ]
+        import datetime as _dt
+        _q, _author = _quotes[_dt.date.today().toordinal() % len(_quotes)]
+
+        print()
+        print(f"\033[96m  Welcome back, {_trader_name}. Let's trade with discipline today.\033[0m")
+        print(f"\033[93m  \"{_q}\"\033[0m")
+        print(f"\033[90m    — {_author}\033[0m")
+        print("=" * 60)
         print("  Type 'CONFIRM LIVE' to proceed, or Ctrl+C to abort.")
         print("=" * 60)
-        
+
         try:
             user_input = input("\n  > ").strip()
             if user_input != "CONFIRM LIVE":
