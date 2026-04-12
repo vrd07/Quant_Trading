@@ -134,6 +134,7 @@ class VWAPStrategy(BaseStrategy):
         self.cci_oversold_entry  = config.get('cci_oversold_entry', -100)
         self.cci_overbought_entry = config.get('cci_overbought_entry', 100)
         self.cci_period          = config.get('cci_period', 20)
+        self.allowed_hours       = config.get('allowed_hours', None)  # e.g. [2, 11, 15, 16, 19]
 
         self.regime_filter = RegimeFilter()
 
@@ -205,6 +206,11 @@ class VWAPStrategy(BaseStrategy):
         bar_hour = self._get_bar_hour(bars)
         if bar_hour is not None and any(s <= bar_hour < e for s, e in ((7, 10), (12, 15))):
             self._log_no_signal(f"Kill zone (hour={bar_hour} UTC)")
+            return None
+
+        # Allowed-hour filter (data-driven session gate)
+        if self.allowed_hours is not None and bar_hour is not None and bar_hour not in self.allowed_hours:
+            self._log_no_signal(f"Outside allowed_hours (hour={bar_hour})")
             return None
 
         # ── Regime ────────────────────────────────────────────────────────
