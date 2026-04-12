@@ -76,13 +76,23 @@ You should now be inside the bot's folder.
 
 ## 📦 Step 4 — Install Bot Dependencies
 
-Still in the Command Prompt (inside the `Quant_Trading` folder), type:
+Still in the Command Prompt (inside the `Quant_Trading` folder), run these commands one at a time. Why a virtual environment? It keeps the bot's Python packages isolated from anything else on your PC.
 
 ```
+python -m venv venv
+venv\Scripts\activate
+pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-Wait for everything to install. This may take 2–3 minutes. You'll see a lot of text scrolling — that's normal.
+After the last command finishes (2–3 minutes of scrolling text — normal), you should see `(venv)` at the start of your prompt line. That means the virtual environment is active.
+
+> From now on, **every time you open a new Command Prompt to use the bot**, first activate the venv:
+> ```
+> cd %USERPROFILE%\Documents\Quant_Trading
+> venv\Scripts\activate
+> ```
+> (PowerShell users: use `venv\Scripts\Activate.ps1` instead. If PowerShell blocks it, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.)
 
 ---
 
@@ -106,32 +116,21 @@ Wait for everything to install. This may take 2–3 minutes. You'll see a lot of
 
 ## ⚙️ Step 6 — Configure the Bot
 
-1. Open the folder `Quant_Trading\config\` in File Explorer
-2. Right-click `config_live_5000.yaml` → **Open with → Notepad**
-3. Scroll to the very bottom and find the `file_bridge` section
+**Good news:** on Windows the bot auto-detects the MT5 Common Files folder under `%APPDATA%\MetaQuotes\Terminal\Common\Files`. You generally do **not** need to edit any path — even if the config file shows a macOS path, the bot and health check will transparently fall back to the Windows-native location.
 
-**✅ Easiest option (works for everyone, including names with spaces like "Shubham Ghodke"):**
+What you may still want to edit in `config\config_live_5000.yaml` (open with Notepad):
 
-Just put a `#` in front of the macOS `data_dir` line to disable it. Leave everything else as-is. The bot will **automatically find the correct MT5 folder** on Windows — no path editing needed.
+- **Risk parameters** — `risk_per_trade_pct`, `max_daily_loss_pct`, `max_drawdown_pct`, `max_positions`. Why: these must match your prop-firm rules exactly.
+- **Symbol suffix** — if your broker's gold symbol is `XAUUSD.m`, `XAUUSDx`, etc., update the `symbols:` block. Why: the wrong symbol means zero trades.
+- **Strategy on/off flags** — leave at defaults unless you know what you're changing.
 
-It should look like this after your edit:
+Save the file (`Ctrl + S`) and close Notepad.
 
-```yaml
-file_bridge:
-  enabled: true
-  # macOS (disabled — add # to the front of this line):
-  # data_dir: "~/Library/Application Support/..."
-```
-
-4. Save the file (`Ctrl + S`) and close Notepad
-
-> **If auto-detect ever fails** (the health check shows ❌ for the bridge directory), you can manually set the path:
+> **Only override the bridge path manually if** Step 8 (health check) says `❌ Bridge directory exists`. In that case, under `file_bridge:` set:
 > ```yaml
-> data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+> data_dir: "C:/Users/YOUR_USERNAME/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
 > ```
-> Spaces in your Windows username are perfectly fine here — just type it exactly as it appears.
->
-> Not sure of your exact username? Open Command Prompt and type: `echo %USERNAME%`
+> Spaces in the username are fine. Find your exact username with: `echo %USERNAME%` in Command Prompt.
 
 ---
 
@@ -247,4 +246,19 @@ If something doesn't work, take a screenshot of the error message in the black w
 
 ---
 
-*Last updated: March 2026 — Windows 11 compatible*
+## 🍎 macOS / Linux Notes (Secondary)
+
+The bot also runs under Wine-hosted MT5. Setup is the same in spirit, but commands differ:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+bash scripts/start_live.sh            # instead of start_live.bat
+```
+
+MT5 Common Files auto-detects to `~/Library/Application Support/net.metaquotes.wine.metatrader5/...` on macOS and `~/.wine/drive_c/users/...` on Linux. See `mt5_bridge/README_SETUP.md` for a more thorough beginner guide.
+
+---
+
+*Last updated: April 2026 — Windows 11 first-class, macOS/Linux via Wine.*

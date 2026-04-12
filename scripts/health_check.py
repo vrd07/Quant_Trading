@@ -69,18 +69,30 @@ def main():
     # ── Check 1: Bridge file directory ──────────────────────────
     bridge_cfg = config.get("file_bridge", {})
     bridge_data_dir = bridge_cfg.get("data_dir")
+
+    # Always compute the OS-native auto-detected path as a fallback.
+    sys.path.insert(0, str(PROJECT_ROOT))
+    try:
+        from mt5_bridge.mt5_file_client import MT5FileClient
+        auto_dir = MT5FileClient._get_default_mt5_path()
+    except Exception:
+        import os as _os
+        auto_dir = Path(_os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) \
+                   / "MetaQuotes" / "Terminal" / "Common" / "Files"
+
     if bridge_data_dir:
-        data_dir = Path(bridge_data_dir).expanduser()
+        configured = Path(bridge_data_dir).expanduser()
+        # If the configured path doesn't exist on this OS (e.g. a macOS path on
+        # Windows) transparently fall back to the auto-detected native path so
+        # the user doesn't have to edit the YAML.
+        if configured.exists():
+            data_dir = configured
+        else:
+            print(f"  ℹ️  Configured data_dir not found on this OS, using auto-detected path")
+            print(f"     (configured: {configured})")
+            data_dir = auto_dir
     else:
-        # Auto-detect using MT5FileClient cross-platform logic
-        try:
-            sys.path.insert(0, str(PROJECT_ROOT))
-            from mt5_bridge.mt5_file_client import MT5FileClient
-            data_dir = MT5FileClient._get_default_mt5_path()
-        except Exception:
-            import os as _os
-            data_dir = Path(_os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming")) \
-                       / "MetaQuotes" / "Terminal" / "Common" / "Files"
+        data_dir = auto_dir
     status_file = data_dir / "mt5_status.json"
 
     results.append(check(
