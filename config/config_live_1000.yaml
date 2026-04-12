@@ -297,19 +297,21 @@ strategies:
   supply_demand:
     enabled: false
     timeframe: 5m
-    min_impulse_atr_mult: 2.5
-    zone_lookback_bars: 5
-    zone_max_age_bars: 100
-    max_active_zones: 3
-    zone_touch_tolerance_atr: 0.3
-    min_rejection_ratio: 0.55
-    adx_min_threshold: 18
-    rsi_overbought: 75
-    rsi_oversold: 25
-    ema_trend_period: 50
+    # Zone formation — loosened to surface more setups on 5m XAUUSD
+    min_impulse_atr_mult: 1.6   # Was 2.5
+    zone_lookback_bars: 4
+    zone_max_age_bars: 80
+    max_active_zones: 5
+    # Entry confirmation — relaxed but still quality-gated
+    zone_touch_tolerance_atr: 0.5
+    min_rejection_ratio: 0.40   # Was 0.55
+    adx_min_threshold: 14       # Was 18
+    rsi_overbought: 78
+    rsi_oversold: 22
+    ema_trend_period: 34
     long_only: false
-    session_hours: [4, 5, 6, 7, 8, 9, 13, 14, 15, 16, 17, 22]
-    cooldown_bars: 10
+    session_hours: [4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 22]
+    cooldown_bars: 4
 
 trading_hours:
   sessions:
