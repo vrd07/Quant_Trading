@@ -129,7 +129,7 @@ echo "─── [4/4] Starting Live Trading ───"
 echo ""
 
 if [ "$FORCE" = true ]; then
-    exec python3 src/main.py --env live --config "$CONFIG" --force-live
+    exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG" --force-live
 else
-    exec python3 src/main.py --env live --config "$CONFIG"
+    exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG"
 fi

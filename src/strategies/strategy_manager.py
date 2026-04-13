@@ -24,6 +24,7 @@ from .kalman_regime_strategy import KalmanRegimeStrategy
 from .mini_medallion_strategy import MiniMedallionStrategy
 from .structure_break_retest import StructureBreakRetestStrategy
 from .supply_demand_strategy import SupplyDemandStrategy
+from .asia_range_fade_strategy import AsiaRangeFadeStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -40,6 +41,7 @@ class StrategyManager:
         'mini_medallion': MiniMedallionStrategy,
         'sbr':            StructureBreakRetestStrategy,
         'supply_demand':  SupplyDemandStrategy,
+        'asia_range_fade': AsiaRangeFadeStrategy,
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
