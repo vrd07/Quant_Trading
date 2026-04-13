@@ -316,6 +316,28 @@ strategies:
     session_hours: [4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 22]
     cooldown_bars: 4
 
+  # ── ASIA RANGE FADE ───────────────────────────────────────────────────────
+  # Fills UTC 09–13 (14:30–18:30 IST) dead window. Backtest 2025-01→2026-03:
+  # 214 trades, WR 45.3%, PF 1.31, DD 1.6% on $10k.
+  asia_range_fade:
+    enabled: true
+    timeframe: 5m
+    session_hours: [9, 10, 11, 12, 13]
+    lookback_bars: 20
+    adx_max: 28.0
+    bb_period: 20
+    bb_width_window: 200
+    bb_width_percentile: 0.60
+    rsi_period: 14
+    rsi_oversold: 35.0
+    rsi_overbought: 65.0
+    atr_period: 14
+    atr_stop_multiplier: 1.5
+    rr_ratio: 1.5
+    cooldown_bars: 12
+    long_only: false
+    respect_ml_trend: true
+
 trading_hours:
   sessions:
     # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
@@ -324,7 +346,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand, asia_range_fade]
 
   news_filter:
     enabled: true
