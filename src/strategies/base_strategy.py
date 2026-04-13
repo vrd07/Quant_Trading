@@ -56,8 +56,18 @@ def _bar_hour(index_value) -> Optional[int]:
     """
     if hasattr(index_value, 'hour'):
         return int(index_value.hour)
+    # Only treat numeric values as Unix timestamps when they look like
+    # real epoch seconds (post-2001). Small ints (e.g. RangeIndex
+    # positions like 400) would otherwise parse to 1970-01-01 → hour=0.
     try:
-        return int(pd.Timestamp(index_value, unit='s', tz='UTC').hour)
+        v = float(index_value)
+        if v < 1e9:   # below ~2001 → almost certainly not a timestamp
+            return None
+        return int(pd.Timestamp(v, unit='s', tz='UTC').hour)
+    except Exception:
+        pass
+    try:
+        return int(pd.Timestamp(index_value).hour)
     except Exception:
         return None
 
@@ -194,17 +204,23 @@ class BaseStrategy(ABC):
         """
         Return the UTC hour of the most recent bar.
 
-        Delegates to the module-level ``_bar_hour`` helper so that all
-        strategies share one robust timestamp-parsing path.
+        Live CandleStore.get_bars() returns a frame with a plain
+        RangeIndex and the actual time held in a ``timestamp`` column;
+        backtests load CSVs with a DatetimeIndex.  We check the column
+        first so live mode reads the real time instead of the positional
+        index (which would incorrectly parse to hour=0).
 
         Args:
-            bars: Strategy bar DataFrame whose index may be a
-                DatetimeIndex or a raw integer Unix-timestamp index.
+            bars: Strategy bar DataFrame.
 
         Returns:
-            Integer hour in [0, 23], or None when the index value cannot
-            be interpreted as a timestamp.
+            Integer hour in [0, 23], or None when no time source is usable.
         """
+        if 'timestamp' in bars.columns and len(bars) > 0:
+            ts = bars['timestamp'].iloc[-1]
+            hour = _bar_hour(ts)
+            if hour is not None:
+                return hour
         return _bar_hour(bars.index[-1])
 
     def _log_no_signal(self, reason: str) -> None:
