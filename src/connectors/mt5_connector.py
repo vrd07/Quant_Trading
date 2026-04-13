@@ -401,12 +401,36 @@ class MT5Connector:
         try:
             response = self.client.get_bars(symbol=mapped, timeframe=timeframe, count=count)
             if response.get("status") == "ERROR":
+                # Broker may use a suffixed name (e.g. XAUUSD.pro). Discover via
+                # status quotes and retry once — preload runs before any tick
+                # has populated _symbol_map through the normal path.
+                if mapped == symbol:
+                    discovered = self._discover_broker_symbol(symbol)
+                    if discovered and discovered != symbol:
+                        logger.info("Retrying GET_BARS with discovered symbol: %s -> %s", symbol, discovered)
+                        response = self.client.get_bars(symbol=discovered, timeframe=timeframe, count=count)
+                        if response.get("status") != "ERROR":
+                            return response.get("bars", [])
                 logger.warning("GET_BARS failed: %s", response.get("message"))
                 return []
             return response.get("bars", [])
         except Exception as e:
             logger.warning("GET_BARS error for %s: %s", symbol, e)
             return []
+
+    def _discover_broker_symbol(self, symbol: str) -> Optional[str]:
+        """Find the broker's actual symbol name (handles suffixes like .pro, .i, etc.)."""
+        try:
+            status = self.client.get_status()
+            quotes = status.get('quotes', {})
+            for broker_sym in quotes:
+                if broker_sym.startswith(symbol) or symbol.startswith(broker_sym):
+                    self._symbol_map[symbol] = broker_sym
+                    logger.info("Symbol mapped via discovery: %s -> %s", symbol, broker_sym)
+                    return broker_sym
+        except Exception as e:
+            logger.debug("Symbol discovery failed for %s: %s", symbol, e)
+        return None
 
     def get_current_tick(self, symbol: str) -> Optional[Tick]:
         """Get current tick for a symbol."""
