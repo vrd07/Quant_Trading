@@ -655,17 +655,20 @@ class TradingSystem:
                 try:
                     dumped_total = 0
                     for sym_key, tf_stores in self.data_engine.candle_stores.items():
-                        store = tf_stores.get("5m")
-                        if not store or len(store) == 0:
-                            continue
                         safe_key = sym_key.replace("/", "_")
-                        csv_path = PROJECT_ROOT / "data" / "logs" / f"candle_store_{safe_key}_5m.csv"
-                        csv_path.parent.mkdir(parents=True, exist_ok=True)
-                        store.to_csv(str(csv_path))
-                        dumped_total += len(store)
-                        self.logger.info(
-                            f"[RegimeML] Dumped {len(store)} live 5m bars from {sym_key}"
-                        )
+                        # Dump both 1m and 5m so cache-fallback on next startup
+                        # can serve kalman_regime (needs 15m built from 1m).
+                        for tf_name in ("1m", "5m"):
+                            store = tf_stores.get(tf_name)
+                            if not store or len(store) == 0:
+                                continue
+                            csv_path = PROJECT_ROOT / "data" / "logs" / f"candle_store_{safe_key}_{tf_name}.csv"
+                            csv_path.parent.mkdir(parents=True, exist_ok=True)
+                            store.to_csv(str(csv_path))
+                            dumped_total += len(store)
+                            self.logger.info(
+                                f"[RegimeML] Dumped {len(store)} live {tf_name} bars from {sym_key}"
+                            )
                     if dumped_total == 0:
                         self.logger.warning(
                             "[RegimeML] No candle stores found to dump"
