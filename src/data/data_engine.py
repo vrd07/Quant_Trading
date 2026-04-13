@@ -218,6 +218,10 @@ class DataEngine:
                 )
                 if tf == '1m':
                     self._build_higher_tf_from_1m(symbol_ticker)
+                else:
+                    # Cache-only 5m: still need to populate 15m/1h/etc for
+                    # higher-TF strategies like kalman_regime.
+                    self._build_higher_tf_from_base(symbol_ticker, base_tf=tf)
                 return loaded
 
             except Exception as e:
@@ -288,6 +292,59 @@ class DataEngine:
             logger.error(f"Failed to preload {symbol_ticker} from yfinance: {e}", exc_info=True)
             return 0
     
+    def _build_higher_tf_from_base(self, symbol_ticker: str, base_tf: str) -> None:
+        """Resample a loaded base timeframe up to all larger timeframes."""
+        base_store = self.candle_stores[symbol_ticker].get(base_tf)
+        if not base_store:
+            return
+        bars_base = base_store.get_bars()
+        if bars_base.empty:
+            return
+
+        symbol = self.symbols[symbol_ticker]
+        base_seconds = self._get_timeframe_seconds(base_tf)
+
+        for tf in self.timeframes:
+            if tf == base_tf:
+                continue
+            # Only resample UP (can't build 1m from 5m).
+            if self._get_timeframe_seconds(tf) <= base_seconds:
+                continue
+
+            resample_rule = {
+                '5m': '5min', '15m': '15min', '1h': '1h', '4h': '4h', '1d': '1D'
+            }.get(tf)
+            if not resample_rule:
+                continue
+
+            try:
+                df = bars_base.set_index('timestamp')
+                resampled = df.resample(resample_rule).agg({
+                    'open': 'first', 'high': 'max', 'low': 'min',
+                    'close': 'last', 'volume': 'sum'
+                }).dropna()
+
+                for idx, row in resampled.iterrows():
+                    ts = idx.to_pydatetime()
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    bar = Bar(
+                        symbol=symbol,
+                        timestamp=ts,
+                        open=Decimal(str(round(row['open'], 6))),
+                        high=Decimal(str(round(row['high'], 6))),
+                        low=Decimal(str(round(row['low'], 6))),
+                        close=Decimal(str(round(row['close'], 6))),
+                        volume=Decimal(str(int(row['volume'])))
+                    )
+                    self.candle_stores[symbol_ticker][tf].add_bar(bar)
+
+                htf_count = len(self.candle_stores[symbol_ticker][tf])
+                if htf_count > 0:
+                    logger.info(f"Built {htf_count} {tf} bars for {symbol_ticker} from {base_tf} data")
+            except Exception as e:
+                logger.warning(f"Failed to build {tf} bars for {symbol_ticker} from {base_tf}: {e}")
+
     def _build_higher_tf_from_1m(self, symbol_ticker: str) -> None:
         """Build higher timeframe bars from preloaded 1m data."""
         bars_1m = self.candle_stores[symbol_ticker]['1m'].get_bars()
