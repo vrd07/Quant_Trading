@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-04-13T05:06:26.722474+00:00",
-  "valid_until": "2026-04-14T05:06:26.722474+00:00",
+  "generated_at": "2026-04-13T09:05:13.571426+00:00",
+  "valid_until": "2026-04-14T09:05:13.571426+00:00",
   "regime": "TREND",
   "confidence": 0.9,
   "classifier": "rule-based",
