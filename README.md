@@ -74,25 +74,27 @@ You should now be inside the bot's folder.
 
 ---
 
-## 📦 Step 4 — Install Bot Dependencies
+## 📦 Step 4 — One-Click Setup (Easiest)
 
-Still in the Command Prompt (inside the `Quant_Trading` folder), run these commands one at a time. Why a virtual environment? It keeps the bot's Python packages isolated from anything else on your PC.
+1. Open the `Quant_Trading` folder in File Explorer
+2. Go into the **`scripts`** subfolder
+3. **Double-click `setup.bat`**
 
-```
-python -m venv venv
-venv\Scripts\activate
-pip install --upgrade pip
-pip install -r requirements.txt
-```
+That's it. The script will:
+- Find your Python install
+- Create the virtual environment
+- Install every required package (2–3 minutes of scrolling text — normal)
+- **Put a "Quant Trading Bot" shortcut on your Desktop**
 
-After the last command finishes (2–3 minutes of scrolling text — normal), you should see `(venv)` at the start of your prompt line. That means the virtual environment is active.
+When it says `Setup complete!`, press any key to close the window.
 
-> From now on, **every time you open a new Command Prompt to use the bot**, first activate the venv:
+> **Advanced / manual alternative:** open Command Prompt in the folder and run:
 > ```
-> cd %USERPROFILE%\Documents\Quant_Trading
+> python -m venv venv
 > venv\Scripts\activate
+> pip install --upgrade pip
+> pip install -r requirements.txt
 > ```
-> (PowerShell users: use `venv\Scripts\Activate.ps1` instead. If PowerShell blocks it, run once: `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned`.)
 
 ---
 
@@ -136,13 +138,14 @@ Save the file (`Ctrl + S`) and close Notepad.
 
 ## ▶️ Step 7 — Run the Bot
 
-**Option A — Double-click (easiest):**
+**Option A — Desktop shortcut (easiest):**
 
-1. Open the `scripts` folder inside `Quant_Trading`
-2. Double-click **`start_live.bat`**
-3. A black window will appear asking: *"Are you ABSOLUTELY SURE you want to trade live? (type YES)"*
-4. Type `YES` and press Enter
-5. The bot is now running! 🎉
+1. **Double-click the "Quant Trading Bot" shortcut on your Desktop** (created by `setup.bat` in Step 4)
+2. A black window will appear asking: *"Are you ABSOLUTELY SURE you want to trade live? (type YES)"*
+3. Type `YES` and press Enter
+4. The bot is now running! 🎉
+
+> No Desktop shortcut? Open the `scripts` folder and double-click `start_live.bat` directly — it will auto-run setup if the venv is missing.
 
 **Option B — PowerShell (nicer looking):**
 

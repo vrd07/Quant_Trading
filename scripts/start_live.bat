@@ -22,14 +22,19 @@ for %%a in (%*) do (
     if /i "%%a"=="--force" set FORCE=true
 )
 
-:: Activate venv
-if exist "venv\Scripts\activate.bat" (
-    call venv\Scripts\activate.bat
-) else (
-    echo ERROR: venv not found. Run: python -m venv venv ^&^& pip install -r requirements.txt
-    pause
-    exit /b 1
+:: Activate venv (auto-run setup if missing)
+if not exist "venv\Scripts\activate.bat" (
+    echo.
+    echo Virtual environment not found — running first-time setup...
+    echo.
+    call "%~dp0setup.bat"
+    if not exist "venv\Scripts\activate.bat" (
+        echo ERROR: Setup did not complete. Please run scripts\setup.bat manually.
+        pause
+        exit /b 1
+    )
 )
+call venv\Scripts\activate.bat
 
 :: ── Account Selection ───────────────────────────────────────
 if "%FORCE%"=="true" (
