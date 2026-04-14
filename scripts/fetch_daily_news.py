@@ -203,36 +203,50 @@ def update_config_csv_path(csv_path: Path) -> None:
         _log(f"Config dir not found at {CONFIG_DIR}, skipping config update")
         return
 
-    rel_path = str(csv_path.relative_to(PROJECT_ROOT))
+    # Force forward slashes so YAML is portable AND so the string is safe to
+    # inject into a regex replacement (backslashes would be parsed as backrefs).
+    rel_path = csv_path.relative_to(PROJECT_ROOT).as_posix()
     config_files = sorted(CONFIG_DIR.glob("config_live*.yaml"))
 
     if not config_files:
         _log("No config_live*.yaml files found")
         return
 
+    # Use a lambda replacement: avoids any re-escaping of the rel_path string.
+    def _make_replacer(prefix_group_idx: int):
+        return lambda m: m.group(prefix_group_idx) + rel_path
+
     for config_file in config_files:
         try:
-            with open(config_file, "r") as f:
+            with open(config_file, "r", encoding="utf-8") as f:
                 content = f.read()
+
+            if not content.strip():
+                _log(f"Refusing to rewrite empty config: {config_file.name}")
+                continue
 
             # Replace csv_path: <anything>.csv under news_filter section
             new_content = re.sub(
                 r"(news_filter:.*?csv_path:\s*)[\w./\-]+\.csv",
-                rf"\g<1>{rel_path}",
+                _make_replacer(1),
                 content,
-                flags=re.DOTALL
+                flags=re.DOTALL,
             )
 
             if new_content == content:
                 # Pattern didn't match — try simpler single-line replace
                 new_content = re.sub(
                     r"(csv_path:\s*)[\w./\-]+\.csv",
-                    rf"\g<1>{rel_path}",
+                    _make_replacer(1),
                     content,
                 )
 
             if new_content != content:
-                with open(config_file, "w") as f:
+                # Hard safety gate: never write a truncated/empty result.
+                if len(new_content) < max(200, int(len(content) * 0.5)):
+                    _log(f"Refusing suspicious rewrite of {config_file.name} ({len(content)} -> {len(new_content)} bytes)")
+                    continue
+                with open(config_file, "w", encoding="utf-8", newline="\n") as f:
                     f.write(new_content)
                 _log(f"Updated {config_file.name} csv_path → {rel_path}")
             else:
