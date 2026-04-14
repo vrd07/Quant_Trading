@@ -1465,8 +1465,8 @@ def main():
     if args.env == 'live' and not args.force_live:
         # Load config to display details
         import yaml as _yaml
-        with open(config_file, 'r') as _f:
-            _live_cfg = _yaml.safe_load(_f)
+        with open(config_file, 'r', encoding='utf-8') as _f:
+            _live_cfg = _yaml.safe_load(_f) or {}
 
         # Merge any runtime overrides written by scripts/runtime_setup.py so the
         # banner reflects the values the user actually entered.
@@ -1486,13 +1486,21 @@ def main():
             except Exception:
                 pass
 
-        _balance = _live_cfg.get('account', {}).get('initial_balance', '?')
-        _max_dd = _live_cfg.get('risk', {}).get('max_drawdown_pct', '?')
-        _abs_limit = _live_cfg.get('risk', {}).get('absolute_max_loss_usd', '?')
-        _max_pos = _live_cfg.get('risk', {}).get('max_positions', '?')
-        _risk_pt = _live_cfg.get('risk', {}).get('risk_per_trade_pct', '?')
-        _risk_usd = float(_balance) * float(_risk_pt)
-        _lot = _live_cfg.get('risk', {}).get('position_sizing', {}).get('fixed_lots', {}).get('XAUUSD', 0.02)
+        # Defensive: any section may be missing or present-but-None after YAML load/merge.
+        _account = _live_cfg.get('account') or {}
+        _risk = _live_cfg.get('risk') or {}
+        _sizing = _risk.get('position_sizing') or {}
+        _fixed_lots = _sizing.get('fixed_lots') or {}
+        _balance = _account.get('initial_balance', 0)
+        _max_dd = _risk.get('max_drawdown_pct', 0)
+        _abs_limit = _risk.get('absolute_max_loss_usd', '?')
+        _max_pos = _risk.get('max_positions', '?')
+        _risk_pt = _risk.get('risk_per_trade_pct', 0)
+        try:
+            _risk_usd = float(_balance) * float(_risk_pt)
+        except (TypeError, ValueError):
+            _risk_usd = 0.0
+        _lot = _fixed_lots.get('XAUUSD', 0.02)
 
         print("\n" + "=" * 60)
         print("\033[91m" + "  ⚠️  LIVE TRADING MODE  ⚠️" + "\033[0m")
@@ -1593,5 +1601,11 @@ if __name__ == "__main__":
     import sys as _sys
     if _sys.platform == "win32":
         import asyncio as _asyncio
-        _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
+        import warnings as _warnings
+        # Python 3.12 deprecated set_event_loop_policy and the Windows*EventLoopPolicy
+        # classes, but they still work and are the correct fix for subprocess bugs on
+        # Windows. Suppress the noise so the banner isn't buried under warnings.
+        with _warnings.catch_warnings():
+            _warnings.simplefilter("ignore", DeprecationWarning)
+            _asyncio.set_event_loop_policy(_asyncio.WindowsSelectorEventLoopPolicy())
     main()
