@@ -1467,20 +1467,41 @@ def main():
         import yaml as _yaml
         with open(config_file, 'r') as _f:
             _live_cfg = _yaml.safe_load(_f)
-        
+
+        # Merge any runtime overrides written by scripts/runtime_setup.py so the
+        # banner reflects the values the user actually entered.
+        import os as _os
+        _override_path = "config/runtime_overrides.yaml"
+        if _os.path.exists(_override_path):
+            try:
+                with open(_override_path, 'r') as _of:
+                    _ov = _yaml.safe_load(_of) or {}
+                def _dm(b, o):
+                    for k, v in o.items():
+                        if isinstance(v, dict) and isinstance(b.get(k), dict):
+                            _dm(b[k], v)
+                        else:
+                            b[k] = v
+                _dm(_live_cfg, _ov)
+            except Exception:
+                pass
+
         _balance = _live_cfg.get('account', {}).get('initial_balance', '?')
         _max_dd = _live_cfg.get('risk', {}).get('max_drawdown_pct', '?')
         _abs_limit = _live_cfg.get('risk', {}).get('absolute_max_loss_usd', '?')
         _max_pos = _live_cfg.get('risk', {}).get('max_positions', '?')
         _risk_pt = _live_cfg.get('risk', {}).get('risk_per_trade_pct', '?')
-        
+        _risk_usd = float(_balance) * float(_risk_pt)
+        _lot = _live_cfg.get('risk', {}).get('position_sizing', {}).get('fixed_lots', {}).get('XAUUSD', 0.02)
+
         print("\n" + "=" * 60)
         print("\033[91m" + "  ⚠️  LIVE TRADING MODE  ⚠️" + "\033[0m")
         print("=" * 60)
         print(f"  Account Balance:     ${_balance}")
         print(f"  Max Drawdown:        {float(_max_dd)*100:.1f}% (${float(_balance)*float(_max_dd):.0f})")
         print(f"  Absolute Loss Limit: ${_abs_limit}")
-        print(f"  Risk Per Trade:      {float(_risk_pt)*100:.2f}% (${float(_balance)*float(_risk_pt):.0f})")
+        print(f"  Risk Per Trade:      {_risk_pt*100:.2f}% (${_risk_usd:.2f})")
+        print(f"  XAUUSD Lot Size:     {_lot}")
         print(f"  Max Positions:       {_max_pos}")
         print("=" * 60)
 
