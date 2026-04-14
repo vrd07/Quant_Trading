@@ -29,6 +29,10 @@ from .data_validator import DataValidator
 import logging
 logger = logging.getLogger(__name__)
 
+# Hardcoded broker offset hack — broker server runs GMT+4 but stamps as UTC.
+# TODO: replace with auto-detection (compare broker time vs system UTC at connect).
+BROKER_OFFSET = timedelta(hours=4)
+
 
 class DataEngine:
     """
@@ -141,7 +145,7 @@ class DataEngine:
 
             loaded = 0
             for b in bars_data:
-                ts = datetime.fromtimestamp(int(b['time']), tz=timezone.utc)
+                ts = datetime.fromtimestamp(int(b['time']), tz=timezone.utc) - BROKER_OFFSET
                 bar = Bar(
                     symbol=symbol,
                     timestamp=ts,
