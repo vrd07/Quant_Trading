@@ -68,11 +68,25 @@ def main() -> int:
         print(f"ERROR: config not found: {cfg_path}", file=sys.stderr)
         return 1
 
-    with cfg_path.open("r") as f:
+    with cfg_path.open("r", encoding="utf-8") as f:
         config = yaml.safe_load(f)
 
-    balance = float(config["account"]["initial_balance"])
-    all_symbols = config.get("symbols", {})
+    if not config:
+        print(
+            f"ERROR: config file loaded as empty: {cfg_path}\n"
+            f"  The file exists but has no YAML content. Likely causes:\n"
+            f"  - Git clone didn't transfer the file contents (try: git pull or re-clone)\n"
+            f"  - File was accidentally emptied — restore with: git checkout -- {cfg_path}",
+            file=sys.stderr,
+        )
+        return 1
+
+    account = config.get("account") or {}
+    if "initial_balance" not in account:
+        print(f"ERROR: config is missing 'account.initial_balance': {cfg_path}", file=sys.stderr)
+        return 1
+    balance = float(account["initial_balance"])
+    all_symbols = config.get("symbols") or {}
 
     print()
     print("=" * 60)

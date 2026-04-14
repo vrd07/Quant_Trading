@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 # Hardcoded broker offset hack — broker server runs GMT+4 but stamps as UTC.
 # TODO: replace with auto-detection (compare broker time vs system UTC at connect).
-BROKER_OFFSET = timedelta(hours=4)
+BROKER_OFFSET = timedelta(hours=4)  # fallback only; real value comes from connector.broker_offset
 
 
 class DataEngine:
@@ -145,7 +145,10 @@ class DataEngine:
 
             loaded = 0
             for b in bars_data:
-                ts = datetime.fromtimestamp(int(b['time']), tz=timezone.utc) - BROKER_OFFSET
+                # Use connector-detected offset; only fall back if attribute is absent
+                # (not when it's zero — a zero offset means broker runs on real UTC).
+                offset = getattr(self.connector, "broker_offset", BROKER_OFFSET)
+                ts = datetime.fromtimestamp(int(b['time']), tz=timezone.utc) - offset
                 bar = Bar(
                     symbol=symbol,
                     timestamp=ts,

@@ -53,8 +53,13 @@ def main():
     # ── Load config ─────────────────────────────────────────────
     config_path = PROJECT_ROOT / args.config
     try:
-        with open(config_path) as f:
+        with open(config_path, encoding="utf-8") as f:
             config = yaml.safe_load(f)
+        if not config:
+            raise ValueError(
+                f"config loaded as empty — file exists but has no YAML content. "
+                f"Restore with: git checkout -- {config_path}"
+            )
         results.append(check("Config file loadable", True, str(config_path.name)))
     except Exception as e:
         results.append(check("Config file loadable", False, str(e)))

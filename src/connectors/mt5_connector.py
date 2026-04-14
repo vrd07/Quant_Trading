@@ -9,7 +9,7 @@ import sys
 import logging
 from pathlib import Path
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any
 import time
 
@@ -52,6 +52,9 @@ class MT5Connector:
             self.last_heartbeat = None
             self.symbols_cache: Dict[str, Symbol] = {}
             self._symbol_map: Dict[str, str] = {}
+            # Broker TZ offset: broker_time - real_utc. Detected on connect().
+            # Default 0 so mis-bootstrap behavior matches "assume broker is UTC".
+            self.broker_offset: timedelta = timedelta(0)
             logger.info("MT5Connector initialized successfully")
             
         except Exception as e:
@@ -80,6 +83,7 @@ class MT5Connector:
                 if response.get("status") == "ALIVE":
                     self.connected = True
                     self.last_heartbeat = datetime.now(timezone.utc)
+                    self._detect_broker_offset()
                     logger.info("Successfully connected to MT5")
                     return True
                 else:
@@ -94,6 +98,33 @@ class MT5Connector:
         logger.error("Failed to connect to MT5 after %d attempts", max_retries)
         raise MT5ConnectionError("Failed to connect to MT5 after multiple attempts")
     
+    def _detect_broker_offset(self) -> None:
+        """
+        Read `server_time` from the EA status file and compute broker_time - utc_now,
+        rounded to the nearest whole hour. Brokers virtually always run on integer-hour
+        offsets; rounding absorbs the ~1s clock skew between EA write and our read.
+        On any failure, leave broker_offset at its previous value (default timedelta(0)).
+        """
+        try:
+            status = self.client.get_status()
+            server_time_str = status.get("server_time")
+            if not server_time_str:
+                logger.warning("EA status has no server_time field; broker_offset stays %s", self.broker_offset)
+                return
+            # MT5 TimeToString with TIME_DATE|TIME_SECONDS → "YYYY.MM.DD HH:MM:SS"
+            broker_naive = datetime.strptime(server_time_str, "%Y.%m.%d %H:%M:%S")
+            broker_utc_labeled = broker_naive.replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            raw_delta = broker_utc_labeled - now_utc
+            hours = round(raw_delta.total_seconds() / 3600)
+            self.broker_offset = timedelta(hours=hours)
+            logger.info(
+                "Broker offset detected: %+d hour(s) (server_time=%s, raw_delta=%.1fs)",
+                hours, server_time_str, raw_delta.total_seconds(),
+            )
+        except Exception as e:
+            logger.warning("Broker offset detection failed: %s. Keeping %s.", e, self.broker_offset)
+
     def disconnect(self) -> None:
         """Clean disconnect."""
         logger.info("Disconnecting from MT5")
