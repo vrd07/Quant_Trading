@@ -76,8 +76,14 @@ class TradingSystem:
             config_file: Path to configuration file
         """
         # Load configuration
-        with open(config_file, 'r') as f:
+        with open(config_file, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
+        if not self.config:
+            raise ValueError(
+                f"Config file loaded as empty: {config_file}\n"
+                f"  The file exists but contains no YAML. Restore it with:\n"
+                f"    git checkout -- {config_file}"
+            )
 
         # Merge interactive runtime overrides (written by scripts/runtime_setup.py)
         override_path = "config/runtime_overrides.yaml"
