@@ -1,7 +1,7 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-04-15T15:10:16.088511+00:00",
-  "valid_until": "2026-04-16T15:10:16.088511+00:00",
+  "generated_at": "2026-04-15T16:54:21.394568+00:00",
+  "valid_until": "2026-04-16T16:54:21.394568+00:00",
   "regime": "RANGE",
   "confidence": 0.9051,
   "classifier": "RandomForest+Markov (n=278 samples)",
@@ -10,7 +10,7 @@
     "momentum": true,
     "kalman_regime": true,
     "mean_reversion": false,
-    "vwap": false,
+    "vwap": true,
     "mini_medallion": true
   },
   "diagnostics": {
@@ -29,13 +29,14 @@
     "momentum": 0.55,
     "kalman_regime": 0.75,
     "mean_reversion": 0.0,
-    "vwap": 0.0,
+    "vwap": 0.45,
     "mini_medallion": 0.6
   },
   "performance_scores": {
-    "kalman_regime": -0.2312,
+    "kalman_regime": -0.209,
     "mini_medallion": -0.1869,
-    "supply_demand": 0.0475,
+    "structure_break_retest": -0.0986,
+    "supply_demand": -0.0128,
     "vwap_deviation": -0.2909
   },
   "regime_probabilities": {
