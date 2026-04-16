@@ -14,6 +14,8 @@ Outputs:
 """
 
 import sys
+import os
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
 import logging
 from pathlib import Path
 from decimal import Decimal
