@@ -146,6 +146,37 @@ class RiskProcessor:
             tp_dist = sl_dist * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
+        elif strategy_name == 'descending_channel_breakout':
+            # DCB: for bullish breakout, channel_lower is the recent HL anchor;
+            # for bearish rejection, channel_upper is the rejected resistance.
+            # Anchor SL beyond the relevant boundary with an ATR buffer, then
+            # clip to a max ATR distance to keep R:R workable on small ATR bars.
+            atr = Decimal(str(signal.metadata.get('atr', 0)))
+            channel_upper = Decimal(str(signal.metadata.get('channel_upper', entry)))
+            channel_lower = Decimal(str(signal.metadata.get('channel_lower', entry)))
+            atr_mult = Decimal(str(strat_cfg.get('atr_stop_multiplier', 1.5)))
+            rr = Decimal(str(strat_cfg.get('rr_ratio', 2.0)))
+
+            buffer = atr_mult * atr
+            if side == OrderSide.BUY:
+                structure_sl = channel_lower - buffer
+                atr_sl = entry - buffer
+                sl = min(structure_sl, atr_sl)  # Farther stop wins (more room)
+                max_dist = atr * Decimal('3.0')
+                if (entry - sl) > max_dist:
+                    sl = entry - max_dist
+            else:
+                structure_sl = channel_upper + buffer
+                atr_sl = entry + buffer
+                sl = max(structure_sl, atr_sl)
+                max_dist = atr * Decimal('3.0')
+                if (sl - entry) > max_dist:
+                    sl = entry + max_dist
+
+            risk = abs(entry - sl)
+            tp_dist = risk * rr
+            tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
+
         elif strategy_name == 'structure_break_retest':
             # SBR uses the broken level as a natural SL anchor.
             # SL sits beyond the broken level by atr_stop_multiplier × ATR.
