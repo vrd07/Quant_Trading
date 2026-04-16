@@ -869,7 +869,28 @@ class TradingSystem:
             except Exception:
                 # Fallback to portfolio engine if MT5 fetch fails
                 mt5_positions = {str(p.position_id): p for p in self.portfolio_engine.get_all_positions()}
-            
+
+            # ── Kalman confidence-based position-count gate ───────────────
+            # Low-confidence kalman_regime signals are limited to 1 concurrent
+            # position; high-confidence (>= threshold) signals may stack up to
+            # risk.max_positions (still enforced by RiskEngine).
+            if signal.strategy_name == "kalman_regime":
+                conf = float(signal.metadata.get('confidence', signal.strength * 100.0))
+                conf_threshold = float(signal.metadata.get('high_confidence_threshold', 90.0))
+                if conf < conf_threshold:
+                    kalman_open = sum(
+                        1 for pos in mt5_positions.values()
+                        if (getattr(pos, 'metadata', None) or {}).get('strategy') == 'kalman_regime'
+                    )
+                    if kalman_open >= 1:
+                        self.logger.info(
+                            f"[KalmanRegime] Low confidence ({conf:.1f} < {conf_threshold:.1f}): "
+                            f"{kalman_open} kalman position(s) open, signal suppressed",
+                            strategy=signal.strategy_name,
+                            symbol=signal.symbol.ticker if signal.symbol else '?'
+                        )
+                        return
+
             # ── The5ers Rule: Directional Lock ────────────────────────────
             # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
             from src.core.constants import OrderSide as _OrderSide, PositionSide as _PositionSide
