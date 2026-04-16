@@ -25,6 +25,7 @@ from .mini_medallion_strategy import MiniMedallionStrategy
 from .structure_break_retest import StructureBreakRetestStrategy
 from .supply_demand_strategy import SupplyDemandStrategy
 from .asia_range_fade_strategy import AsiaRangeFadeStrategy
+from .descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -42,6 +43,7 @@ class StrategyManager:
         'sbr':            StructureBreakRetestStrategy,
         'supply_demand':  SupplyDemandStrategy,
         'asia_range_fade': AsiaRangeFadeStrategy,
+        'descending_channel_breakout': DescendingChannelBreakoutStrategy,
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
