@@ -341,6 +341,36 @@ strategies:
     long_only: false
     respect_ml_trend: true
 
+  # ── DESCENDING CHANNEL BREAKOUT (DCB) ──────────────────────────────
+  # Detects descending channels via linear regression, identifies
+  # structure shifts (higher-low formations), and trades confirmed
+  # breakouts or trendline rejections with defined R:R.
+  # Disabled by default — backtest before enabling live.
+  descending_channel_breakout:
+    enabled: false
+    timeframe: 5m
+    channel_lookback: 100         # ~8h of 5m data — approximates 4H channel
+    swing_period: 10              # Bars to identify swing highs/lows
+    min_hl_count: 2               # Minimum Higher Lows before entry
+    channel_slope_max: -0.001     # Max slope (must be negative = descending)
+    breakout_atr_buffer: 0.3      # Price must exceed trendline by 0.3× ATR
+    demand_zone_atr_mult: 1.5     # Demand zone width in ATR units
+    rejection_min_ratio: 0.50     # Min wick/range ratio for rejection entries
+    adx_min_threshold: 20
+    adx_max_threshold: 55
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    atr_period: 14
+    atr_stop_multiplier: 1.5
+    rr_ratio: 2.0
+    cooldown_bars: 8
+    long_only: false
+    only_in_regime: TREND
+    min_strength: 0.60
+    session_hours: [4, 5, 6, 7, 8, 13, 16, 17, 22]
+    min_body_atr_ratio: 0.30
+
 trading_hours:
   sessions:
     # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
@@ -349,7 +379,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand, asia_range_fade]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout]
 
   news_filter:
     enabled: true
