@@ -150,6 +150,7 @@ strategies:
   # Kalman Regime-Switching Strategy (Instruct.md)
   kalman_regime:
     enabled: true
+    long_only: false            # Two-sided: SELL re-enabled with confidence-gated sizing
     kalman_q: 0.00001
     kalman_r: 0.01
     rv_window: 20
@@ -163,6 +164,9 @@ strategies:
     sl_atr_multiplier: 2.5
     tp_atr_multiplier: 2.0
     news_filter: true
+    high_confidence_threshold: 90.0
+    session_filter_enabled: true
+    allowed_sessions: [[1,7],[15,17],[20,22]]   # ≥7 hours/day (UTC)
 
 trading_hours:
   sessions:
