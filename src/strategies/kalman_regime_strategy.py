@@ -116,6 +116,11 @@ class KalmanRegimeStrategy(BaseStrategy):
         # Sell-side: require higher signal strength for shorts (gold upward bias)
         self.min_signal_strength_sell = config.get('min_signal_strength_sell', None)
 
+        # Confidence threshold (0-100). Signals with confidence >= threshold may stack
+        # up to risk.max_positions; below the threshold the executor allows only one
+        # concurrent kalman_regime position. Confidence is derived from signal strength.
+        self.high_confidence_threshold = float(config.get('high_confidence_threshold', 90.0))
+
         # Minimum data required
         self.min_bars = max(self.rv_ma_window, 100) + self.rv_window + 10
 
@@ -369,6 +374,8 @@ class KalmanRegimeStrategy(BaseStrategy):
         # ── 7. Emit signal ──────────────────────────────────────────────────
         self._bars_since_signal = 0  # Reset cooldown
 
+        confidence = round(strength * 100.0, 2)
+
         return self._create_signal(
             side=side,
             strength=strength,
@@ -381,6 +388,8 @@ class KalmanRegimeStrategy(BaseStrategy):
                 'zscore': current_z,
                 'adx': current_adx,
                 'rsi': current_rsi,
-                'atr': current_atr
+                'atr': current_atr,
+                'confidence': confidence,
+                'high_confidence_threshold': self.high_confidence_threshold,
             }
         )
