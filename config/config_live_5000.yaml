@@ -296,7 +296,7 @@ strategies:
   # ── SUPPLY & DEMAND ZONE STRATEGY ─────────────────────────────────────────
   # Disabled by default — backtest before enabling live.
   supply_demand:
-    enabled: true
+    enabled: false  # Backtest 2yr: PF 1.07, DD -8.56%, 34.7% WR — no tunable edge on XAUUSD. Fold-in to mini_medallion also hurt composite.
     timeframe: 5m
     # Zone formation — loosened to surface more setups on 5m XAUUSD
     min_impulse_atr_mult: 1.6   # Was 2.5

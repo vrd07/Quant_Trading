@@ -254,7 +254,7 @@ STRATEGY_WEIGHTS = {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
         "kalman_regime":  0.75,  # raised: range-mode OU mean-reversion is Kalman's strength
         "mean_reversion": 0.00,  # disabled: backtest confirmed no edge
-        "vwap":           0.00,  # disabled: backtest confirmed no edge
+        "vwap":           0.45,  # 2026-04-15 refresh: PF 1.67, +1.54%, DD 1.3% over 2yr (30 trades, thin sample) — small clean edge
         "mini_medallion": 0.60,
     },
     "VOLATILE": {
@@ -262,7 +262,7 @@ STRATEGY_WEIGHTS = {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
         "kalman_regime":  0.90,
         "mean_reversion": 0.00,  # disabled
-        "vwap":           0.00,  # disabled
+        "vwap":           0.45,  # 2026-04-15: re-enabled alongside RANGE (same backtest evidence)
         "mini_medallion": 0.70,
     },
 }

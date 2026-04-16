@@ -259,11 +259,13 @@ class TestDynamicWeighting:
         assert overrides["kalman_regime"] is True
 
     def test_unprofitable_strategies_disabled_by_default(self):
-        """mean_reversion and vwap should be disabled in all regimes by default."""
+        """mean_reversion disabled in all regimes; vwap disabled only in TREND."""
         for regime in REGIMES:
             overrides = resolve_strategy_overrides(regime, 0.80, {})
             assert overrides["mean_reversion"] is False
-            assert overrides["vwap"] is False
+        assert resolve_strategy_overrides("TREND", 0.80, {})["vwap"] is False
+        assert resolve_strategy_overrides("RANGE", 0.80, {})["vwap"] is True
+        assert resolve_strategy_overrides("VOLATILE", 0.80, {})["vwap"] is True
 
     def test_low_confidence_enables_more_strategies(self):
         """Low confidence (< 0.55) should lower threshold, enabling more strategies."""
@@ -278,13 +280,17 @@ class TestDynamicWeighting:
             f"low={low_enabled}, high={high_enabled}"
         )
 
-    def test_all_regimes_enable_four_profitable_strategies(self):
-        """All regimes should enable the 4 profitable strategies."""
+    def test_all_regimes_enable_core_profitable_strategies(self):
+        """All regimes enable the 4 core profitable strategies; RANGE/VOLATILE also enable vwap."""
+        core = {"breakout", "momentum", "kalman_regime", "mini_medallion"}
         for regime in REGIMES:
             overrides = resolve_strategy_overrides(regime, 0.80, {})
-            enabled = [s for s, v in overrides.items() if v]
-            assert set(enabled) == {"breakout", "momentum", "kalman_regime", "mini_medallion"}, \
-                f"{regime} should enable all 4 profitable strategies, got {enabled}"
+            enabled = {s for s, v in overrides.items() if v}
+            assert core.issubset(enabled), f"{regime} missing core strategies: got {enabled}"
+            if regime == "TREND":
+                assert "vwap" not in enabled
+            else:
+                assert "vwap" in enabled
 
     def test_weights_table_completeness(self):
         """Every regime in STRATEGY_WEIGHTS should have all 6 strategies."""

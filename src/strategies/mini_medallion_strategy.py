@@ -90,7 +90,6 @@ class MiniMedallionStrategy(BaseStrategy):
             
         current_price = float(bars['close'].iloc[-1])
 
-        # Compute signal scores (-1, 0, +1) — 7 independent signals
         signals = {
             'mean_reversion': self._signal_mean_reversion(bars, vwap),
             'momentum_burst': self._signal_momentum_burst(bars),
