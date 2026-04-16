@@ -159,6 +159,12 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         self.rsi_oversold = config.get("rsi_oversold", 25)
         self.ema_trend_period = config.get("ema_trend_period", 50)
 
+        # Correction-phase gate: only run DCB when price is in a corrective
+        # pullback relative to a higher-timeframe trend anchor. Without this,
+        # the strategy bleeds during persistent uptrends (validated Q1 2026).
+        self.require_correction_phase = config.get("require_correction_phase", True)
+        self.long_ema_period = config.get("long_ema_period", 200)
+
         # Risk/execution
         self.long_only = config.get("long_only", False)
         self.cooldown_bars = config.get("cooldown_bars", 8)
@@ -180,7 +186,10 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         # O(1) slice — process last 400 bars regardless of history depth
         bars = bars.tail(400)
 
-        min_bars = self.channel_lookback + self.swing_period + 10
+        min_bars = max(
+            self.channel_lookback + self.swing_period + 10,
+            self.long_ema_period + 10 if self.require_correction_phase else 0,
+        )
         if len(bars) < min_bars:
             self._log_no_signal("Insufficient data")
             return None
@@ -210,6 +219,11 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         rsi = Indicators.rsi(bars, period=14)
         adx = Indicators.adx(bars, period=14)
         ema_trend = Indicators.ema(bars, period=self.ema_trend_period)
+        long_ema = (
+            Indicators.ema(bars, period=self.long_ema_period)
+            if self.require_correction_phase
+            else None
+        )
 
         current_close = float(bars["close"].iloc[-1])
         current_open = float(bars["open"].iloc[-1])
@@ -226,6 +240,22 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         ):
             self._log_no_signal("Indicator calculation failed")
             return None
+
+        # ── Correction-phase gate (200-EMA anchor) ───────────────────────
+        # DCB is designed for descending-channel corrections. If price is
+        # trading above its long-term EMA we're in a persistent uptrend,
+        # where the pattern degrades (Q1 2026 saw 0W/5L in this regime).
+        if self.require_correction_phase and long_ema is not None:
+            current_long_ema = float(long_ema.iloc[-1])
+            if np.isnan(current_long_ema):
+                self._log_no_signal("Long EMA not ready")
+                return None
+            if current_close > current_long_ema:
+                self._log_no_signal(
+                    f"Not in correction phase: close {current_close:.2f} "
+                    f"> {self.long_ema_period}-EMA {current_long_ema:.2f}"
+                )
+                return None
 
         # ── Phase 1: Channel Detection ───────────────────────────────────
         lookback_bars = bars.tail(self.channel_lookback)
