@@ -1,10 +1,10 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-04-15T17:08:56.906954+00:00",
-  "valid_until": "2026-04-16T17:08:56.906954+00:00",
+  "generated_at": "2026-04-16T04:09:13.215208+00:00",
+  "valid_until": "2026-04-17T04:09:13.215208+00:00",
   "regime": "RANGE",
-  "confidence": 0.9053,
-  "classifier": "RandomForest+Markov (n=278 samples)",
+  "confidence": 0.8951,
+  "classifier": "RandomForest+Markov (n=279 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -14,15 +14,15 @@
     "mini_medallion": true
   },
   "diagnostics": {
-    "adx_14": 28.101757,
-    "atr_pct": 0.041567,
-    "bb_width_ratio": 1.673248,
-    "close_ema20_pct": 0.005327,
-    "momentum_1d": -0.007597,
-    "momentum_5d": 0.07276,
-    "range_atr_ratio": 0.426126,
-    "vol_ratio": 0.585245,
-    "park_vol_zscore": -0.445286
+    "adx_14": 27.857178,
+    "atr_pct": 0.036579,
+    "bb_width_ratio": 1.560117,
+    "close_ema20_pct": 0.008738,
+    "momentum_1d": -6e-06,
+    "momentum_5d": 0.070487,
+    "range_atr_ratio": 0.148612,
+    "vol_ratio": 0.128176,
+    "park_vol_zscore": -0.669753
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -40,9 +40,9 @@
     "vwap_deviation": -0.2909
   },
   "regime_probabilities": {
-    "TREND": 0.0872,
-    "RANGE": 0.9053,
-    "VOLATILE": 0.0075
+    "TREND": 0.0977,
+    "RANGE": 0.8951,
+    "VOLATILE": 0.0072
   },
   "transition_matrix": {
     "TREND": {
@@ -51,9 +51,9 @@
       "VOLATILE": 0.125
     },
     "RANGE": {
-      "TREND": 0.1048,
-      "RANGE": 0.8871,
-      "VOLATILE": 0.0081
+      "TREND": 0.1044,
+      "RANGE": 0.8876,
+      "VOLATILE": 0.008
     },
     "VOLATILE": {
       "TREND": 0.1429,
