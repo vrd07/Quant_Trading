@@ -395,8 +395,8 @@ strategies:
     cooldown_bars: 8
     long_only: false
     only_in_regime: TREND
-    min_strength: 0.60
-    session_hours: [4, 5, 6, 7, 8, 13, 16, 17, 22]
+    min_strength: 0.55
+    session_hours: [3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18, 22, 23]
     min_body_atr_ratio: 0.30
     require_correction_phase: true   # Only trade when close < long_ema_period (correction regime)
     long_ema_period: 200             # Anchor EMA — price must be below to gate signals
