@@ -140,9 +140,9 @@ def main():
             f"  trades={r['trades']:>3} wr={r['win_rate']:>5.1f}% "
             f"pf={r['pf']:>5.2f} ret={r['return_pct']:>+7.2f}% "
             f"dd={r['max_dd_pct']:>5.2f}% exp=${r['expectancy']:>+6.2f} "
-            f"| ema={o['long_ema_period']} slope={o['channel_slope_max']} "
-            f"lb={o['channel_lookback']} sw={o['swing_period']} "
-            f"str={o['min_strength']} cd={o['cooldown_bars']}"
+            f"| ema={o.get('long_ema_period','-')} slope={o.get('channel_slope_max','-')} "
+            f"sw={o.get('swing_period','-')} "
+            f"str={o.get('min_strength','-')} cd={o.get('cooldown_bars','-')}"
         )
 
     # Pick: most trades with PF >= 1.2
