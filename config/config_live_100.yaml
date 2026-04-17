@@ -288,7 +288,7 @@ strategies:
     adx_max_threshold: 55           # Cap ADX — overheated trends whipsaw
     rsi_overbought: 70              # Tighter RSI bands
     rsi_oversold: 30
-    atr_stop_multiplier: 1.2        # Tighter SL (was 1.5) — broken level is strong invalidation
+    atr_stop_multiplier: 1.8        # Widened from 1.2 — gives retest room to wick past broken level
     rr_ratio: 2.0                   # Lowered from 2.5 — improves TP hit rate
     cooldown_bars: 8                # Fast re-entry in quality sessions
     long_only: false
@@ -349,14 +349,14 @@ strategies:
   descending_channel_breakout:
     enabled: true
     timeframe: 5m
-    channel_lookback: 100         # ~8h of 5m data — approximates 4H channel
-    swing_period: 10              # Bars to identify swing highs/lows
-    min_hl_count: 2               # Minimum Higher Lows before entry
-    channel_slope_max: -0.001     # Max slope (must be negative = descending)
-    breakout_atr_buffer: 0.3      # Price must exceed trendline by 0.3× ATR
-    demand_zone_atr_mult: 1.5     # Demand zone width in ATR units
-    rejection_min_ratio: 0.50     # Min wick/range ratio for rejection entries
-    adx_min_threshold: 22
+    channel_lookback: 60
+    swing_period: 5
+    min_hl_count: 1
+    channel_slope_max: -0.0003
+    breakout_atr_buffer: 0.20
+    demand_zone_atr_mult: 1.5
+    rejection_min_ratio: 0.50
+    adx_min_threshold: 20
     adx_max_threshold: 55
     rsi_overbought: 75
     rsi_oversold: 25
@@ -364,14 +364,14 @@ strategies:
     atr_period: 14
     atr_stop_multiplier: 1.5
     rr_ratio: 2.0
-    cooldown_bars: 8
+    cooldown_bars: 3
     long_only: false
     only_in_regime: TREND
-    min_strength: 0.55
-    session_hours: [3, 4, 5, 6, 7, 8, 9, 10, 13, 14, 15, 16, 17, 18, 22, 23]
-    min_body_atr_ratio: 0.30
-    require_correction_phase: true   # Only trade when close < long_ema_period (correction regime)
-    long_ema_period: 200             # Anchor EMA — price must be below to gate signals
+    min_strength: 0.45
+    session_hours: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    min_body_atr_ratio: 0.25
+    require_correction_phase: false
+    long_ema_period: 200
 
 trading_hours:
   sessions:
