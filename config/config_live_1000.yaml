@@ -347,7 +347,7 @@ strategies:
   # breakouts or trendline rejections with defined R:R.
   # Disabled by default — backtest before enabling live.
   descending_channel_breakout:
-    enabled: false
+    enabled: true
     timeframe: 5m
     channel_lookback: 100
     swing_period: 10
@@ -356,7 +356,7 @@ strategies:
     breakout_atr_buffer: 0.3
     demand_zone_atr_mult: 1.5
     rejection_min_ratio: 0.50
-    adx_min_threshold: 20
+    adx_min_threshold: 22
     adx_max_threshold: 55
     rsi_overbought: 75
     rsi_oversold: 25
@@ -370,6 +370,8 @@ strategies:
     min_strength: 0.60
     session_hours: [4, 5, 6, 7, 8, 13, 16, 17, 22]
     min_body_atr_ratio: 0.30
+    require_correction_phase: true   # Only trade when close < long_ema_period (correction regime)
+    long_ema_period: 200             # Anchor EMA — price must be below to gate signals
 
 trading_hours:
   sessions:
