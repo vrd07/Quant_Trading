@@ -232,6 +232,8 @@ class SimulatedBroker:
 
         # Subtract commission
         pnl -= self.commission_per_trade
+        if position.symbol and position.symbol.commission_per_lot > 0:
+            pnl -= position.symbol.commission_per_lot * position.quantity * Decimal("2")
 
         # Update balance
         self.balance += pnl
