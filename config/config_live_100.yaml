@@ -420,6 +420,13 @@ strategies:
     require_fvg_confluence: false
     fvg_ob_proximity_atr: 2.0
     fvg_max_age_bars: 50
+    # BOS/CHoCH (structure shift) confluence -- opt-in ICT structure filter.
+    # When true, entry requires a recent confirmed bullish (BUY) or bearish (SELL)
+    # structure shift (BOS or CHoCH) within bos_choch_max_age_bars.
+    require_bos_choch_confluence: false
+    bos_choch_swing_length: 10
+    bos_choch_max_age_bars: 60
+    bos_choch_accept_bos: true
 
 trading_hours:
   sessions:
