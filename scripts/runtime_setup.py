@@ -54,25 +54,6 @@ def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> 
         return val
 
 
-def _prompt_int(prompt: str, default: int, minimum: int | None = None, maximum: int | None = None) -> int:
-    while True:
-        raw = input(f"{prompt} [default: {default}]: ").strip()
-        if raw == "":
-            return default
-        try:
-            val = int(raw)
-        except ValueError:
-            print("  Invalid integer, try again.")
-            continue
-        if minimum is not None and val < minimum:
-            print(f"  Must be >= {minimum}.")
-            continue
-        if maximum is not None and val > maximum:
-            print(f"  Must be <= {maximum}.")
-            continue
-        return val
-
-
 def _usd_per_pip(symbol_cfg: dict, lot_size: float) -> float:
     return float(symbol_cfg["pip_value"]) * float(symbol_cfg["value_per_lot"]) * lot_size
 
@@ -223,33 +204,6 @@ def main() -> int:
         print("  => Daily profit target disabled")
     print()
 
-    # ── Max concurrent positions ──
-    print("--- Step 5: Max concurrent positions ---")
-    default_max_pos = int(config["risk"].get("max_positions", 2))
-    max_positions = _prompt_int(
-        "  Max positions open at the same time",
-        default=default_max_pos,
-        minimum=1,
-        maximum=20,
-    )
-    worst_case = max_positions * max_loss_trade
-    print(f"  => Worst-case concurrent exposure: {max_positions} x ${max_loss_trade:.2f} = ${worst_case:.2f}")
-    if worst_case > max_daily_loss:
-        print(f"  WARNING: {max_positions} positions could lose ${worst_case:.2f} — exceeds daily cap ${max_daily_loss:.2f}.")
-    print()
-
-    # ── Manual trade per-trade cap (feeds ManualTradeMonitor) ──
-    print("--- Step 6: Manual-click per-trade risk cap ---")
-    default_manual_cap = float(
-        config.get("risk", {}).get("manual_guard", {}).get("max_risk_per_trade_usd", max_loss_trade)
-    )
-    manual_cap = _prompt_float(
-        "  Max loss per MANUAL trade (USD) — monitor warns/closes if exceeded",
-        default=default_manual_cap,
-        minimum=0.01,
-    )
-    print()
-
     # ── Build overrides ──
     risk_per_trade_pct = max_loss_trade / balance if balance else default_risk_pct
 
@@ -268,10 +222,6 @@ def main() -> int:
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
             "max_daily_profit_usd": max_daily_profit,
-            "max_positions": max_positions,
-            "manual_guard": {
-                "max_risk_per_trade_usd": manual_cap,
-            },
         },
     }
 
@@ -285,8 +235,6 @@ def main() -> int:
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))
-    print(f"   Max positions   : {max_positions}")
-    print(f"   Manual cap/trade: ${manual_cap:.2f}")
     print("=" * 60)
     print()
     print("!" * 60)
