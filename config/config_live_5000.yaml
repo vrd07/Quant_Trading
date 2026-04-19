@@ -394,37 +394,21 @@ strategies:
   #   SL = first buy candle low | TP = OB high + sellers' SL cluster (liquidity premium)
   # Disabled by default -- run backtest first, then enable if PF > 1.3
   smc_ob:
-    enabled: false
-    timeframe: 5m
-    swing_lookback: 5            # Bars for local range context around impulse
-    min_impulse_atr_mult: 1.2    # Bearish candle body >= 1.2x ATR (realistic on 5m gold)
-    ob_max_age_bars: 100         # OB expires after 100 bars (~8h on 5m)
-    ob_touch_tolerance_atr: 1.0  # Wider tolerance -- gold has big wicks on 5m
-    # TP = OB high + this multiple of ATR (~150-200 pips on XAUUSD 5m at typical ATR)
+    enabled: true
+    timeframe: 1m
+    long_only: true
+    swing_lookback: 5
+    min_impulse_atr_mult: 0.8
+    ob_max_age_bars: 120
+    ob_touch_tolerance_atr: 1.0
+    cooldown_bars: 3
+    adx_min_threshold: 12
+    use_ema_trend_filter: true
+    ema_trend_period: 50
     liquidity_premium_mult: 15.0
-    min_liquidity_premium_mult: 8.0   # Minimum TP floor
-    adx_min_threshold: 15.0     # Mild trend filter -- OB works in post-impulse context
-    long_only: false             # Trade both BUY (demand OB) and SELL (supply OB)
-    use_ema_trend_filter: true   # BUY only above EMA, SELL only below EMA -- prevents trading against trend
-    ema_trend_period: 50         # EMA period for trend direction gate
-    # SL quality gates: reject noise (too small) and sloppy wide-stop entries
-    min_sl_atr: 0.1              # SL must be >= 0.1x ATR (avoids micro noise entries)
-    max_sl_atr: 2.5              # SL must be <= 2.5x ATR (avoids wide/ambiguous OBs)
-    cooldown_bars: 10
-    session_hours: [2, 3, 4, 5, 6, 7, 8, 9, 10, 13, 15, 16, 17, 22]
-    # FVG (Fair Value Gap) confluence -- opt-in ICT imbalance filter.
-    # When true, entry requires an unmitigated FVG (matching direction) within
-    # fvg_ob_proximity_atr * ATR of the OB zone. Fewer, cleaner signals.
-    require_fvg_confluence: false
-    fvg_ob_proximity_atr: 2.0
-    fvg_max_age_bars: 50
-    # BOS/CHoCH (structure shift) confluence -- opt-in ICT structure filter.
-    # When true, entry requires a recent confirmed bullish (BUY) or bearish (SELL)
-    # structure shift (BOS or CHoCH) within bos_choch_max_age_bars.
-    require_bos_choch_confluence: false
-    bos_choch_swing_length: 10
-    bos_choch_max_age_bars: 60
-    bos_choch_accept_bos: true
+    min_liquidity_premium_mult: 8.0
+    max_sl_atr: 4.0
+    min_sl_atr: 0.05
 
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
