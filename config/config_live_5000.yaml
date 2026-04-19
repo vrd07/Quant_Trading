@@ -399,7 +399,11 @@ trading_hours:
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
+<<<<<<< HEAD
+    csv_path: news/2026-04-16_news.csv
+=======
     csv_path: news/2026-04-17_news.csv
+>>>>>>> f511d7764186f826f928f524157fc9500a1397b3
     currency: USD
     impacts:
       - high

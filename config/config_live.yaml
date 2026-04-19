@@ -149,7 +149,11 @@ trading_hours:
   
   news_filter:
     enabled: true  # ALWAYS ON FOR LIVE
+<<<<<<< HEAD
+    csv_path: news/2026-04-16_news.csv
+=======
     csv_path: news/2026-03-04_news.csv
+>>>>>>> f511d7764186f826f928f524157fc9500a1397b3
     currency: USD
     impacts:
       - high
