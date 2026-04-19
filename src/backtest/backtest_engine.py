@@ -428,6 +428,12 @@ class BacktestEngine:
                 if position.symbol:
                     pnl *= position.symbol.value_per_lot
             
+            # Per-symbol round-trip commission (in addition to flat per-trade)
+            symbol_commission = Decimal("0")
+            if position.symbol and position.symbol.commission_per_lot > 0:
+                symbol_commission = position.symbol.commission_per_lot * position.quantity * Decimal("2")
+            total_commission = self.broker.commission_per_trade + symbol_commission
+
             # Record closed trade
             self.broker.closed_trades.append({
                 'position_id': str(pos_id),
@@ -437,15 +443,15 @@ class BacktestEngine:
                 'exit_price': float(final_price),
                 'quantity': float(position.quantity),
                 'pnl': float(pnl),
-                'commission': float(self.broker.commission_per_trade),
-                'net_pnl': float(pnl - self.broker.commission_per_trade),
+                'commission': float(total_commission),
+                'net_pnl': float(pnl - total_commission),
                 'exit_reason': 'backtest_end',
                 'exit_time': str(final_bar.name),
                 'strategy': position.metadata.get('strategy', 'unknown')
             })
-            
+
             # Update balance
-            self.broker.balance += pnl - self.broker.commission_per_trade
+            self.broker.balance += pnl - total_commission
             
             # Remove position
             del self.broker.positions[pos_id]
