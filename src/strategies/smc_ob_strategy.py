@@ -208,6 +208,81 @@ def _price_in_zone(
 
 
 # ---------------------------------------------------------------------------
+# FVG confluence helper
+# (adapted from joshyattridge/smart-money-concepts `fvg` — MIT licensed)
+#
+# An FVG at bar i is defined by a 3-bar pattern:
+#   Bullish: bar[i-1].high < bar[i+1].low  AND  bar[i] is bullish (close > open)
+#            Top = bar[i+1].low    Bottom = bar[i-1].high
+#   Bearish: bar[i-1].low  > bar[i+1].high AND  bar[i] is bearish (close < open)
+#            Top = bar[i-1].low    Bottom = bar[i+1].high
+#
+# Mitigation: a bullish FVG is mitigated once a later bar's low <= Top;
+#             a bearish FVG is mitigated once a later bar's high >= Bottom.
+# ---------------------------------------------------------------------------
+
+def _find_unmitigated_fvg_near_ob(
+    bars: pd.DataFrame,
+    ob_high: float,
+    ob_low: float,
+    direction: str,
+    max_age_bars: int,
+    proximity: float,
+) -> Optional[Dict[str, float]]:
+    """Return the most recent unmitigated FVG in the trade direction near the OB.
+
+    The FVG must overlap the interval [ob_low - proximity, ob_high + proximity]
+    so the imbalance sits at (or adjacent to) the Order Block — canonical ICT
+    confluence that confirms the zone still has unfilled inefficiency.
+
+    Args:
+        bars: OHLCV DataFrame (index doesn't matter; positional).
+        ob_high, ob_low: Order Block zone boundaries.
+        direction: DIR_BUY -> search bullish FVGs; DIR_SELL -> bearish.
+        max_age_bars: Consider FVGs formed within the last max_age_bars only.
+        proximity: ATR-scaled tolerance for FVG-to-OB overlap.
+
+    Returns:
+        {'top': float, 'bottom': float, 'age': int} for the newest match,
+        or None.
+    """
+    n = len(bars)
+    if n < 3:
+        return None
+
+    hi = bars["high"].values
+    lo = bars["low"].values
+    op = bars["open"].values
+    cl = bars["close"].values
+
+    zone_top = ob_high + proximity
+    zone_bot = ob_low  - proximity
+
+    start = max(1, n - max_age_bars - 1)
+    end   = n - 1  # bar[i+1] must exist, so i maxes at n-2
+
+    for i in range(end - 1, start - 1, -1):
+        if direction == DIR_BUY:
+            if hi[i - 1] < lo[i + 1] and cl[i] > op[i]:
+                fvg_top = float(lo[i + 1])
+                fvg_bot = float(hi[i - 1])
+                if fvg_top >= zone_bot and fvg_bot <= zone_top:
+                    remaining = lo[i + 2:]
+                    if remaining.size == 0 or (remaining > fvg_top).all():
+                        return {"top": fvg_top, "bottom": fvg_bot, "age": n - 1 - i}
+        else:  # DIR_SELL
+            if lo[i - 1] > hi[i + 1] and cl[i] < op[i]:
+                fvg_top = float(lo[i - 1])
+                fvg_bot = float(hi[i + 1])
+                if fvg_top >= zone_bot and fvg_bot <= zone_top:
+                    remaining = hi[i + 2:]
+                    if remaining.size == 0 or (remaining < fvg_bot).all():
+                        return {"top": fvg_top, "bottom": fvg_bot, "age": n - 1 - i}
+
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Strategy class
 # ---------------------------------------------------------------------------
 
@@ -249,6 +324,14 @@ class SMCOrderBlockStrategy(BaseStrategy):
         # Both are expressed as ATR multiples.
         self.min_sl_atr: float = config.get("min_sl_atr", 0.1)   # SL must be >= 0.1 ATR
         self.max_sl_atr: float = config.get("max_sl_atr", 3.0)   # SL must be <= 3.0 ATR
+
+        # FVG (Fair Value Gap) confluence filter — opt-in ICT imbalance check.
+        # When enabled, the entry break must coincide with an unmitigated FVG
+        # of matching direction sitting within fvg_ob_proximity_atr * ATR of
+        # the OB zone.
+        self.require_fvg_confluence: bool  = config.get("require_fvg_confluence", False)
+        self.fvg_ob_proximity_atr: float   = config.get("fvg_ob_proximity_atr", 2.0)
+        self.fvg_max_age_bars: int         = config.get("fvg_max_age_bars", 50)
 
         # ── Mutable state (Carmack: explicit, only mutated in on_bar) ──────
         self._state: str                         = IDLE
@@ -519,6 +602,10 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if current_high > self._trigger_high:
+                    fvg_meta = self._check_fvg_confluence(bars, current_atr)
+                    if self.require_fvg_confluence and fvg_meta is None:
+                        self._log_no_signal("BUY: no unmitigated FVG near OB — skipping entry")
+                        return None
                     return self._emit_signal(
                         side=OrderSide.BUY,
                         entry_price=current_close,
@@ -529,6 +616,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         adx=adx,
                         regime=regime,
                         sweep_low=current_low,
+                        fvg_meta=fvg_meta,
                     )
 
             else:  # DIR_SELL
@@ -541,6 +629,10 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if current_low < self._trigger_low:
+                    fvg_meta = self._check_fvg_confluence(bars, current_atr)
+                    if self.require_fvg_confluence and fvg_meta is None:
+                        self._log_no_signal("SELL: no unmitigated FVG near OB — skipping entry")
+                        return None
                     return self._emit_signal(
                         side=OrderSide.SELL,
                         entry_price=current_close,
@@ -551,6 +643,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         adx=adx,
                         regime=regime,
                         sweep_high=current_high,
+                        fvg_meta=fvg_meta,
                     )
 
         self._log_no_signal(
@@ -561,6 +654,22 @@ class SMCOrderBlockStrategy(BaseStrategy):
     # ------------------------------------------------------------------
     # Signal emission helper (shared for both directions)
     # ------------------------------------------------------------------
+
+    def _check_fvg_confluence(
+        self, bars: pd.DataFrame, current_atr: float
+    ) -> Optional[Dict[str, float]]:
+        """Return nearest unmitigated FVG near the OB, or None."""
+        assert self._ob_zone is not None
+        assert self._direction is not None
+        proximity = self.fvg_ob_proximity_atr * current_atr
+        return _find_unmitigated_fvg_near_ob(
+            bars,
+            self._ob_zone["high"],
+            self._ob_zone["low"],
+            self._direction,
+            self.fvg_max_age_bars,
+            proximity,
+        )
 
     def _emit_signal(
         self,
@@ -574,6 +683,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
         regime: MarketRegime,
         sweep_low: float = 0.0,
         sweep_high: float = 0.0,
+        fvg_meta: Optional[Dict[str, float]] = None,
     ) -> Optional[Signal]:
         """Validate, compute strength, reset state, and emit the signal."""
         assert self._ob_zone is not None
@@ -651,6 +761,26 @@ class SMCOrderBlockStrategy(BaseStrategy):
             rr=f"{rr_ratio:.2f}",
         )
 
+        metadata = {
+            "ob_direction": direction,
+            "ob_high": round(ob_high, 2),
+            "ob_low":  round(ob_low, 2),
+            "ob_age_bars": ob_age,
+            "sweep_close": round(sweep_close, 2) if sweep_close else None,
+            "sweep_ratio": round(sweep_ratio, 3),
+            "trigger_high": round(trigger_high, 2) if trigger_high else None,
+            "trigger_low":  round(trigger_low, 2) if trigger_low else None,
+            "sl_level": round(sl_level, 2) if sl_level else None,
+            "rr_ratio": round(rr_ratio, 2),
+            "atr": round(current_atr, 4),
+            "adx": round(current_adx, 1),
+            "adx_rising": adx_rising,
+        }
+        if fvg_meta is not None:
+            metadata["fvg_top"]    = round(fvg_meta["top"], 2)
+            metadata["fvg_bottom"] = round(fvg_meta["bottom"], 2)
+            metadata["fvg_age"]    = int(fvg_meta["age"])
+
         return self._create_signal(
             side=side,
             strength=strength,
@@ -658,19 +788,5 @@ class SMCOrderBlockStrategy(BaseStrategy):
             entry_price=entry_price,
             stop_loss=stop_loss,
             take_profit=take_profit,
-            metadata={
-                "ob_direction": direction,
-                "ob_high": round(ob_high, 2),
-                "ob_low":  round(ob_low, 2),
-                "ob_age_bars": ob_age,
-                "sweep_close": round(sweep_close, 2) if sweep_close else None,
-                "sweep_ratio": round(sweep_ratio, 3),
-                "trigger_high": round(trigger_high, 2) if trigger_high else None,
-                "trigger_low":  round(trigger_low, 2) if trigger_low else None,
-                "sl_level": round(sl_level, 2) if sl_level else None,
-                "rr_ratio": round(rr_ratio, 2),
-                "atr": round(current_atr, 4),
-                "adx": round(current_adx, 1),
-                "adx_rising": adx_rising,
-            },
+            metadata=metadata,
         )
