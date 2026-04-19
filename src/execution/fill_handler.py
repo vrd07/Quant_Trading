@@ -36,6 +36,10 @@ class FillHandler:
             filled_price = Decimal(str(fill_data.get('filled_price', 0)))
             filled_quantity = Decimal(str(fill_data.get('filled_quantity', 0)))
             commission = Decimal(str(fill_data.get('commission', 0)))
+
+            # Fallback: if broker didn't report commission, use per-symbol config
+            if commission == 0 and order.symbol.commission_per_lot > 0:
+                commission = order.symbol.commission_per_lot * filled_quantity
             
             # Determine position side
             if order.side == OrderSide.BUY:
