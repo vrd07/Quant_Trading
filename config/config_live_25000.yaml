@@ -114,6 +114,19 @@ risk:
     loss_pause_consecutive: 2
     loss_pause_minutes: 30
 
+  # News/high-loss blackout — suppresses ALL orders during these UTC hours.
+  trading_windows:
+    enabled: true
+    blocked_hours_utc: [14, 15, 16]
+
+  # Per-trade + daily cap enforcement for manual MT5 clicks.
+  manual_guard:
+    enabled: true
+    daily_loss_cap_usd: 120            # ~40% of absolute_max_loss_usd
+    size_multiplier: 0.5
+    max_risk_per_trade_usd: 25         # matches risk_per_trade_pct × balance
+    auto_close_violations: false
+
   trailing_stop:
     enabled: true
     breakeven_atr_mult: 1.2

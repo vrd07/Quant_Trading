@@ -72,32 +72,16 @@ strategies:
   
   breakout:
     enabled: true
-    timeframe: 5m
-    donchian_period: 12             # v3: shorter channel (60 min) — faster breakout detection
-    rr_ratio: 3.0                   # v3: wider TP — gold trends well, capture more per winner
+    donchian_period: 20  # Use standard period for live
+    confirmation_bars: 1 # Require 1 bar confirmation for safety
+    rr_ratio: 1.5               # Was 2.0 → take profits sooner
     only_in_regime: TREND
-    atr_stop_multiplier: 2.0        # v3: back to 2.0 — 1.5 was too tight, stops hit too early
-    adx_min_threshold: 20           # v3: back to 20 — quality over quantity
-    min_body_atr_ratio: 0.30        # v3: back to 0.30 — ensures quality breakout bars
-    volume_confirmation: false
-    rsi_overbought: 78              # v3: widened from 75 — let strong trends run
-    rsi_oversold: 22                # v3: widened from 25
-    atr_spike_mult: 1.8             # v3: relaxed from 1.5 — gold is volatile, allow more
-    cooldown_bars: 2                # v3: reduced from 4 — more trade frequency
-    # v3 filters: data-driven from 353-trade backtest analysis
-    bb_squeeze_enabled: true        # Only breakout after consolidation
-    bb_squeeze_period: 20
-    bb_squeeze_percentile: 70       # v3: relaxed from 60 — less restrictive entry
-    bb_squeeze_lookback: 50
-    htf_trend_enabled: true         # 1H EMA(21) trend must align with breakout direction
-    htf_ema_period: 21
-    session_filter_enabled: true    # Only trade during high-WR sessions
-    allowed_sessions: [[4,4],[7,8],[22,22]]  # v3: ONLY profitable hours — London pre (4), prime (7-8), late NY (22)
-    close_position_pct: 0.35        # v3: relaxed from 0.30 — fewer false rejections
-    macd_confirmation: true         # MACD histogram must confirm direction
-    ema_confirm_enabled: true       # v3: EMA fast/slow crossover alignment — improved WR to 33.5%
-    ema_fast_period: 9
-    ema_slow_period: 21
+    mtf_confirmation: true
+    atr_stop_multiplier: 2.5        # Was 2.0 → wider stops, give room to breathe
+    volume_confirmation: false       # Disabled: file bridge provides no volume data
+    volume_ratio_min: 1.2            # Volume must be >= 1.2x 20-bar average
+    rsi_overbought: 75               # Don't buy above RSI 75
+    rsi_oversold: 25                 # Don't sell below RSI 25
   
   mean_reversion:
     enabled: true
@@ -116,11 +100,6 @@ strategies:
     stop_atr_multiplier: 2.0
     atr_period: 14
     min_volume_ratio: 1.0
-    rsi_oversold_entry: 35      # BUY only when RSI < 35 (genuinely oversold)
-    rsi_overbought_entry: 65    # SELL only when RSI > 65 (genuinely overbought)
-    cci_oversold_entry: -100    # BUY only when CCI < -100
-    cci_overbought_entry: 100   # SELL only when CCI > +100
-    cci_period: 20
     only_in_regime: RANGE
   
   # Momentum Scalping Strategy 
@@ -128,45 +107,34 @@ strategies:
     enabled: true
     rsi_period: 14
     ema_period: 20
-    rr_ratio: 1.5
-    atr_stop_multiplier: 2.0
+    rr_ratio: 1.5               # Was 2.0 → take profits sooner
+    atr_stop_multiplier: 2.0          # Was 1.2 → wider stops
     rsi_bull_threshold: 50
     rsi_bear_threshold: 50
-    rsi_overbought: 75
-    rsi_oversold: 25
-    adx_min_threshold: 25             # Require ADX >= 25 for strong trend
-    volume_confirmation: true         # NOW ENABLED: EA exports tick volume
-    volume_ratio_min: 1.0
+    rsi_overbought: 75                # Don't buy above RSI 75
+    rsi_oversold: 25                  # Don't sell below RSI 25
+    adx_min_threshold: 20             # Require ADX >= 20 for momentum
+    volume_confirmation: false         # Disabled: file bridge provides no volume data
+    volume_ratio_min: 1.0             # Volume must be >= 1.0x average
     macd_fast: 12
     macd_slow: 26
     macd_signal: 9
-    ema_fast: 9                       # EMA triple stack alignment
-    ema_mid: 21
-    ema_slow: 50
-    rsi_slope_bars: 3                 # RSI must be rising/falling over 3 bars
-    min_signal_strength: 0.65         # Gate: skip weak signals
     only_in_regime: TREND
   
   # Kalman Regime-Switching Strategy (Instruct.md)
   kalman_regime:
-    enabled: true
-    long_only: false            # Two-sided: SELL re-enabled with confidence-gated sizing
-    kalman_q: 0.00001
-    kalman_r: 0.01
-    rv_window: 20
-    rv_ma_window: 100
-    zscore_window: 20
-    entry_threshold: 2.5        # Tightened from 2.0 — fewer but cleaner reversals
-    trend_adx_min: 22           # Raised from 15 — avoid choppy markets
-    kalman_confirm_bars: 2      # Require 2 consecutive bars on correct Kalman side
-    min_signal_strength: 0.50   # Gate: skip weak kalman signals
+    enabled: true              # ← Enabled for The5ers challenge
+    kalman_q: 0.00001           # Process noise (lower = smoother)
+    kalman_r: 0.01              # Measurement noise
+    rv_window: 20               # Realized volatility window
+    rv_ma_window: 100           # RV moving average for regime threshold
+    zscore_window: 20           # OU z-score std window
+    entry_threshold: 2.0        # |Z| threshold for range-mode entry
+    trend_adx_min: 15           # Light ADX gate for trend mode (avoids dead-flat markets)
     atr_period: 14
-    sl_atr_multiplier: 2.5
-    tp_atr_multiplier: 2.0
-    news_filter: true
-    high_confidence_threshold: 90.0
-    session_filter_enabled: true
-    allowed_sessions: [[1,7],[15,17],[20,22]]   # ≥7 hours/day (UTC)
+    sl_atr_multiplier: 2.5      # Stop loss distance
+    tp_atr_multiplier: 2.0      # Take profit distance
+    news_filter: true           # Skip signals during news blackout
 
 trading_hours:
   sessions:
@@ -181,12 +149,12 @@ trading_hours:
   
   news_filter:
     enabled: true  # ALWAYS ON FOR LIVE
-    csv_path: news/2026-04-17_news.csv
+    csv_path: news/2026-03-04_news.csv
     currency: USD
     impacts:
       - high
       - red
-    buffer_min: 5               # 5-minute buffer
+    buffer_min: 10
     timezone: Asia/Kolkata
 
 monitoring:
