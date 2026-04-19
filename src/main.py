@@ -215,6 +215,20 @@ class TradingSystem:
             self.logger.info("6. Initializing trade journal...")
             self.trade_journal = TradeJournal()
             self.logger.info("✓ Trade journal ready")
+
+            # 6a. Manual-trade monitor (audits MT5-side manual clicks against
+            # the same guards RiskEngine applies to bot orders).
+            from .monitoring.manual_trade_monitor import ManualTradeMonitor
+            self.manual_trade_monitor = ManualTradeMonitor(
+                connector=self.connector, config=self.config, logger=self.logger
+            )
+            if self.manual_trade_monitor.enabled:
+                self.logger.info(
+                    "✓ Manual trade monitor active "
+                    f"(max_risk=${self.manual_trade_monitor.max_risk_per_trade_usd}, "
+                    f"blocked_hours={sorted(self.manual_trade_monitor.blocked_hours_utc)}, "
+                    f"auto_close={self.manual_trade_monitor.auto_close})"
+                )
             
             # 6b. Sync trade history from MT5
             self.logger.info("   Syncing trade history from MT5...")
@@ -346,7 +360,15 @@ class TradingSystem:
                 
                 # 5. Process any fills from MT5
                 self._process_fills()
-                
+
+                # 5b. Audit MT5-side manual positions against RiskEngine-equivalent
+                # rules every ~15s. Runs cheaply on the existing positions poll.
+                if self.loop_iteration % 60 == 0 and self.manual_trade_monitor is not None:
+                    try:
+                        self.manual_trade_monitor.check_once()
+                    except Exception as e:
+                        self.logger.error(f"Manual trade monitor error: {e}", exc_info=True)
+
                 # 6. Save state periodically
                 if self._should_save_state():
                     self._save_state()
@@ -1037,9 +1059,13 @@ class TradingSystem:
                         self.logger.debug(f"Fill poll: journal record failed for ticket={ticket}: {_je}")
 
                 # Update RiskEngine circuit breaker in real-time (no more 30s blind spot)
+                # Pass strategy so the manual-daily-loss counter bumps only on
+                # manual-tagged closed deals (wiring the guard to real fills).
                 if self.risk_engine is not None:
                     from decimal import Decimal as _Dec
-                    self.risk_engine.record_trade_result(_Dec(str(realized_pnl)))
+                    self.risk_engine.record_trade_result(
+                        _Dec(str(realized_pnl)), strategy_name=strategy
+                    )
 
                 self.logger.info(
                     f"[FillPoller] Detected closed deal: ticket={ticket} symbol={symbol_name} "
