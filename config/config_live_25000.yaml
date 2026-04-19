@@ -352,7 +352,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-04-15_news.csv
+    csv_path: news/2026-04-16_news.csv
     currency: USD
     impacts:
       - high
@@ -382,7 +382,7 @@ portfolio:
 
 file_bridge:
   enabled: true
-  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  #data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100
 
 shutdown:

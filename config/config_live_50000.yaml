@@ -383,7 +383,7 @@ trading_hours:
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
-    csv_path: news/2026-04-15_news.csv
+    csv_path: news/2026-04-16_news.csv
     currency: USD
     impacts:
       - high
@@ -427,7 +427,7 @@ file_bridge:
   #     data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   #
   # macOS (MT5 under Wine — active by default):
-  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  # data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100
 
 shutdown:
