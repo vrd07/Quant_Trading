@@ -39,7 +39,7 @@ Design (codinglegits):
   - Jeff Dean: every signal carries full metadata for post-trade attribution.
 """
 
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import pandas as pd
 import numpy as np
 
@@ -283,6 +283,207 @@ def _find_unmitigated_fvg_near_ob(
 
 
 # ---------------------------------------------------------------------------
+# BOS / CHoCH confluence helpers
+# (adapted from joshyattridge/smart-money-concepts — MIT licensed)
+#
+# BOS (Break of Structure)     = trend continuation: HH-HL-HH-HL pattern with
+#                                the prior swing high/low taken out.
+# CHoCH (Change of Character)  = trend reversal: the counter-trend swing made
+#                                an extreme in the OLD direction, then price
+#                                broke the prior pivot in the NEW direction.
+#
+# Encoding: swing pattern over the last four pivots [hl_-4, hl_-3, hl_-2, hl_-1].
+# For bullish events we require pattern [-1, 1, -1, 1] (low, high, low, high).
+# For bearish events the mirror pattern [1, -1, 1, -1].
+# The level that must break is the pivot at index -3.
+# ---------------------------------------------------------------------------
+
+def _compute_swing_highs_lows(bars: pd.DataFrame, swing_length: int) -> pd.DataFrame:
+    """Return a DataFrame with HighLow (+1 high, -1 low, NaN otherwise) and Level.
+
+    A swing high at bar i is the maximum high over the window [i-swing_length,
+    i+swing_length]. Consecutive same-type swings are coalesced so only the
+    extreme one survives.
+    """
+    sl2 = swing_length * 2
+    hi = bars["high"]
+    lo = bars["low"]
+    hl = np.where(
+        hi == hi.shift(-(sl2 // 2)).rolling(sl2).max(),
+        1,
+        np.where(lo == lo.shift(-(sl2 // 2)).rolling(sl2).min(), -1, np.nan),
+    )
+
+    while True:
+        positions = np.where(~np.isnan(hl))[0]
+        if len(positions) < 2:
+            break
+        cur  = hl[positions[:-1]]
+        nxt  = hl[positions[1:]]
+        h_cur = hi.iloc[positions[:-1]].values
+        l_cur = lo.iloc[positions[:-1]].values
+        h_nxt = hi.iloc[positions[1:]].values
+        l_nxt = lo.iloc[positions[1:]].values
+        drop = np.zeros(len(positions), dtype=bool)
+        cons_h = (cur == 1) & (nxt == 1)
+        drop[:-1] |= cons_h & (h_cur <  h_nxt)
+        drop[1:]  |= cons_h & (h_cur >= h_nxt)
+        cons_l = (cur == -1) & (nxt == -1)
+        drop[:-1] |= cons_l & (l_cur >  l_nxt)
+        drop[1:]  |= cons_l & (l_cur <= l_nxt)
+        if not drop.any():
+            break
+        hl[positions[drop]] = np.nan
+
+    level = np.where(
+        ~np.isnan(hl),
+        np.where(hl == 1, hi.values, lo.values),
+        np.nan,
+    )
+    return pd.DataFrame({"HighLow": hl, "Level": level})
+
+
+def _compute_bos_choch(
+    bars: pd.DataFrame, shl: pd.DataFrame, close_break: bool = True
+) -> pd.DataFrame:
+    """Return BOS/CHOCH flags, level, and break index per bar.
+
+    Follows the joshyattridge library semantics. An event is only reported
+    after it has been *confirmed* by a future close (or wick, if close_break
+    is False) breaking through the pivot level.
+    """
+    n = len(bars)
+    bos   = np.zeros(n, dtype=np.int32)
+    choch = np.zeros(n, dtype=np.int32)
+    level = np.zeros(n, dtype=np.float64)
+
+    hl_col = shl["HighLow"].values
+    lv_col = shl["Level"].values
+
+    hl_order: List[float] = []
+    lv_order: List[float] = []
+    positions: List[int]  = []
+
+    for i in range(n):
+        if np.isnan(hl_col[i]):
+            continue
+        hl_order.append(hl_col[i])
+        lv_order.append(lv_col[i])
+        positions.append(i)
+        if len(hl_order) >= 4:
+            last_pos = positions[-2]
+            ho = hl_order[-4:]
+            lo = lv_order[-4:]
+            # bullish BOS: -1,1,-1,1 and L1 < L2 < H1 < H2
+            if ho == [-1, 1, -1, 1] and lo[0] < lo[2] < lo[1] < lo[3]:
+                bos[last_pos]   = 1
+                level[last_pos] = lo[1]
+            # bearish BOS: 1,-1,1,-1 and H1 > H2 > L1 > L2
+            elif ho == [1, -1, 1, -1] and lo[0] > lo[2] > lo[1] > lo[3]:
+                bos[last_pos]   = -1
+                level[last_pos] = lo[1]
+            # bullish CHoCH: -1,1,-1,1 and H2 > H1 > L1 > L2  (lower-low then break above prior high)
+            elif ho == [-1, 1, -1, 1] and lo[3] > lo[1] > lo[0] > lo[2]:
+                choch[last_pos] = 1
+                level[last_pos] = lo[1]
+            # bearish CHoCH: 1,-1,1,-1 and L2 < L1 < H1 < H2  (higher-high then break below prior low)
+            elif ho == [1, -1, 1, -1] and lo[3] < lo[1] < lo[0] < lo[2]:
+                choch[last_pos] = -1
+                level[last_pos] = lo[1]
+
+    broken = np.zeros(n, dtype=np.int32)
+    events = np.where((bos != 0) | (choch != 0))[0]
+    close_v = bars["close"].values
+    high_v  = bars["high"].values
+    low_v   = bars["low"].values
+    for i in events:
+        direction = bos[i] if bos[i] != 0 else choch[i]
+        if direction == 1:
+            future = close_v[i + 2:] if close_break else high_v[i + 2:]
+            mask = future > level[i]
+        else:
+            future = close_v[i + 2:] if close_break else low_v[i + 2:]
+            mask = future < level[i]
+        if mask.size and mask.any():
+            j = int(np.argmax(mask)) + i + 2
+            broken[i] = j
+
+    unbroken = ((bos != 0) | (choch != 0)) & (broken == 0)
+    bos[unbroken]   = 0
+    choch[unbroken] = 0
+    level[unbroken] = 0
+
+    return pd.DataFrame({
+        "BOS":         bos,
+        "CHOCH":       choch,
+        "Level":       level,
+        "BrokenIndex": broken,
+    })
+
+
+def _find_recent_structure_shift(
+    bars: pd.DataFrame,
+    direction: str,
+    swing_length: int,
+    max_age_bars: int,
+    accept_bos: bool,
+) -> Optional[Dict[str, Any]]:
+    """Return the most recent confirmed BOS/CHoCH matching the trade direction.
+
+    Args:
+        bars: OHLCV DataFrame.
+        direction: DIR_BUY -> bullish shifts (+1); DIR_SELL -> bearish (-1).
+        swing_length: Swing-detection window (half-width).
+        max_age_bars: Shift must have been *confirmed* within this many bars.
+        accept_bos: If False, only CHoCH qualifies (stricter reversal signal).
+
+    Returns:
+        {'type': 'choch'|'bos', 'level': float, 'confirmed_age': int,
+         'pivot_age': int} or None.
+    """
+    n = len(bars)
+    if n < 4 * swing_length + 4:
+        return None
+
+    # Restrict to recent window for performance (swing detection is O(n))
+    window_size = max(200, max_age_bars + 4 * swing_length + 10)
+    if n > window_size:
+        bars = bars.iloc[-window_size:].reset_index(drop=True)
+    else:
+        bars = bars.reset_index(drop=True)
+
+    m = len(bars)
+    shl = _compute_swing_highs_lows(bars, swing_length)
+    bc  = _compute_bos_choch(bars, shl)
+
+    want = 1 if direction == DIR_BUY else -1
+    bos_v   = bc["BOS"].values
+    choch_v = bc["CHOCH"].values
+    level_v = bc["Level"].values
+    brk_v   = bc["BrokenIndex"].values
+
+    # Walk backward over pivots; take the most recent confirmed match.
+    for i in range(m - 1, -1, -1):
+        is_choch = choch_v[i] == want
+        is_bos   = bos_v[i]   == want and accept_bos
+        if not (is_choch or is_bos):
+            continue
+        broken_at = int(brk_v[i])
+        if broken_at == 0:
+            continue  # not confirmed
+        confirmed_age = (m - 1) - broken_at
+        if confirmed_age > max_age_bars:
+            continue
+        return {
+            "type":          "choch" if is_choch else "bos",
+            "level":         float(level_v[i]),
+            "confirmed_age": confirmed_age,
+            "pivot_age":     (m - 1) - i,
+        }
+    return None
+
+
+# ---------------------------------------------------------------------------
 # Strategy class
 # ---------------------------------------------------------------------------
 
@@ -332,6 +533,15 @@ class SMCOrderBlockStrategy(BaseStrategy):
         self.require_fvg_confluence: bool  = config.get("require_fvg_confluence", False)
         self.fvg_ob_proximity_atr: float   = config.get("fvg_ob_proximity_atr", 2.0)
         self.fvg_max_age_bars: int         = config.get("fvg_max_age_bars", 50)
+
+        # BOS/CHoCH (structure-shift) confluence filter — opt-in ICT gate.
+        # When enabled, entry requires a recent confirmed market-structure shift
+        # in the trade direction. CHoCH is a reversal break (stricter); BOS is a
+        # continuation break. `bos_choch_accept_bos=false` uses CHoCH only.
+        self.require_bos_choch_confluence: bool = config.get("require_bos_choch_confluence", False)
+        self.bos_choch_swing_length: int        = config.get("bos_choch_swing_length", 10)
+        self.bos_choch_max_age_bars: int        = config.get("bos_choch_max_age_bars", 60)
+        self.bos_choch_accept_bos: bool         = config.get("bos_choch_accept_bos", True)
 
         # ── Mutable state (Carmack: explicit, only mutated in on_bar) ──────
         self._state: str                         = IDLE
@@ -606,6 +816,10 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     if self.require_fvg_confluence and fvg_meta is None:
                         self._log_no_signal("BUY: no unmitigated FVG near OB — skipping entry")
                         return None
+                    structure_meta = self._check_structure_confluence(bars)
+                    if self.require_bos_choch_confluence and structure_meta is None:
+                        self._log_no_signal("BUY: no bullish BOS/CHoCH recently — skipping entry")
+                        return None
                     return self._emit_signal(
                         side=OrderSide.BUY,
                         entry_price=current_close,
@@ -617,6 +831,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         regime=regime,
                         sweep_low=current_low,
                         fvg_meta=fvg_meta,
+                        structure_meta=structure_meta,
                     )
 
             else:  # DIR_SELL
@@ -633,6 +848,10 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     if self.require_fvg_confluence and fvg_meta is None:
                         self._log_no_signal("SELL: no unmitigated FVG near OB — skipping entry")
                         return None
+                    structure_meta = self._check_structure_confluence(bars)
+                    if self.require_bos_choch_confluence and structure_meta is None:
+                        self._log_no_signal("SELL: no bearish BOS/CHoCH recently — skipping entry")
+                        return None
                     return self._emit_signal(
                         side=OrderSide.SELL,
                         entry_price=current_close,
@@ -644,6 +863,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         regime=regime,
                         sweep_high=current_high,
                         fvg_meta=fvg_meta,
+                        structure_meta=structure_meta,
                     )
 
         self._log_no_signal(
@@ -671,6 +891,19 @@ class SMCOrderBlockStrategy(BaseStrategy):
             proximity,
         )
 
+    def _check_structure_confluence(
+        self, bars: pd.DataFrame
+    ) -> Optional[Dict[str, Any]]:
+        """Return most recent confirmed BOS/CHoCH in trade direction, or None."""
+        assert self._direction is not None
+        return _find_recent_structure_shift(
+            bars,
+            self._direction,
+            self.bos_choch_swing_length,
+            self.bos_choch_max_age_bars,
+            self.bos_choch_accept_bos,
+        )
+
     def _emit_signal(
         self,
         side: OrderSide,
@@ -684,6 +917,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
         sweep_low: float = 0.0,
         sweep_high: float = 0.0,
         fvg_meta: Optional[Dict[str, float]] = None,
+        structure_meta: Optional[Dict[str, Any]] = None,
     ) -> Optional[Signal]:
         """Validate, compute strength, reset state, and emit the signal."""
         assert self._ob_zone is not None
@@ -780,6 +1014,11 @@ class SMCOrderBlockStrategy(BaseStrategy):
             metadata["fvg_top"]    = round(fvg_meta["top"], 2)
             metadata["fvg_bottom"] = round(fvg_meta["bottom"], 2)
             metadata["fvg_age"]    = int(fvg_meta["age"])
+        if structure_meta is not None:
+            metadata["structure_type"]  = structure_meta["type"]
+            metadata["structure_level"] = round(structure_meta["level"], 2)
+            metadata["structure_confirmed_age"] = int(structure_meta["confirmed_age"])
+            metadata["structure_pivot_age"]     = int(structure_meta["pivot_age"])
 
         return self._create_signal(
             side=side,
