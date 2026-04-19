@@ -33,10 +33,11 @@ from src.strategies.structure_break_retest import StructureBreakRetestStrategy
 from src.strategies.supply_demand_strategy import SupplyDemandStrategy
 from src.strategies.asia_range_fade_strategy import AsiaRangeFadeStrategy
 from src.strategies.descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
+from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'all']
+STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'smc_ob', 'all']
 
 
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
@@ -105,6 +106,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('descending_channel_breakout', {}))
         cfg['enabled'] = True
         return DescendingChannelBreakoutStrategy(symbol, cfg)
+    elif strategy_name == 'smc_ob':
+        cfg = dict(strats.get('smc_ob', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return SMCOrderBlockStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
