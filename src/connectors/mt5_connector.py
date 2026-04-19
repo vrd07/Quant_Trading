@@ -480,11 +480,15 @@ class MT5Connector:
                 else:
                     logger.warning("No quotes in status file. Keys: %s", list(status.keys()))
             
-            # Try exact match first, then fuzzy match for broker suffixes
+            # Use cached symbol mapping first (consistent with is_market_open)
             quote = None
             matched_symbol = None
-            
-            if symbol in quotes:
+            mapped = self._symbol_map.get(symbol, symbol)
+
+            if mapped in quotes:
+                quote = quotes[mapped]
+                matched_symbol = mapped
+            elif symbol in quotes:
                 quote = quotes[symbol]
                 matched_symbol = symbol
             else:
