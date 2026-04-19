@@ -1544,16 +1544,33 @@ def main():
         _risk = _live_cfg.get('risk') or {}
         _sizing = _risk.get('position_sizing') or {}
         _fixed_lots = _sizing.get('fixed_lots') or {}
+        _symbols_cfg = _live_cfg.get('symbols') or {}
         _balance = _account.get('initial_balance', 0)
         _max_dd = _risk.get('max_drawdown_pct', 0)
         _abs_limit = _risk.get('absolute_max_loss_usd', '?')
         _max_pos = _risk.get('max_positions', '?')
         _risk_pt = _risk.get('risk_per_trade_pct', 0)
+        _daily_profit = _risk.get('max_daily_profit_usd', 0)
         try:
             _risk_usd = float(_balance) * float(_risk_pt)
         except (TypeError, ValueError):
             _risk_usd = 0.0
-        _lot = _fixed_lots.get('XAUUSD', 0.02)
+
+        # Walk enabled symbols and pick each one's effective lot size.
+        # runtime_setup.py writes min_lot == max_lot == user_lot on the symbol,
+        # so min_lot is the authoritative display value. Fall back to fixed_lots
+        # map only when the symbol wasn't touched by runtime_setup.
+        _enabled_lots: list[tuple[str, float]] = []
+        for _tkr, _scfg in _symbols_cfg.items():
+            if not isinstance(_scfg, dict) or not _scfg.get('enabled', False):
+                continue
+            _lot_val = _scfg.get('min_lot')
+            if _lot_val is None:
+                _lot_val = _fixed_lots.get(_tkr, _fixed_lots.get('default', 0.0))
+            try:
+                _enabled_lots.append((_tkr, float(_lot_val)))
+            except (TypeError, ValueError):
+                _enabled_lots.append((_tkr, 0.0))
 
         print("\n" + "=" * 60)
         print("\033[91m" + "  ⚠️  LIVE TRADING MODE  ⚠️" + "\033[0m")
@@ -1562,7 +1579,21 @@ def main():
         print(f"  Max Drawdown:        {float(_max_dd)*100:.1f}% (${float(_balance)*float(_max_dd):.0f})")
         print(f"  Absolute Loss Limit: ${_abs_limit}")
         print(f"  Risk Per Trade:      {_risk_pt*100:.2f}% (${_risk_usd:.2f})")
-        print(f"  XAUUSD Lot Size:     {_lot}")
+        try:
+            _dp = float(_daily_profit)
+        except (TypeError, ValueError):
+            _dp = 0.0
+        if _dp > 0:
+            _dp_pct = (_dp / float(_balance) * 100) if _balance else 0.0
+            print(f"  Max Daily Profit:    ${_dp:.2f} ({_dp_pct:.2f}%)")
+        else:
+            print(f"  Max Daily Profit:    disabled")
+        if _enabled_lots:
+            print(f"  Symbols / Lot Size:")
+            for _tkr, _lv in _enabled_lots:
+                print(f"    - {_tkr:<14s} {_lv} lots")
+        else:
+            print(f"  Symbols / Lot Size:  (none enabled)")
         print(f"  Max Positions:       {_max_pos}")
         print("=" * 60)
 
