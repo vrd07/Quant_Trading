@@ -5,16 +5,26 @@ This module has VETO POWER over all trading decisions.
 No order can be placed without passing all risk checks.
 
 Risk checks (in order, fail fast):
-1. Kill switch active? → REJECT
-2. Circuit breaker active? → REJECT
-3. Daily loss limit reached? → REJECT + TRIGGER KILL SWITCH
-4. Drawdown limit reached? → REJECT + TRIGGER KILL SWITCH
-5. Position count limit? → REJECT
-6. Exposure limit per symbol? → REJECT
-7. Position size valid? → REJECT
-8. Stop loss present? → REJECT
-9. Risk per trade exceeded? → REJECT
+1.  Kill switch active? → REJECT
+2.  Circuit breaker active? → REJECT
+2b. Hour blackout (UTC) hit? → REJECT            [added 2026-04-19]
+3.  Daily loss limit reached? → REJECT + TRIGGER KILL SWITCH
+4.  Drawdown limit reached? → REJECT + TRIGGER KILL SWITCH
+4c. Manual daily-loss cap breached? → REJECT     [added 2026-04-19]
+5.  Position count limit? → REJECT
+6.  Exposure limit per symbol? → REJECT
+7.  Position size valid? → REJECT
+8.  Stop loss present? → REJECT
+9.  Risk per trade exceeded? → REJECT
 10. Correlation risk? → REJECT (if enabled)
+
+Journal-driven guards (added 2026-04-19 from 145-trade audit):
+- Hour blackout:  14-16 UTC lost -$196 across all strategies; config-driven
+                  list of hours blocks every new order during those windows.
+- Manual cap:     'manual'-tagged orders accounted for -$358 of -$400 net.
+                  After N USD of manual loss in a UTC day, no more manual orders.
+- Manual sizing:  Halve lot size for 'manual'-tagged orders. Keeps the user
+                  in the game while they audit whether manual has real edge.
 """
 
 from typing import Dict, Tuple, Optional
@@ -95,11 +105,37 @@ class RiskEngine:
             str(risk_config.get('daily_loss_budget_safety_pct', 0.85))
         )
         
+        # ── Hour blackout (journal-driven) ─────────────────────────────────
+        # Carmack: design for the worst case — 14h-16h UTC lost $196 of $400 net.
+        # Block those hours across every strategy unless config overrides.
+        tw_cfg = risk_config.get('trading_windows', {}) or {}
+        self.trading_windows_enabled: bool = bool(tw_cfg.get('enabled', False))
+        raw_blocked = tw_cfg.get('blocked_hours_utc', []) or []
+        # Normalize once at load — downstream check is a pure O(1) set lookup
+        self.blocked_hours_utc = frozenset(
+            int(h) for h in raw_blocked if 0 <= int(h) <= 23
+        )
+
+        # ── Manual-trade guard (journal-driven) ────────────────────────────
+        # TJ: explicit over magic. A 'manual' strategy tag is recognized by
+        # exact string match; no regex, no inheritance, no surprise behavior.
+        mg_cfg = risk_config.get('manual_guard', {}) or {}
+        self.manual_guard_enabled: bool = bool(mg_cfg.get('enabled', False))
+        self.manual_daily_loss_cap_usd = Decimal(
+            str(mg_cfg.get('daily_loss_cap_usd', 0))
+        )
+        self.manual_size_multiplier = Decimal(
+            str(mg_cfg.get('size_multiplier', 0.5))
+        )
+        # Tracks dollar loss from manual-tagged orders in the current UTC day.
+        # Reset by reset_daily_metrics().
+        self._manual_daily_loss_usd = Decimal("0")
+
         # State tracking
         self.daily_start_equity = Decimal("0")
         self.equity_high_water_mark = Decimal("0")
         self.daily_trades_count = 0
-        
+
         # Logging
         from ..monitoring.logger import get_logger
         self.logger = get_logger(__name__)
@@ -151,6 +187,23 @@ class RiskEngine:
                     order_id=str(order.order_id)
                 )
                 return False, cb_reason
+
+            # CHECK 2b: Hour blackout (journal-driven; pure set lookup)
+            if self.trading_windows_enabled and self.blocked_hours_utc:
+                now_hour = datetime.now(timezone.utc).hour
+                if now_hour in self.blocked_hours_utc:
+                    reason = (
+                        f"Hour blackout: {now_hour:02d}:00 UTC is in blocked "
+                        f"window {sorted(self.blocked_hours_utc)}"
+                    )
+                    self.logger.warning(
+                        "Order rejected - hour blackout",
+                        hour_utc=now_hour,
+                        blocked_hours=sorted(self.blocked_hours_utc),
+                        order_id=str(order.order_id),
+                        strategy=self._order_strategy_tag(order),
+                    )
+                    return False, reason
             
             # CHECK 3: Annual/Account Balance Check
             if account_balance <= 0:
@@ -260,6 +313,28 @@ class RiskEngine:
                     limit=float(max_daily_loss),
                     pct_used=float(daily_loss / max_daily_loss)
                 )
+
+            # CHECK 4c: Manual daily-loss cap
+            # Only applies to orders tagged as 'manual' in metadata.strategy.
+            # Automated orders are unaffected. Reason: the audit showed 89% of
+            # losses came from manual trades; this caps that bleed per UTC day.
+            if (self.manual_guard_enabled
+                    and self.manual_daily_loss_cap_usd > 0
+                    and self._is_manual_order(order)):
+                if self._manual_daily_loss_usd >= self.manual_daily_loss_cap_usd:
+                    reason = (
+                        f"Manual daily loss cap breached: "
+                        f"${self._manual_daily_loss_usd:.2f} >= "
+                        f"${self.manual_daily_loss_cap_usd:.2f}. "
+                        f"No more manual orders today."
+                    )
+                    self.logger.warning(
+                        "Order rejected - manual loss cap",
+                        manual_loss_today=float(self._manual_daily_loss_usd),
+                        cap=float(self.manual_daily_loss_cap_usd),
+                        order_id=str(order.order_id),
+                    )
+                    return False, reason
             
             # CHECK 4: Drawdown limit
             current_drawdown = self.drawdown_tracker.calculate_drawdown(
@@ -402,6 +477,7 @@ class RiskEngine:
         current_positions: Optional[Dict[str, Position]] = None,
         account_equity: Optional[Decimal] = None,
         signal_strength: float = None,
+        strategy_name: Optional[str] = None,
     ) -> Decimal:
         """
         Calculate optimal position size.
@@ -424,6 +500,8 @@ class RiskEngine:
                 lots=float(fixed),
                 symbol=symbol.ticker
             )
+            # Manual guard applies here too — halve even fixed-lot manual orders.
+            fixed = self._apply_manual_size_multiplier(fixed, symbol, strategy_name)
             return fixed  # FIXED LOT: Bypass exposure cap completely
 
         # ── Fixed fractional (default): size by % risk ────────────────────
@@ -455,30 +533,48 @@ class RiskEngine:
                     final_size=float(capped_size),
                     symbol=symbol.ticker
                 )
-                return capped_size
+                risk_size = capped_size
 
+        # Manual-guard sizing: halve the final size for manual-tagged orders.
+        # Applied last so it composes with fixed_lot, risk_pct, and exposure caps.
+        risk_size = self._apply_manual_size_multiplier(risk_size, symbol, strategy_name)
         return risk_size
 
     
-    def record_trade_result(self, pnl: Decimal) -> None:
+    def record_trade_result(self, pnl: Decimal, strategy_name: Optional[str] = None) -> None:
         """
-        Record trade result for circuit breaker tracking.
-        
+        Record trade result for circuit breaker + manual-guard tracking.
+
         Args:
             pnl: Realized P&L from trade
+            strategy_name: Strategy that originated the trade. Used to bump the
+                manual daily-loss counter when the trade was manual-tagged.
         """
         self.circuit_breaker.record_trade(pnl)
-        
+
+        # Carmack: mutations should be visible. This one bumps a counter that
+        # later gates new manual orders — tag the log so it's greppable.
+        if self._is_manual_strategy_tag(strategy_name) and pnl < 0:
+            self._manual_daily_loss_usd += abs(pnl)
+            self.logger.info(
+                "Manual loss tallied",
+                pnl=float(pnl),
+                manual_loss_today=float(self._manual_daily_loss_usd),
+                cap=float(self.manual_daily_loss_cap_usd),
+            )
+
         if pnl < 0:
             self.logger.info(
                 "Trade loss recorded",
                 pnl=float(pnl),
+                strategy=strategy_name,
                 consecutive_losses=self.circuit_breaker.consecutive_losses
             )
         else:
             self.logger.info(
                 "Trade win recorded",
-                pnl=float(pnl)
+                pnl=float(pnl),
+                strategy=strategy_name,
             )
     
     def update_equity_hwm(self, current_equity: Decimal) -> None:
@@ -516,11 +612,13 @@ class RiskEngine:
         """
         self.daily_start_equity = starting_equity
         self.daily_trades_count = 0
-        
+        self._manual_daily_loss_usd = Decimal("0")
+
         self.logger.info(
             "Daily metrics reset",
             starting_equity=float(starting_equity),
             daily_trades_count=0,
+            manual_daily_loss_reset=True,
             date=datetime.now(timezone.utc).date().isoformat()
         )
     
@@ -641,3 +739,62 @@ class RiskEngine:
                 'reason': reason,
                 'status': 'ACTIVE'
             }, f, indent=2)
+
+    # ── Pure helpers (Carmack: pure functions, no hidden state) ────────────
+    # Grouped at the bottom so the main flow in validate_order() stays readable.
+
+    _MANUAL_STRATEGY_TAGS = frozenset({"manual", "manual_gut", "manual_rules",
+                                       "unknown", "", "none"})
+
+    @classmethod
+    def _is_manual_strategy_tag(cls, tag: Optional[str]) -> bool:
+        """True if the given strategy tag should be treated as a manual trade.
+
+        Pure: depends only on the input string. No I/O, no instance state.
+        """
+        if tag is None:
+            return False
+        return tag.strip().lower() in cls._MANUAL_STRATEGY_TAGS
+
+    @classmethod
+    def _order_strategy_tag(cls, order: Order) -> str:
+        """Extract the strategy tag from an order's metadata, or ''.
+
+        Pure: read-only lookup. Never raises — returns '' on missing keys.
+        """
+        meta = getattr(order, "metadata", None) or {}
+        return str(meta.get("strategy", "")).strip()
+
+    @classmethod
+    def _is_manual_order(cls, order: Order) -> bool:
+        """True if the order's strategy metadata marks it manual."""
+        return cls._is_manual_strategy_tag(cls._order_strategy_tag(order))
+
+    def _apply_manual_size_multiplier(
+        self,
+        size: Decimal,
+        symbol: Symbol,
+        strategy_name: Optional[str],
+    ) -> Decimal:
+        """Halve (or scale by config) the lot size for manual-tagged orders.
+
+        Clamped to symbol.min_lot so we never emit an invalid size. Returns
+        size unchanged when manual_guard is disabled or order isn't manual.
+        """
+        if not self.manual_guard_enabled:
+            return size
+        if not self._is_manual_strategy_tag(strategy_name):
+            return size
+        scaled = (size * self.manual_size_multiplier).quantize(symbol.lot_step) \
+            if hasattr(symbol, "lot_step") else size * self.manual_size_multiplier
+        # Never drop below exchange minimum — reject would happen downstream anyway
+        scaled = max(symbol.min_lot, scaled)
+        self.logger.info(
+            "Manual size multiplier applied",
+            original=float(size),
+            scaled=float(scaled),
+            multiplier=float(self.manual_size_multiplier),
+            symbol=symbol.ticker,
+            strategy=strategy_name,
+        )
+        return scaled
