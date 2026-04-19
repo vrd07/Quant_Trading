@@ -103,16 +103,35 @@ risk:
 
   position_sizing:
     method: fixed
+    # Explicit per-symbol lots. Strategies fire on every enabled symbol
+    # (strategy_manager.py:64); this table pins the lot size each strategy
+    # uses. Clamped down to symbol.max_lot at sizing time.
     fixed_lots:
-      XAUUSD: 0.02
+      XAUUSD: 0.02                   # ~$20/ATR risk on 75-pip stop
+      BTCUSD: 0.01                   # exchange min; ~$40-80/ATR on BTC
       EURUSD: 0.01
-      default: 0.05
+      default: 0.01                  # conservative default — NOT 0.05
   circuit_breaker:
     enabled: true
     max_consecutive_losses: 3      # Tightened — audit standard
     cooldown_minutes: 30
     loss_pause_consecutive: 3
     loss_pause_minutes: 30
+
+  # Journal-driven guards (added 2026-04-19 from 145-trade audit)
+  # 14h-16h UTC lost $196 of $400 total bleed. Block those hours.
+  trading_windows:
+    enabled: true
+    blocked_hours_utc: [14, 15, 16]    # London close + US news overlap
+
+  # 'manual'-tagged orders accounted for -$358 of -$400 net. Cap the daily
+  # bleed from manual, and halve position size while discipline is proven.
+  manual_guard:
+    enabled: true
+    daily_loss_cap_usd: 50             # Cut off after $50 of manual loss/day
+    size_multiplier: 0.5               # Half-size manual orders
+    max_risk_per_trade_usd: 15         # Per-trade $ cap on manual clicks (monitor enforces)
+    auto_close_violations: false       # If true, monitor closes violating manual positions
 
   trailing_stop:
     enabled: false
@@ -231,11 +250,16 @@ strategies:
     rv_window: 20
     rv_ma_window: 100
     zscore_window: 20
-    entry_threshold: 2.0            # v2: lowered from 2.5 — more range entries
-    trend_adx_min: 20               # v2: lowered from 22
-    kalman_confirm_bars: 2          # Keep 2-bar confirmation (proven in v1)
-    min_signal_strength: 0.50
-    cooldown_bars: 2                # v2: 30 min cooldown (was 30 bars = 7.5hr!)
+    # v3 Loosen (2026-04-19): backtest shows 2× trades, 2× absolute return at
+    # same PF/Sharpe. User accepts the 2.4× larger max-DD because account-level
+    # max-loss is enforced outside this strategy. Raw config for reference:
+    #   entry_threshold 2.0→1.5, trend_adx_min 20→17, kalman_confirm_bars 2→1,
+    #   min_signal_strength 0.50→0.35, cooldown_bars 2→1.
+    entry_threshold: 1.5            # v3 loose: 2.0 -> 1.5
+    trend_adx_min: 17               # v3 loose: 20 -> 17
+    kalman_confirm_bars: 1          # v3 loose: 2 -> 1
+    min_signal_strength: 0.35       # v3 loose: 0.50 -> 0.35
+    cooldown_bars: 1                # v3 loose: 2 -> 1
     atr_period: 14
     sl_atr_multiplier: 1.5
     tp_atr_multiplier: 8.0          # v2: 8x ATR TP — let big trends run
