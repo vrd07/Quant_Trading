@@ -423,7 +423,14 @@ class RiskEngine:
                 sl_distance = abs(order.price - order.stop_loss)
                 value_per_lot = order.symbol.value_per_lot if order.symbol else Decimal("1")
                 risk_amount = sl_distance * order.quantity * value_per_lot
-                max_risk = account_balance * self.risk_per_trade_pct
+                # Prefer the user's absolute USD cap (runtime_setup) over the
+                # percentage — lets "max loss per trade" stay fixed even when
+                # balance drifts. Add a 1% tolerance for float/rounding.
+                risk_usd_cap = Decimal(str(self.config.get('risk', {}).get('risk_per_trade_usd', 0) or 0))
+                if risk_usd_cap > 0:
+                    max_risk = risk_usd_cap * Decimal("1.01")
+                else:
+                    max_risk = account_balance * self.risk_per_trade_pct
                 
                 if risk_amount > max_risk:
                     # Allow min_lot orders through — the minimum possible trade shouldn't be blocked
