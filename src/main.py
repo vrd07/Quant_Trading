@@ -489,6 +489,7 @@ class TradingSystem:
             'vwap':          strategy_config.get('vwap', {}).get('timeframe', global_primary_tf),
             'kalman_regime': strategy_config.get('kalman_regime', {}).get('timeframe', global_primary_tf),
             'mean_reversion':strategy_config.get('mean_reversion', {}).get('timeframe', global_primary_tf),
+            'smc_ob':        strategy_config.get('smc_ob', {}).get('timeframe', global_primary_tf),
         }
 
         for symbol_ticker in enabled_symbols:
