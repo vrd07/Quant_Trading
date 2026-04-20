@@ -1579,7 +1579,15 @@ def main():
         print(f"  Account Balance:     ${_balance}")
         print(f"  Max Drawdown:        {float(_max_dd)*100:.1f}% (${float(_balance)*float(_max_dd):.0f})")
         print(f"  Absolute Loss Limit: ${_abs_limit}")
-        print(f"  Risk Per Trade:      {_risk_pt*100:.2f}% (${_risk_usd:.2f})")
+        _budget_usd = _risk.get('risk_per_trade_usd')
+        if _budget_usd:
+            try:
+                _budget_usd_f = float(_budget_usd)
+            except (TypeError, ValueError):
+                _budget_usd_f = 0.0
+            print(f"  Risk Per Trade:      ${_budget_usd_f:.2f} (SL auto-sized — every trade risks exactly this)")
+        else:
+            print(f"  Risk Per Trade:      {_risk_pt*100:.2f}% (${_risk_usd:.2f})")
         try:
             _dp = float(_daily_profit)
         except (TypeError, ValueError):
