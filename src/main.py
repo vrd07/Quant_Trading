@@ -218,7 +218,7 @@ class TradingSystem:
 
             # 6a. Manual-trade monitor (audits MT5-side manual clicks against
             # the same guards RiskEngine applies to bot orders).
-            from .monitoring.manual_trade_monitor import ManualTradeMonitor
+            from src.monitoring.manual_trade_monitor import ManualTradeMonitor
             self.manual_trade_monitor = ManualTradeMonitor(
                 connector=self.connector, config=self.config, logger=self.logger
             )
