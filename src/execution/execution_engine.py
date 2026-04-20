@@ -233,6 +233,56 @@ class ExecutionEngine:
                 )
                 position_size = clamped
 
+            # ── Budget SL: strict "max loss per trade" enforcement ────────────
+            # The user's runtime_setup entry defines the exact USD risk budget.
+            # Override the strategy's structural SL with the budget-sized SL so
+            # every trade risks exactly `risk_per_trade_usd`, regardless of which
+            # strategy fired. TP is left as the strategy set it.
+            _risk_cfg = self.risk_engine.config.get('risk', {}) or {}
+            _max_loss_usd = Decimal(str(_risk_cfg.get('risk_per_trade_usd', 0) or 0))
+            if _max_loss_usd <= 0:
+                _pct = Decimal(str(_risk_cfg.get('risk_per_trade_pct', 0) or 0))
+                _max_loss_usd = account_balance * _pct
+
+            if (_max_loss_usd > 0
+                    and position_size > 0
+                    and signal.symbol.value_per_lot > 0
+                    and signal.entry_price):
+                budget_sl_dist = _max_loss_usd / (position_size * signal.symbol.value_per_lot)
+
+                min_stops = getattr(signal.symbol, 'min_stops_distance', Decimal('0')) or Decimal('0')
+                buffered_min = min_stops * Decimal('1.05') if min_stops > 0 else Decimal('0')
+
+                if buffered_min > 0 and budget_sl_dist < buffered_min:
+                    self.logger.warning(
+                        "[BudgetSL] Required SL < broker min — skipping trade",
+                        signal_id=signal_id,
+                        strategy=signal.strategy_name,
+                        symbol=signal.symbol.ticker,
+                        required_dist=float(budget_sl_dist),
+                        broker_min=float(buffered_min),
+                        max_loss_usd=float(_max_loss_usd),
+                        lot=float(position_size),
+                    )
+                    return None
+
+                entry_d = Decimal(str(signal.entry_price))
+                old_sl = signal.stop_loss
+                signal.stop_loss = (
+                    entry_d - budget_sl_dist if signal.side == OrderSide.BUY
+                    else entry_d + budget_sl_dist
+                )
+                self.logger.info(
+                    "[BudgetSL] SL rewritten to exact loss budget",
+                    strategy=signal.strategy_name,
+                    symbol=signal.symbol.ticker,
+                    old_sl=float(old_sl) if old_sl else None,
+                    new_sl=float(signal.stop_loss),
+                    sl_distance=float(budget_sl_dist),
+                    max_loss_usd=float(_max_loss_usd),
+                    lot=float(position_size),
+                )
+
             # 2. Create order from signal
             order = Order(
                 symbol=signal.symbol,
