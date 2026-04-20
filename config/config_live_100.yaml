@@ -400,17 +400,20 @@ strategies:
     timeframe: 1m
     long_only: true
     swing_lookback: 5
-    min_impulse_atr_mult: 0.8
+    min_impulse_atr_mult: 0.5
     ob_max_age_bars: 120
     ob_touch_tolerance_atr: 1.0
     cooldown_bars: 3
-    adx_min_threshold: 12
+    adx_min_threshold: 8
     use_ema_trend_filter: true
     ema_trend_period: 50
     liquidity_premium_mult: 15.0
     min_liquidity_premium_mult: 8.0
     max_sl_atr: 4.0
     min_sl_atr: 0.05
+    require_fvg_confluence: true
+    fvg_ob_proximity_atr: 2.0
+    fvg_max_age_bars: 50
 
 trading_hours:
   sessions:
