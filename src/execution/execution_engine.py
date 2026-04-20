@@ -188,9 +188,24 @@ class ExecutionEngine:
                 signal_strength=float(signal.strength) if signal.strength is not None else None,
             )
             
-            # Apply strategy-specific fixed lot override directly from the signal
+            # Apply strategy-specific fixed lot override directly from the signal.
+            # Clamp to symbol [min_lot, max_lot] so the user's runtime_setup lot
+            # (written as min_lot == max_lot == user_lot) always wins over any
+            # strategy-declared fixed_lot.
             if 'fixed_lot' in signal.metadata:
-                position_size = Decimal(str(signal.metadata['fixed_lot']))
+                requested = Decimal(str(signal.metadata['fixed_lot']))
+                sym = signal.symbol
+                clamped = max(sym.min_lot, min(sym.max_lot, requested))
+                if clamped != requested:
+                    self.logger.info(
+                        "Strategy fixed_lot clamped to symbol bounds",
+                        strategy=signal.strategy_name,
+                        requested=float(requested),
+                        applied=float(clamped),
+                        min_lot=float(sym.min_lot),
+                        max_lot=float(sym.max_lot),
+                    )
+                position_size = clamped
             
             if position_size <= 0:
                 self.logger.warning(
@@ -200,17 +215,23 @@ class ExecutionEngine:
                 return None
 
             # Apply session lot-size multiplier (e.g. 0.5 for Asian, 0.75 for NY Evening)
-            # Set by main.py via signal.metadata['lot_size_multiplier']
+            # Set by main.py via signal.metadata['lot_size_multiplier'].
+            # Clamped to symbol [min_lot, max_lot] so that when the user pins
+            # min_lot == max_lot via runtime_setup, the multiplier cannot move
+            # the size away from the user's chosen lot.
             lot_multiplier = float(signal.metadata.get('lot_size_multiplier', 1.0))
             if lot_multiplier != 1.0:
+                sym = signal.symbol
                 adjusted = Decimal(str(lot_multiplier)) * position_size
-                # Clamp to broker minimum (0.01 lots) and round to 2 dp
-                position_size = max(Decimal('0.01'), adjusted.quantize(Decimal('0.01')))
+                rounded = adjusted.quantize(Decimal('0.01'))
+                clamped = max(sym.min_lot, min(sym.max_lot, rounded))
                 self.logger.info(
                     f"[SessionLot] Lot multiplier {lot_multiplier:.2f} applied: "
-                    f"{float(adjusted):.2f} → {float(position_size):.2f} lots",
+                    f"{float(position_size):.2f} → {float(clamped):.2f} lots "
+                    f"(raw {float(rounded):.2f}, bounds [{float(sym.min_lot):.2f}, {float(sym.max_lot):.2f}])",
                     strategy=signal.strategy_name
                 )
+                position_size = clamped
 
             # 2. Create order from signal
             order = Order(
