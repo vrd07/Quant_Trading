@@ -1,12 +1,7 @@
 {
   "symbol": "BTCUSD",
-<<<<<<< HEAD
-  "generated_at": "2026-04-16T04:05:02.949544+00:00",
-  "valid_until": "2026-04-17T04:05:02.949544+00:00",
-=======
-  "generated_at": "2026-04-17T09:59:40.552008+00:00",
-  "valid_until": "2026-04-18T09:59:40.552008+00:00",
->>>>>>> f511d7764186f826f928f524157fc9500a1397b3
+  "generated_at": "2026-04-20T05:49:34.086800+00:00",
+  "valid_until": "2026-04-21T05:49:34.086800+00:00",
   "regime": "TREND",
   "confidence": 0.55,
   "classifier": "rule-based",
@@ -37,7 +32,9 @@
     "vwap": 0.0,
     "mini_medallion": 0.65
   },
-  "performance_scores": {},
+  "performance_scores": {
+    "kalman_regime": -0.0015
+  },
   "regime_probabilities": {},
   "transition_matrix": {
     "TREND": {

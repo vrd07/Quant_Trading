@@ -1,18 +1,10 @@
 {
   "symbol": "XAUUSD",
-<<<<<<< HEAD
-  "generated_at": "2026-04-16T04:05:09.104073+00:00",
-  "valid_until": "2026-04-17T04:05:09.104073+00:00",
+  "generated_at": "2026-04-20T05:49:37.772099+00:00",
+  "valid_until": "2026-04-21T05:49:37.772099+00:00",
   "regime": "RANGE",
-  "confidence": 0.907,
-  "classifier": "RandomForest+Markov (n=278 samples)",
-=======
-  "generated_at": "2026-04-17T09:59:42.279287+00:00",
-  "valid_until": "2026-04-18T09:59:42.279287+00:00",
-  "regime": "RANGE",
-  "confidence": 0.8944,
-  "classifier": "RandomForest+Markov (n=279 samples)",
->>>>>>> f511d7764186f826f928f524157fc9500a1397b3
+  "confidence": 0.8862,
+  "classifier": "RandomForest+Markov (n=281 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -22,27 +14,15 @@
     "mini_medallion": true
   },
   "diagnostics": {
-<<<<<<< HEAD
-    "adx_14": 28.723276,
-    "atr_pct": 0.039425,
-    "bb_width_ratio": 1.675901,
-    "close_ema20_pct": 0.013818,
-    "momentum_1d": 0.016787,
-    "momentum_5d": 0.081073,
-    "range_atr_ratio": 0.485514,
-    "vol_ratio": 0.830881,
-    "park_vol_zscore": -0.471594
-=======
-    "adx_14": 28.465662,
-    "atr_pct": 0.036187,
-    "bb_width_ratio": 1.562151,
-    "close_ema20_pct": 0.003348,
-    "momentum_1d": -0.000288,
-    "momentum_5d": 0.063234,
-    "range_atr_ratio": 0.22202,
-    "vol_ratio": 0.297675,
-    "park_vol_zscore": -0.699375
->>>>>>> f511d7764186f826f928f524157fc9500a1397b3
+    "adx_14": 27.166927,
+    "atr_pct": 0.033745,
+    "bb_width_ratio": 1.345913,
+    "close_ema20_pct": 0.001228,
+    "momentum_1d": 0.006244,
+    "momentum_5d": 0.064898,
+    "range_atr_ratio": 0.432049,
+    "vol_ratio": 0.226399,
+    "park_vol_zscore": -1.222225
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -52,25 +32,17 @@
     "vwap": 0.45,
     "mini_medallion": 0.6
   },
-<<<<<<< HEAD
-  "performance_scores": {},
-  "regime_probabilities": {
-    "RANGE": 0.907,
-    "TREND": 0.0863,
-    "VOLATILE": 0.0067
-=======
   "performance_scores": {
-    "kalman_regime": -0.209,
-    "mini_medallion": -0.1869,
+    "kalman_regime": -0.25,
+    "mini_medallion": -0.2176,
     "structure_break_retest": -0.1685,
     "supply_demand": -0.0128,
-    "vwap_deviation": -0.3107
+    "vwap_deviation": -0.2
   },
   "regime_probabilities": {
-    "TREND": 0.0984,
-    "RANGE": 0.8944,
-    "VOLATILE": 0.0072
->>>>>>> f511d7764186f826f928f524157fc9500a1397b3
+    "TREND": 0.1058,
+    "RANGE": 0.8862,
+    "VOLATILE": 0.008
   },
   "transition_matrix": {
     "TREND": {
@@ -79,8 +51,8 @@
       "VOLATILE": 0.125
     },
     "RANGE": {
-      "TREND": 0.1044,
-      "RANGE": 0.8876,
+      "TREND": 0.1036,
+      "RANGE": 0.8884,
       "VOLATILE": 0.008
     },
     "VOLATILE": {
