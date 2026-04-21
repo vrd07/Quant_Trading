@@ -32,6 +32,7 @@ class RiskProcessor:
         'kalman_regime': 'kalman_regime',
         'mini_medallion': 'mini_medallion',
         'structure_break_retest': 'sbr',
+        'fibonacci_retracement': 'fibonacci_retracement',
     }
 
     def calculate_stops(self, signal: Signal) -> Signal:
@@ -191,6 +192,28 @@ class RiskProcessor:
                 sl = broken_level - sl_buffer
             else:
                 sl = broken_level + sl_buffer
+
+            risk = abs(entry - sl)
+            tp_dist = risk * rr
+            tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
+
+        elif strategy_name == 'fibonacci_retracement':
+            # Fib retracement: SL beyond the swing low (BUY) or swing high (SELL).
+            # The swing point is the structural invalidation level — if price
+            # moves past the swing, the pullback thesis is dead.
+            atr = Decimal(str(signal.metadata.get('atr', 0)))
+            swing_high = Decimal(str(signal.metadata.get('swing_high', entry)))
+            swing_low = Decimal(str(signal.metadata.get('swing_low', entry)))
+            atr_mult = Decimal(str(strat_cfg.get('atr_stop_multiplier', 1.5)))
+            rr = Decimal(str(strat_cfg.get('rr_ratio', 2.5)))
+
+            sl_buffer = atr_mult * atr
+            if side == OrderSide.BUY:
+                # Bullish: SL below swing low (invalidation of upswing)
+                sl = swing_low - sl_buffer
+            else:
+                # Bearish: SL above swing high (invalidation of downswing)
+                sl = swing_high + sl_buffer
 
             risk = abs(entry - sl)
             tp_dist = risk * rr
