@@ -27,6 +27,7 @@ from .supply_demand_strategy import SupplyDemandStrategy
 from .asia_range_fade_strategy import AsiaRangeFadeStrategy
 from .descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
 from .smc_ob_strategy import SMCOrderBlockStrategy
+from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -46,6 +47,7 @@ class StrategyManager:
         'asia_range_fade': AsiaRangeFadeStrategy,
         'descending_channel_breakout': DescendingChannelBreakoutStrategy,
         'smc_ob':         SMCOrderBlockStrategy,
+        'fibonacci_retracement': FibonacciRetracementStrategy,
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
