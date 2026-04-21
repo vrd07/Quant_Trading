@@ -429,6 +429,32 @@ strategies:
     fvg_ob_proximity_atr: 2.0
     fvg_max_age_bars: 50
 
+  # ── FIBONACCI RETRACEMENT GOLDEN ZONE ──────────────────────────────
+  # Trades pullbacks into the 50%–61.8% Fibonacci retracement zone.
+  # Entry on rejection candle from the Golden Zone with trend confirmation.
+  # Disabled by default — backtest before enabling live.
+  fibonacci_retracement:
+    enabled: false
+    timeframe: 5m
+    swing_lookback: 5              # N-bar pivot detection window
+    min_swing_atr_mult: 2.0        # Minimum swing size in ATR multiples
+    swing_max_age_bars: 100        # Expire old swing pairs
+    golden_zone_upper: 0.618       # Upper boundary (closer to swing low)
+    golden_zone_lower: 0.50        # Lower boundary (closer to swing high)
+    min_rejection_ratio: 0.50      # Minimum wick rejection quality
+    adx_min_threshold: 20
+    adx_max_threshold: 55
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    atr_stop_multiplier: 1.5       # SL buffer beyond swing low/high
+    rr_ratio: 2.5                  # Risk:reward ratio
+    cooldown_bars: 8
+    long_only: false
+    only_in_regime: TREND
+    min_strength: 0.0
+    session_hours: null             # All hours by default
+
 trading_hours:
   sessions:
     # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
@@ -437,7 +463,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout, smc_ob]
+      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement]
 
   news_filter:
     enabled: true

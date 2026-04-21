@@ -413,6 +413,31 @@ strategies:
     fvg_ob_proximity_atr: 2.0
     fvg_max_age_bars: 50
 
+  # ── FIBONACCI RETRACEMENT GOLDEN ZONE ──────────────────────────────
+  # Trades pullbacks into the 50%–61.8% Fibonacci retracement zone.
+  # Disabled by default — backtest before enabling live.
+  fibonacci_retracement:
+    enabled: false
+    timeframe: 5m
+    swing_lookback: 5
+    min_swing_atr_mult: 2.0
+    swing_max_age_bars: 100
+    golden_zone_upper: 0.618
+    golden_zone_lower: 0.50
+    min_rejection_ratio: 0.50
+    adx_min_threshold: 20
+    adx_max_threshold: 55
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    atr_stop_multiplier: 1.5
+    rr_ratio: 2.5
+    cooldown_bars: 8
+    long_only: false
+    only_in_regime: TREND
+    min_strength: 0.0
+    session_hours: null
+
 trading_hours:
   # Friday cutoff disabled for 24/7 crypto/weekend trading
   # friday_cutoff_utc: "19:00"
@@ -424,7 +449,7 @@ trading_hours:
       end: "23:59"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout, smc_ob]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
