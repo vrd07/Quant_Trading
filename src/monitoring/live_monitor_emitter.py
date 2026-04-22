@@ -522,13 +522,82 @@ class LiveMonitorEmitter:
         return rows
 
     def _collect_session(self, ts) -> Dict[str, Any]:
-        out = {"name": "", "news_blackout": False, "next_event": "", "regime_generated_at": ""}
+        out: Dict[str, Any] = {
+            "active_name": "",
+            "news_blackout": False,
+            "regime_generated_at": "",
+            "time_left_min": None,
+            "all": [],
+        }
+
+        now = datetime.now(timezone.utc)
+        now_hhmm = now.strftime("%H:%M")
+
+        # Pull session config directly — cheap and gives us the full list.
+        try:
+            sessions_cfg = (
+                (getattr(ts, "config", {}) or {})
+                .get("trading_hours", {})
+                .get("sessions", []) or []
+            )
+        except Exception:
+            sessions_cfg = []
+
+        def _hhmm_to_min(s: str) -> int:
+            try:
+                hh, mm = s.split(":")
+                return int(hh) * 60 + int(mm)
+            except Exception:
+                return 0
+
+        now_min = now.hour * 60 + now.minute
+        active_name = ""
+
+        for s in sessions_cfg:
+            if not isinstance(s, dict):
+                continue
+            name = str(s.get("name", "") or "session")
+            start = s.get("start", "00:00")
+            end = s.get("end", "23:59")
+            enabled = bool(s.get("enabled", True))
+
+            active = False
+            if enabled:
+                if start <= end:
+                    active = start <= now_hhmm < end
+                else:  # cross-midnight window (e.g. asia 22:00–07:00)
+                    active = now_hhmm >= start or now_hhmm < end
+
+            # Minutes remaining in this session (only meaningful when active)
+            mins_left = None
+            if active:
+                end_min = _hhmm_to_min(end)
+                if start <= end:
+                    mins_left = max(0, end_min - now_min)
+                else:
+                    mins_left = ((end_min - now_min) % (24 * 60))
+                if not active_name:
+                    active_name = name
+                    out["time_left_min"] = mins_left
+
+            out["all"].append({
+                "name": name,
+                "start": start,
+                "end": end,
+                "enabled": enabled,
+                "active": active,
+                "lot_mult": float(s.get("lot_size_multiplier", 1.0) or 1.0),
+                "strategies": list(s.get("strategies", []) or []),
+                "mins_left": mins_left,
+            })
+
+        out["active_name"] = active_name
+
+        # News blackout + regime metadata (unchanged)
         try:
             sm = getattr(ts, "_session_mgr", None)
-            if sm is not None:
-                state = getattr(sm, "state", None)
-                out["name"] = getattr(state, "current_session", "") if state else ""
-                out["news_blackout"] = bool(getattr(state, "news_blackout", False)) if state else False
+            state = getattr(sm, "state", None) if sm else None
+            out["news_blackout"] = bool(getattr(state, "news_blackout", False)) if state else False
         except Exception:
             pass
         try:

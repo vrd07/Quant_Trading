@@ -114,8 +114,8 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1080x780")
-        self.root.minsize(920, 640)
+        self.root.geometry("1080x880")
+        self.root.minsize(960, 720)
         self.root.configure(bg=BG)
         try:
             self.root.attributes("-topmost", bool(topmost))
@@ -187,30 +187,36 @@ class LiveMonitorApp:
         body.grid_columnconfigure(0, weight=1, uniform="cols")
         body.grid_columnconfigure(1, weight=1, uniform="cols")
         body.grid_rowconfigure(0, weight=0)
-        body.grid_rowconfigure(1, weight=1)
+        body.grid_rowconfigure(1, weight=0)   # sessions — fixed height
         body.grid_rowconfigure(2, weight=1)
+        body.grid_rowconfigure(3, weight=1)
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
         self.account_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
         self._build_account_body(self.account_panel)
 
-        # Row 1: symbols (left) + signals (right)
+        # Row 1: trading sessions (spans both cols)
+        self.sessions_panel = self._make_panel(body, "TRADING SESSIONS")
+        self.sessions_panel.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        self._build_sessions_body(self.sessions_panel)
+
+        # Row 2: symbols (left) + signals (right)
         self.symbols_panel = self._make_panel(body, "MARKET & SYMBOLS")
-        self.symbols_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 4), pady=(0, 8))
+        self.symbols_panel.grid(row=2, column=0, sticky="nsew", padx=(0, 4), pady=(0, 8))
         self._build_symbols_body(self.symbols_panel)
 
         self.signals_panel = self._make_panel(body, "LIVE SIGNALS")
-        self.signals_panel.grid(row=1, column=1, sticky="nsew", padx=(4, 0), pady=(0, 8))
+        self.signals_panel.grid(row=2, column=1, sticky="nsew", padx=(4, 0), pady=(0, 8))
         self._build_signals_body(self.signals_panel)
 
-        # Row 2: positions + journal
+        # Row 3: positions + journal
         self.positions_panel = self._make_panel(body, "OPEN POSITIONS")
-        self.positions_panel.grid(row=2, column=0, sticky="nsew", padx=(0, 4))
+        self.positions_panel.grid(row=3, column=0, sticky="nsew", padx=(0, 4))
         self._build_positions_body(self.positions_panel)
 
         self.journal_panel = self._make_panel(body, "TRADE JOURNAL & PSYCHOLOGY")
-        self.journal_panel.grid(row=2, column=1, sticky="nsew", padx=(4, 0))
+        self.journal_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0))
         self._build_journal_body(self.journal_panel)
 
         # Footer
@@ -327,6 +333,41 @@ class LiveMonitorApp:
         bar["canvas"].coords(bar["fill"], 0, 0, int(w * pct / 100), 10)
         color = GREEN if pct < 60 else (YELLOW if pct < 85 else RED)
         bar["canvas"].itemconfigure(bar["fill"], fill=color)
+
+    # --- sessions body ---
+    def _build_sessions_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
+        body.pack(fill=tk.X)
+
+        # Top line: current session + countdown + news-blackout chip
+        hdr = tk.Frame(body, bg=BG_PANEL)
+        hdr.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(hdr, text="ACTIVE:", bg=BG_PANEL, fg=TEXT_DIM,
+                 font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
+        self.session_active_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=TEXT,
+                                           font=("Menlo", 12, "bold"))
+        self.session_active_lbl.pack(side=tk.LEFT, padx=(6, 14))
+
+        tk.Label(hdr, text="ENDS IN:", bg=BG_PANEL, fg=TEXT_DIM,
+                 font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
+        self.session_countdown_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=TEXT,
+                                              font=("Menlo", 12, "bold"))
+        self.session_countdown_lbl.pack(side=tk.LEFT, padx=(6, 14))
+
+        self.session_news_chip = tk.Label(hdr, text="", bg=BG_PANEL, fg=BG_PANEL,
+                                          font=("Menlo", 9, "bold"), padx=8, pady=2)
+        self.session_news_chip.pack(side=tk.RIGHT)
+
+        # Table of all configured sessions
+        cols = ("active", "name", "window", "lot", "strats")
+        headings = ("", "Session", "UTC Window", "Lot ×", "Strategies (whitelisted)")
+        widths = (30, 140, 140, 70, 520)
+        self.tree_sessions = self._make_tree(body, cols, headings, widths, height=4)
+        self.tree_sessions.pack(fill=tk.X)
+        self.tree_sessions.tag_configure("active", foreground=GREEN,
+                                         background=BG_PANEL_2)
+        self.tree_sessions.tag_configure("idle", foreground=TEXT_DIM)
+        self.tree_sessions.tag_configure("disabled", foreground=TEXT_FAINT)
 
     # --- symbols body ---
     def _build_symbols_body(self, panel) -> None:
@@ -513,6 +554,53 @@ class LiveMonitorApp:
         else:
             self.error_banner.pack_forget()
 
+        # ---- sessions ----
+        sess = d.get("session", {}) or {}
+        active_name = (sess.get("active_name") or "").strip()
+        if active_name:
+            self.session_active_lbl.config(text=active_name.upper(), fg=GREEN)
+        else:
+            self.session_active_lbl.config(text="NONE", fg=TEXT_FAINT)
+
+        mins = sess.get("time_left_min")
+        if isinstance(mins, (int, float)) and mins is not None:
+            h, m = divmod(int(mins), 60)
+            self.session_countdown_lbl.config(
+                text=(f"{h}h {m:02d}m" if h > 0 else f"{m}m"),
+                fg=(YELLOW if mins < 15 else TEXT),
+            )
+        else:
+            self.session_countdown_lbl.config(text="—", fg=TEXT_FAINT)
+
+        if sess.get("news_blackout"):
+            self.session_news_chip.config(text=" NEWS BLACKOUT ", bg=RED, fg=BG)
+        else:
+            self.session_news_chip.config(text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM)
+
+        self._clear(self.tree_sessions)
+        for s in (sess.get("all") or []):
+            if not s.get("enabled", True):
+                tag = "disabled"
+                marker = "○"
+            elif s.get("active"):
+                tag = "active"
+                marker = "●"
+            else:
+                tag = "idle"
+                marker = "·"
+            strats = s.get("strategies") or []
+            strats_txt = (
+                ", ".join(strats) if len(strats) <= 6
+                else f"{len(strats)} strategies"
+            )
+            self.tree_sessions.insert("", "end", values=(
+                marker,
+                (s.get("name") or "").upper(),
+                f"{s.get('start', '?')} – {s.get('end', '?')}",
+                f"{float(s.get('lot_mult', 1.0)):.2f}",
+                strats_txt or "—",
+            ), tags=(tag,))
+
         # ---- symbols ----
         self._clear(self.tree_symbols)
         for s in d.get("symbols", []) or []:
@@ -595,14 +683,13 @@ class LiveMonitorApp:
 
         # ---- footer ----
         bot = d.get("bot", {}) or {}
-        sess = d.get("session", {}) or {}
         left_bits = [
             f"cfg={Path(bot.get('config_file', '')).name or '?'}",
             f"env={bot.get('env', '?')}",
             f"iter={bot.get('loop_iteration', 0)}",
         ]
-        if sess.get("name"):
-            left_bits.append(f"session={sess.get('name')}")
+        if sess.get("active_name"):
+            left_bits.append(f"session={sess.get('active_name')}")
         if sess.get("news_blackout"):
             left_bits.append("NEWS BLACKOUT")
         self.footer_left.config(text="   ·   ".join(left_bits))
