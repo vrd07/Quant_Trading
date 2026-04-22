@@ -274,7 +274,7 @@ class LiveMonitorApp:
 
     # --- account body ---
     def _build_account_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=12, pady=(0, 10))
+        body = tk.Frame(panel, bg=BG_PANEL, padx=12, pady=5)
         body.pack(fill=tk.X)
 
         row = tk.Frame(body, bg=BG_PANEL)
@@ -330,7 +330,7 @@ class LiveMonitorApp:
 
     # --- symbols body ---
     def _build_symbols_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=(0, 8))
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
         cols = ("sym", "bid", "ask", "spread", "regime", "dir", "atr")
@@ -346,7 +346,7 @@ class LiveMonitorApp:
 
     # --- signals body ---
     def _build_signals_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=(0, 8))
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
         cols = ("ts", "strat", "sym", "side", "conf", "status", "reason")
@@ -361,7 +361,7 @@ class LiveMonitorApp:
 
     # --- positions body ---
     def _build_positions_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=(0, 8))
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
         cols = ("sym", "side", "strat", "qty", "entry", "now", "sl", "tp", "pnl")
@@ -376,7 +376,7 @@ class LiveMonitorApp:
 
     # --- journal body ---
     def _build_journal_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=(0, 8))
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
         cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "reason")
@@ -396,7 +396,7 @@ class LiveMonitorApp:
         err_sep = tk.Frame(panel, bg=BORDER, height=1)
         err_sep.pack(fill=tk.X, padx=10, pady=(4, 4))
 
-        err_body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=(0, 8))
+        err_body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         err_body.pack(fill=tk.BOTH)
         err_cols = ("ts", "level", "friendly")
         err_head = ("Time", "Level", "Message")
