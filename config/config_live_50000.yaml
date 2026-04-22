@@ -446,23 +446,25 @@ strategies:
   # ── FIBONACCI RETRACEMENT GOLDEN ZONE ──────────────────────────────
   # Trades pullbacks into the 50%–61.8% Fibonacci retracement zone.
   # Disabled by default — backtest before enabling live.
+  # big_trend tuned config (Apr 2026 sweep):
+  # PF 1.75, WR 36.8%, DD 9.2%, 152 trades / 6mo on XAUUSD 5m — best risk-adjusted
   fibonacci_retracement:
-    enabled: false
+    enabled: true
     timeframe: 5m
     swing_lookback: 5
-    min_swing_atr_mult: 2.0
+    min_swing_atr_mult: 3.5          # was 2.0 — only BIG swings
     swing_max_age_bars: 100
     golden_zone_upper: 0.618
     golden_zone_lower: 0.50
-    min_rejection_ratio: 0.50
-    adx_min_threshold: 20
-    adx_max_threshold: 55
+    min_rejection_ratio: 0.55        # was 0.50
+    adx_min_threshold: 25            # was 20 — skip weak trends
+    adx_max_threshold: 70            # was 55 — allow strong trends
     rsi_overbought: 75
     rsi_oversold: 25
     ema_trend_period: 50
     atr_stop_multiplier: 1.5
     rr_ratio: 2.5
-    cooldown_bars: 8
+    cooldown_bars: 10                # was 8
     long_only: false
     only_in_regime: TREND
     min_strength: 0.0
