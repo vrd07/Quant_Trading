@@ -475,14 +475,45 @@ trading_hours:
   # friday_cutoff_utc: "19:00"
 
   sessions:
-    # ── 24/7 ALL STRATEGIES ───────────────────────────────────────────────────
-    # Single session covering the full day. All enabled strategies fire at all times.
-    - name: all_day
+    # ── ASIA (Tokyo/Sydney) 00:00–07:00 UTC — low vol, range-fade alpha ──────
+    - name: asia
       start: "00:00"
-      end: "23:59"
+      end: "07:00"
+      enabled: true
+      lot_size_multiplier: 0.7
+      strategies: [asia_range_fade, vwap, fibonacci_retracement, mini_medallion]
+
+    # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
+    - name: london
+      start: "07:00"
+      end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, supply_demand, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement]
+      strategies: [breakout, sbr, kalman_regime, momentum, smc_ob, descending_channel_breakout, mini_medallion, fibonacci_retracement]
+
+    # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
+    - name: overlap
+      start: "12:00"
+      end: "16:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement]
+
+    # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
+    - name: new_york
+      start: "16:00"
+      end: "22:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, fibonacci_retracement, smc_ob]
+
+    # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
+    - name: late_ny
+      start: "22:00"
+      end: "23:59"
+      enabled: false
+      lot_size_multiplier: 0.5
+      strategies: [mini_medallion, fibonacci_retracement]
 
   news_filter:
     enabled: true               # RESTRICTED: No trades ±5 min around high-impact news
