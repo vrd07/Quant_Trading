@@ -267,7 +267,7 @@ STRATEGY_WEIGHTS = {
         "asia_range_fade": 0.70, # PF 1.31, WR 45.3%, DD 1.6% — range-optimised
         "descending_channel_breakout": 0.45,
         "smc_ob":         0.50,
-        "fibonacci_retracement": 0.20,  # only_in_regime=TREND — gated off in range
+        "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
     },
     "VOLATILE": {
         "breakout":       0.55,  # raised: breakout captures vol expansion moves
