@@ -140,10 +140,32 @@ if %errorlevel%==0 (
 echo --- [4/4] Starting Live Trading ---
 echo.
 
+:: Spawn the interactive live-monitor pop-up in a separate window so
+:: the user can snap it next to MT5 while the bot streams state to it.
+:: Uses pythonw.exe (from venv) for a clean GUI-only window — no console.
+if not exist "logs" mkdir logs
+python -c "import tkinter" >nul 2>&1
+if %errorlevel%==0 (
+    echo   [INFO] Launching live monitor pop-up...
+    if exist "venv\Scripts\pythonw.exe" (
+        start "" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000
+    ) else (
+        start "Live Monitor" python scripts\live_monitor.py --refresh 1000
+    )
+) else (
+    echo   [WARN] Tkinter not available — skipping live monitor pop-up.
+)
+
 if "%FORCE%"=="true" (
     python src\main.py --env live --config %CONFIG% --force-live
 ) else (
     python src\main.py --env live --config %CONFIG%
+)
+
+:: Bot has exited — close any live-monitor windows that are still open.
+:: (Safe: only targets pythonw processes that loaded live_monitor.py.)
+for /f "tokens=2" %%p in ('wmic process where "CommandLine like '%%live_monitor.py%%'" get ProcessId ^| findstr /r "[0-9]"') do (
+    taskkill /PID %%p /F >nul 2>&1
 )
 
 :: If the bot exits, pause so you can read any error messages

@@ -128,6 +128,23 @@ fi
 echo "─── [4/4] Starting Live Trading ───"
 echo ""
 
+# Spawn the interactive live-monitor pop-up in the background so the user
+# can snap it next to MT5 while the bot streams state to it via JSON.
+# (Uses stdlib Tkinter — no extra deps. Skipped if Tkinter unavailable.)
+MONITOR_LOG="logs/live_monitor.log"
+mkdir -p logs
+if python3 -c "import tkinter" >/dev/null 2>&1; then
+    echo "  ➜ Launching live monitor pop-up..."
+    nohup python3 scripts/live_monitor.py --refresh 1000 \
+        >"$MONITOR_LOG" 2>&1 &
+    MONITOR_PID=$!
+    echo "    Monitor PID: $MONITOR_PID   (log: $MONITOR_LOG)"
+    # Ensure the monitor window closes when the bot does.
+    trap 'kill $MONITOR_PID 2>/dev/null || true' EXIT INT TERM
+else
+    echo "  ⚠ Tkinter not available — skipping live monitor pop-up."
+fi
+
 if [ "$FORCE" = true ]; then
     exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG" --force-live
 else
