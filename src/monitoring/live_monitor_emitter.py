@@ -21,7 +21,7 @@ import os
 import threading
 import time
 from collections import deque
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -256,6 +256,8 @@ class LiveMonitorEmitter:
         positions = self._collect_positions(ts)
         strategies = self._collect_strategies(ts)
         session = self._collect_session(ts)
+        news = self._collect_news(ts)
+        performance = self._collect_performance_stats()
         journal = self._collect_journal_from_csv()
 
         # Auto-derive status if the bot is healthy / halted
@@ -297,6 +299,8 @@ class LiveMonitorEmitter:
             "journal": combined_journal[:15],
             "strategies": strategies,
             "session": session,
+            "news": news,
+            "performance": performance,
             "errors": errors,
         }
 
@@ -308,7 +312,10 @@ class LiveMonitorEmitter:
             "margin": 0.0, "free_margin": 0.0,
             "return_usd": 0.0, "return_pct": 0.0,
             "daily_pnl": 0.0, "daily_loss_limit_used_pct": 0.0,
-            "drawdown_used_pct": 0.0, "open_positions": 0,
+            "daily_loss_limit_used_usd": 0.0, "daily_loss_limit_usd": 0.0,
+            "drawdown_used_pct": 0.0,
+            "drawdown_used_usd": 0.0, "drawdown_limit_usd": 0.0,
+            "open_positions": 0,
             "broker": "",
         }
         try:
@@ -360,6 +367,8 @@ class LiveMonitorEmitter:
             if base > 0:
                 daily_loss_abs = -out["daily_pnl"] if out["daily_pnl"] < 0 else 0.0
                 daily_limit = max_daily_pct * base
+                out["daily_loss_limit_usd"] = round(daily_limit, 2)
+                out["daily_loss_limit_used_usd"] = round(daily_loss_abs, 2)
                 if daily_limit > 0:
                     out["daily_loss_limit_used_pct"] = round(
                         min(100.0, daily_loss_abs / daily_limit * 100.0), 2
@@ -376,6 +385,8 @@ class LiveMonitorEmitter:
                         hwm = max(out["equity"], base)
                     dd_abs = max(0.0, hwm - out["equity"])
                     dd_limit = max_dd_pct * hwm
+                    out["drawdown_limit_usd"] = round(dd_limit, 2)
+                    out["drawdown_used_usd"] = round(dd_abs, 2)
                     if dd_limit > 0:
                         out["drawdown_used_pct"] = round(
                             min(100.0, dd_abs / dd_limit * 100.0), 2
@@ -605,6 +616,209 @@ class LiveMonitorEmitter:
             out["regime_generated_at"] = override.get("generated_at", "")
         except Exception:
             pass
+        return out
+
+    def _collect_news(self, ts) -> Dict[str, Any]:
+        """Pull news-filter status and upcoming high-impact events, emitted in IST."""
+        ist_offset = timedelta(hours=5, minutes=30)
+        now_utc = datetime.now(timezone.utc)
+        now_ist = now_utc + ist_offset
+        out: Dict[str, Any] = {
+            "ist_now": now_ist.strftime("%H:%M:%S"),
+            "ist_date": now_ist.strftime("%a %d %b %Y"),
+            "utc_now": now_utc.strftime("%H:%M:%S"),
+            "blackout": False,
+            "blackout_reason": "",
+            "upcoming": [],
+        }
+
+        sm = getattr(ts, "_session_mgr", None)
+        try:
+            state = getattr(sm, "state", None) if sm else None
+            if state is not None:
+                out["blackout"] = bool(getattr(state, "news_blackout", False))
+                out["blackout_reason"] = str(
+                    getattr(state, "news_blackout_reason", "") or ""
+                )
+        except Exception:
+            pass
+
+        # Try several common attribute names for the upcoming-events cache.
+        events: List[Any] = []
+        try:
+            for attr in ("upcoming_events", "upcoming_news", "news_events", "events"):
+                ev = getattr(sm, attr, None) if sm else None
+                if ev:
+                    events = list(ev)
+                    break
+            if not events and sm is not None:
+                nf = getattr(sm, "news_filter", None)
+                if nf is not None:
+                    for attr in ("upcoming_events", "upcoming_news", "events"):
+                        ev = getattr(nf, attr, None)
+                        if ev:
+                            events = list(ev)
+                            break
+        except Exception:
+            events = []
+
+        def _to_dt(v: Any) -> Optional[datetime]:
+            if v is None:
+                return None
+            if isinstance(v, datetime):
+                return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
+            if isinstance(v, str):
+                try:
+                    dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+                except Exception:
+                    return None
+            return None
+
+        for e in events[:20]:
+            try:
+                if isinstance(e, dict):
+                    t = _to_dt(
+                        e.get("time_utc") or e.get("time") or e.get("datetime")
+                        or e.get("timestamp")
+                    )
+                    impact = str(e.get("impact", "") or "").upper()
+                    currency = str(e.get("currency", "") or e.get("ccy", ""))
+                    title = str(e.get("title", "") or e.get("event", "") or e.get("name", ""))
+                else:
+                    t = _to_dt(
+                        getattr(e, "time_utc", None) or getattr(e, "time", None)
+                        or getattr(e, "datetime", None) or getattr(e, "timestamp", None)
+                    )
+                    impact = str(getattr(e, "impact", "") or "").upper()
+                    currency = str(getattr(e, "currency", "") or getattr(e, "ccy", ""))
+                    title = str(
+                        getattr(e, "title", "") or getattr(e, "event", "")
+                        or getattr(e, "name", "")
+                    )
+                if t is None:
+                    continue
+                mins_until = int((t - now_utc).total_seconds() / 60)
+                if mins_until < -15:
+                    continue
+                t_ist = t + ist_offset
+                out["upcoming"].append({
+                    "time_ist": t_ist.strftime("%H:%M"),
+                    "date_ist": t_ist.strftime("%d %b"),
+                    "impact": impact or "MED",
+                    "currency": currency or "",
+                    "title": title[:70],
+                    "mins_until": mins_until,
+                })
+            except Exception:
+                continue
+
+        out["upcoming"].sort(key=lambda r: r["mins_until"])
+        out["upcoming"] = out["upcoming"][:6]
+        return out
+
+    def _collect_performance_stats(self) -> Dict[str, Any]:
+        """Derive live trading stats (win-rate, PF, streak, expectancy) from journal CSV."""
+        out: Dict[str, Any] = {
+            "total_trades": 0, "wins": 0, "losses": 0, "scratches": 0,
+            "win_rate": 0.0, "avg_win": 0.0, "avg_loss": 0.0,
+            "profit_factor": 0.0, "expectancy": 0.0,
+            "best_trade": 0.0, "worst_trade": 0.0,
+            "current_streak": 0, "streak_type": "",
+            "total_pnl": 0.0,
+        }
+        path = Path("data/logs/trade_journal.csv")
+        if not path.exists():
+            return out
+
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                size = f.tell()
+                seek_from = max(0, size - 200 * 1024)
+                f.seek(seek_from)
+                tail = f.read().decode("utf-8", errors="replace")
+            with open(path, "r", encoding="utf-8") as f:
+                header_line = f.readline().strip()
+        except Exception:
+            return out
+
+        if not header_line:
+            return out
+        header = [h.strip() for h in header_line.split(",")]
+        try:
+            pnl_idx = header.index("realized_pnl")
+        except ValueError:
+            return out
+
+        lines = [l for l in tail.splitlines() if l.strip()]
+        if not lines:
+            return out
+        # Skip first (possibly partial) line when we seeked mid-file
+        data_lines = lines[1:] if seek_from > 0 else (
+            lines[1:] if lines[0] == header_line else lines
+        )
+
+        pnls: List[float] = []
+        for ln in data_lines:
+            parts = ln.split(",")
+            if len(parts) <= pnl_idx:
+                continue
+            try:
+                pnls.append(float(parts[pnl_idx] or 0))
+            except Exception:
+                continue
+
+        if not pnls:
+            return out
+
+        wins = [p for p in pnls if p > 0]
+        losses = [p for p in pnls if p < 0]
+        scratches = [p for p in pnls if p == 0]
+
+        out["total_trades"] = len(pnls)
+        out["wins"] = len(wins)
+        out["losses"] = len(losses)
+        out["scratches"] = len(scratches)
+        out["total_pnl"] = round(sum(pnls), 2)
+        if pnls:
+            decided = len(wins) + len(losses)
+            out["win_rate"] = round(len(wins) / decided * 100, 1) if decided else 0.0
+        if wins:
+            out["avg_win"] = round(sum(wins) / len(wins), 2)
+            out["best_trade"] = round(max(wins), 2)
+        if losses:
+            out["avg_loss"] = round(sum(losses) / len(losses), 2)
+            out["worst_trade"] = round(min(losses), 2)
+
+        gross_win = sum(wins)
+        gross_loss = -sum(losses)
+        if gross_loss > 0:
+            out["profit_factor"] = round(gross_win / gross_loss, 2)
+        elif gross_win > 0:
+            out["profit_factor"] = 999.0
+
+        wr = out["win_rate"] / 100.0
+        out["expectancy"] = round(wr * out["avg_win"] - (1 - wr) * abs(out["avg_loss"]), 2)
+
+        # Current streak from the end of the trade list
+        streak = 0
+        stype = ""
+        for p in reversed(pnls):
+            if p > 0:
+                if stype in ("", "W"):
+                    stype = "W"; streak += 1
+                else:
+                    break
+            elif p < 0:
+                if stype in ("", "L"):
+                    stype = "L"; streak += 1
+                else:
+                    break
+            else:
+                continue  # scratches do not break a streak
+        out["current_streak"] = streak
+        out["streak_type"] = stype
         return out
 
     def _collect_journal_from_csv(self) -> List[Dict[str, Any]]:

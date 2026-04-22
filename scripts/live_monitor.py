@@ -114,8 +114,8 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1080x880")
-        self.root.minsize(960, 720)
+        self.root.geometry("1320x1040")
+        self.root.minsize(1120, 880)
         self.root.configure(bg=BG)
         try:
             self.root.attributes("-topmost", bool(topmost))
@@ -186,38 +186,54 @@ class LiveMonitorApp:
         body.pack(fill=tk.BOTH, expand=True)
         body.grid_columnconfigure(0, weight=1, uniform="cols")
         body.grid_columnconfigure(1, weight=1, uniform="cols")
-        body.grid_rowconfigure(0, weight=0)
-        body.grid_rowconfigure(1, weight=0)   # sessions — fixed height
-        body.grid_rowconfigure(2, weight=1)
-        body.grid_rowconfigure(3, weight=1)
+        body.grid_rowconfigure(0, weight=0)   # account (fixed)
+        body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
+        body.grid_rowconfigure(2, weight=1)   # symbols | signals (medium)
+        body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
+        body.grid_rowconfigure(4, weight=4)   # journal (huge)
+        body.grid_rowconfigure(5, weight=0)   # errors (tiny, fixed)
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
-        self.account_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        self.account_panel.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self._build_account_body(self.account_panel)
 
-        # Row 1: trading sessions (spans both cols)
+        # Row 1: sessions (left) + news IST (right)
         self.sessions_panel = self._make_panel(body, "TRADING SESSIONS")
-        self.sessions_panel.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, 8))
+        self.sessions_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 4), pady=(0, 6))
         self._build_sessions_body(self.sessions_panel)
+
+        self.news_panel = self._make_panel(body, "MARKET NEWS (IST)")
+        self.news_panel.grid(row=1, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
+        self._build_news_body(self.news_panel)
 
         # Row 2: symbols (left) + signals (right)
         self.symbols_panel = self._make_panel(body, "MARKET & SYMBOLS")
-        self.symbols_panel.grid(row=2, column=0, sticky="nsew", padx=(0, 4), pady=(0, 8))
+        self.symbols_panel.grid(row=2, column=0, sticky="nsew", padx=(0, 4), pady=(0, 6))
         self._build_symbols_body(self.symbols_panel)
 
         self.signals_panel = self._make_panel(body, "LIVE SIGNALS")
-        self.signals_panel.grid(row=2, column=1, sticky="nsew", padx=(4, 0), pady=(0, 8))
+        self.signals_panel.grid(row=2, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self._build_signals_body(self.signals_panel)
 
-        # Row 3: positions + journal
+        # Row 3: performance metrics (left) + open positions (right, small)
+        self.performance_panel = self._make_panel(body, "PERFORMANCE METRICS")
+        self.performance_panel.grid(row=3, column=0, sticky="nsew", padx=(0, 4), pady=(0, 6))
+        self._build_performance_body(self.performance_panel)
+
         self.positions_panel = self._make_panel(body, "OPEN POSITIONS")
-        self.positions_panel.grid(row=3, column=0, sticky="nsew", padx=(0, 4))
+        self.positions_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self._build_positions_body(self.positions_panel)
 
+        # Row 4: trade journal (spans both, huge)
         self.journal_panel = self._make_panel(body, "TRADE JOURNAL & PSYCHOLOGY")
-        self.journal_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0))
+        self.journal_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self._build_journal_body(self.journal_panel)
+
+        # Row 5: errors (spans both, tiny)
+        self.errors_panel = self._make_panel(body, "RECENT WARNINGS / ERRORS")
+        self.errors_panel.grid(row=5, column=0, columnspan=2, sticky="nsew")
+        self._build_errors_body(self.errors_panel)
 
         # Footer
         footer = tk.Frame(self.root, bg=BG_PANEL_2, padx=10, pady=4)
@@ -326,9 +342,23 @@ class LiveMonitorApp:
         fill = canvas.create_rectangle(0, 0, 0, 10, fill=GREEN, width=0)
         return {"canvas": canvas, "fill": fill, "val": val_lbl}
 
-    def _set_risk_bar(self, bar: Dict[str, Any], pct: float) -> None:
+    def _set_risk_bar(
+        self,
+        bar: Dict[str, Any],
+        pct: float,
+        used_usd: Optional[float] = None,
+        limit_usd: Optional[float] = None,
+    ) -> None:
         pct = max(0.0, min(100.0, float(pct or 0)))
-        bar["val"].config(text=f"{pct:.0f}%")
+        label = f"{pct:.0f}%"
+        if used_usd is not None and limit_usd is not None and limit_usd > 0:
+            label = (
+                f"{pct:.0f}%  "
+                f"(${_fmt_money(used_usd)} / ${_fmt_money(limit_usd)})"
+            )
+        elif used_usd is not None:
+            label = f"{pct:.0f}%  (${_fmt_money(used_usd)})"
+        bar["val"].config(text=label)
         w = bar["canvas"].winfo_width() or 1
         bar["canvas"].coords(bar["fill"], 0, 0, int(w * pct / 100), 10)
         color = GREEN if pct < 60 else (YELLOW if pct < 85 else RED)
@@ -337,37 +367,89 @@ class LiveMonitorApp:
     # --- sessions body ---
     def _build_sessions_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
-        body.pack(fill=tk.X)
+        body.pack(fill=tk.BOTH, expand=True)
 
-        # Top line: current session + countdown + news-blackout chip
+        # Top line: current session + countdown
         hdr = tk.Frame(body, bg=BG_PANEL)
         hdr.pack(fill=tk.X, pady=(0, 4))
         tk.Label(hdr, text="ACTIVE:", bg=BG_PANEL, fg=TEXT_DIM,
                  font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
         self.session_active_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=TEXT,
-                                           font=("Menlo", 12, "bold"))
+                                           font=("Menlo", 11, "bold"))
         self.session_active_lbl.pack(side=tk.LEFT, padx=(6, 14))
 
         tk.Label(hdr, text="ENDS IN:", bg=BG_PANEL, fg=TEXT_DIM,
                  font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
         self.session_countdown_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=TEXT,
-                                              font=("Menlo", 12, "bold"))
-        self.session_countdown_lbl.pack(side=tk.LEFT, padx=(6, 14))
+                                              font=("Menlo", 11, "bold"))
+        self.session_countdown_lbl.pack(side=tk.LEFT, padx=(6, 0))
 
-        self.session_news_chip = tk.Label(hdr, text="", bg=BG_PANEL, fg=BG_PANEL,
-                                          font=("Menlo", 9, "bold"), padx=8, pady=2)
-        self.session_news_chip.pack(side=tk.RIGHT)
-
-        # Table of all configured sessions
+        # Table of all configured sessions (compact: narrower cols, height=4)
         cols = ("active", "name", "window", "lot", "strats")
-        headings = ("", "Session", "UTC Window", "Lot ×", "Strategies (whitelisted)")
-        widths = (30, 140, 140, 70, 520)
+        headings = ("", "Session", "UTC Window", "Lot ×", "Strategies")
+        widths = (24, 100, 110, 55, 240)
         self.tree_sessions = self._make_tree(body, cols, headings, widths, height=4)
-        self.tree_sessions.pack(fill=tk.X)
+        self.tree_sessions.pack(fill=tk.BOTH, expand=True)
         self.tree_sessions.tag_configure("active", foreground=GREEN,
                                          background=BG_PANEL_2)
         self.tree_sessions.tag_configure("idle", foreground=TEXT_DIM)
         self.tree_sessions.tag_configure("disabled", foreground=TEXT_FAINT)
+
+    # --- news body (IST) ---
+    def _build_news_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        hdr = tk.Frame(body, bg=BG_PANEL)
+        hdr.pack(fill=tk.X, pady=(0, 4))
+        tk.Label(hdr, text="IST NOW:", bg=BG_PANEL, fg=TEXT_DIM,
+                 font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
+        self.news_ist_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=GOLD,
+                                     font=("Menlo", 11, "bold"))
+        self.news_ist_lbl.pack(side=tk.LEFT, padx=(6, 14))
+
+        self.news_chip = tk.Label(hdr, text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM,
+                                  font=("Menlo", 9, "bold"), padx=8, pady=2)
+        self.news_chip.pack(side=tk.RIGHT)
+
+        cols = ("in", "time", "impact", "ccy", "title")
+        headings = ("In", "IST", "Impact", "Ccy", "Event")
+        widths = (60, 60, 65, 45, 260)
+        self.tree_news = self._make_tree(body, cols, headings, widths, height=4)
+        self.tree_news.pack(fill=tk.BOTH, expand=True)
+        self.tree_news.tag_configure("imminent", foreground=RED)
+        self.tree_news.tag_configure("high", foreground=ORANGE)
+        self.tree_news.tag_configure("medium", foreground=YELLOW)
+        self.tree_news.tag_configure("low", foreground=TEXT_DIM)
+
+    # --- performance metrics body ---
+    def _build_performance_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=10, pady=6)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        def kv(parent, label, init="—", color=TEXT) -> tk.Label:
+            col = tk.Frame(parent, bg=BG_PANEL)
+            col.pack(side=tk.LEFT, padx=(0, 14))
+            tk.Label(col, text=label, bg=BG_PANEL, fg=TEXT_DIM,
+                     font=("Menlo", 9, "bold")).pack(anchor="w")
+            lbl = tk.Label(col, text=init, bg=BG_PANEL, fg=color,
+                           font=("Menlo", 12, "bold"))
+            lbl.pack(anchor="w")
+            return lbl
+
+        row1 = tk.Frame(body, bg=BG_PANEL)
+        row1.pack(fill=tk.X, pady=(0, 4))
+        self.val_perf_trades = kv(row1, "TRADES")
+        self.val_perf_winrate = kv(row1, "WIN RATE")
+        self.val_perf_pf = kv(row1, "PROFIT FACTOR")
+        self.val_perf_exp = kv(row1, "EXPECTANCY")
+
+        row2 = tk.Frame(body, bg=BG_PANEL)
+        row2.pack(fill=tk.X)
+        self.val_perf_avgwin = kv(row2, "AVG WIN")
+        self.val_perf_avgloss = kv(row2, "AVG LOSS")
+        self.val_perf_streak = kv(row2, "STREAK")
+        self.val_perf_totalpnl = kv(row2, "TOTAL P&L")
 
     # --- symbols body ---
     def _build_symbols_body(self, panel) -> None:
@@ -400,22 +482,22 @@ class LiveMonitorApp:
         self.tree_signals.tag_configure("received", foreground=TEXT)
         self.tree_signals.tag_configure("error", foreground=RED)
 
-    # --- positions body ---
+    # --- positions body (compact) ---
     def _build_positions_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("sym", "side", "strat", "qty", "entry", "now", "sl", "tp", "pnl")
-        headings = ("Symbol", "Side", "Strategy", "Qty", "Entry",
+        cols = ("sym", "side", "qty", "entry", "now", "sl", "tp", "pnl")
+        headings = ("Symbol", "Side", "Qty", "Entry",
                     "Current", "S/L", "T/P", "P&L ($)")
-        widths = (80, 55, 130, 55, 80, 80, 80, 80, 90)
-        self.tree_positions = self._make_tree(body, cols, headings, widths, height=6)
+        widths = (70, 50, 50, 70, 70, 70, 70, 80)
+        self.tree_positions = self._make_tree(body, cols, headings, widths, height=4)
         self.tree_positions.pack(fill=tk.BOTH, expand=True)
         self.tree_positions.tag_configure("win", foreground=GREEN)
         self.tree_positions.tag_configure("loss", foreground=RED)
         self.tree_positions.tag_configure("flat", foreground=TEXT)
 
-    # --- journal body ---
+    # --- journal body (huge — takes most of the vertical space) ---
     def _build_journal_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
@@ -423,27 +505,22 @@ class LiveMonitorApp:
         cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "reason")
         headings = ("Closed", "Symbol", "Strategy", "Side",
                     "Entry", "Exit", "P&L", "Why / Exit")
-        widths = (70, 80, 130, 55, 80, 80, 80, 300)
-        self.tree_journal = self._make_tree(body, cols, headings, widths, height=6)
+        widths = (80, 90, 150, 60, 90, 90, 90, 600)
+        self.tree_journal = self._make_tree(body, cols, headings, widths, height=14)
         self.tree_journal.pack(fill=tk.BOTH, expand=True)
         self.tree_journal.tag_configure("win", foreground=GREEN)
         self.tree_journal.tag_configure("loss", foreground=RED)
 
-        # "Errors" sub-section below
-        err_hdr = tk.Frame(panel, bg=BG_PANEL)
-        err_hdr.pack(fill=tk.X, padx=10, pady=(6, 0))
-        tk.Label(err_hdr, text="RECENT WARNINGS / ERRORS", bg=BG_PANEL,
-                 fg=GOLD, font=("Menlo", 10, "bold")).pack(side=tk.LEFT)
-        err_sep = tk.Frame(panel, bg=BORDER, height=1)
-        err_sep.pack(fill=tk.X, padx=10, pady=(4, 4))
+    # --- errors body (compact standalone strip) ---
+    def _build_errors_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=2)
+        body.pack(fill=tk.BOTH, expand=True)
 
-        err_body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
-        err_body.pack(fill=tk.BOTH)
-        err_cols = ("ts", "level", "friendly")
-        err_head = ("Time", "Level", "Message")
-        err_widths = (70, 80, 520)
-        self.tree_errors = self._make_tree(err_body, err_cols, err_head, err_widths, height=4)
-        self.tree_errors.pack(fill=tk.X)
+        cols = ("ts", "level", "friendly")
+        headings = ("Time", "Level", "Message")
+        widths = (70, 80, 900)
+        self.tree_errors = self._make_tree(body, cols, headings, widths, height=3)
+        self.tree_errors.pack(fill=tk.BOTH, expand=True)
         self.tree_errors.tag_configure("critical", foreground=RED)
         self.tree_errors.tag_configure("warning", foreground=YELLOW)
         self.tree_errors.tag_configure("info", foreground=TEXT_DIM)
@@ -539,8 +616,18 @@ class LiveMonitorApp:
         )
         self.val_uptime.config(text=_fmt_uptime((d.get("bot", {}) or {}).get("uptime_seconds", 0)))
 
-        self._set_risk_bar(self.bar_daily, acc.get("daily_loss_limit_used_pct", 0))
-        self._set_risk_bar(self.bar_drawdown, acc.get("drawdown_used_pct", 0))
+        self._set_risk_bar(
+            self.bar_daily,
+            acc.get("daily_loss_limit_used_pct", 0),
+            used_usd=acc.get("daily_loss_limit_used_usd"),
+            limit_usd=acc.get("daily_loss_limit_usd"),
+        )
+        self._set_risk_bar(
+            self.bar_drawdown,
+            acc.get("drawdown_used_pct", 0),
+            used_usd=acc.get("drawdown_used_usd"),
+            limit_usd=acc.get("drawdown_limit_usd"),
+        )
 
         # ---- error banner ----
         errs = d.get("errors", []) or []
@@ -572,11 +659,6 @@ class LiveMonitorApp:
         else:
             self.session_countdown_lbl.config(text="—", fg=TEXT_FAINT)
 
-        if sess.get("news_blackout"):
-            self.session_news_chip.config(text=" NEWS BLACKOUT ", bg=RED, fg=BG)
-        else:
-            self.session_news_chip.config(text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM)
-
         self._clear(self.tree_sessions)
         for s in (sess.get("all") or []):
             if not s.get("enabled", True):
@@ -600,6 +682,95 @@ class LiveMonitorApp:
                 f"{float(s.get('lot_mult', 1.0)):.2f}",
                 strats_txt or "—",
             ), tags=(tag,))
+
+        # ---- news (IST) ----
+        news = d.get("news", {}) or {}
+        ist_now = news.get("ist_now", "") or ""
+        ist_date = news.get("ist_date", "") or ""
+        self.news_ist_lbl.config(
+            text=f"{ist_now}  ·  {ist_date}" if ist_date else ist_now or "—",
+            fg=GOLD,
+        )
+        if news.get("blackout") or sess.get("news_blackout"):
+            self.news_chip.config(text=" NEWS BLACKOUT ", bg=RED, fg=BG)
+        else:
+            self.news_chip.config(text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM)
+
+        self._clear(self.tree_news)
+        upcoming = news.get("upcoming") or []
+        if not upcoming:
+            self.tree_news.insert("", "end", values=(
+                "—", "—", "—", "—", "No upcoming events tracked",
+            ), tags=("low",))
+        else:
+            for e in upcoming:
+                mins = int(e.get("mins_until", 0) or 0)
+                if mins < 0:
+                    in_txt = f"{abs(mins)}m ago"
+                elif mins < 60:
+                    in_txt = f"{mins}m"
+                else:
+                    h, m = divmod(mins, 60)
+                    in_txt = f"{h}h {m:02d}m"
+                impact = (e.get("impact") or "").upper()
+                if 0 <= mins <= 30:
+                    tag = "imminent"
+                elif impact == "HIGH":
+                    tag = "high"
+                elif impact == "MEDIUM":
+                    tag = "medium"
+                else:
+                    tag = "low"
+                self.tree_news.insert("", "end", values=(
+                    in_txt,
+                    e.get("time_ist", "—"),
+                    impact or "—",
+                    e.get("currency", "") or "—",
+                    (e.get("title") or "—")[:60],
+                ), tags=(tag,))
+
+        # ---- performance metrics ----
+        perf = d.get("performance", {}) or {}
+        total_trades = int(perf.get("total_trades", 0) or 0)
+        wins = int(perf.get("wins", 0) or 0)
+        losses = int(perf.get("losses", 0) or 0)
+        wr = float(perf.get("win_rate", 0) or 0)
+        pf = float(perf.get("profit_factor", 0) or 0)
+        exp_v = float(perf.get("expectancy", 0) or 0)
+        avg_w = float(perf.get("avg_win", 0) or 0)
+        avg_l = float(perf.get("avg_loss", 0) or 0)
+        total_pnl = float(perf.get("total_pnl", 0) or 0)
+        streak = int(perf.get("current_streak", 0) or 0)
+        stype = (perf.get("streak_type") or "").upper()
+
+        self.val_perf_trades.config(text=f"{total_trades}  ({wins}W / {losses}L)")
+        self.val_perf_winrate.config(
+            text=f"{wr:.1f}%" if total_trades else "—",
+            fg=(GREEN if wr >= 55 else YELLOW if wr >= 45 else RED) if total_trades else TEXT,
+        )
+        self.val_perf_pf.config(
+            text=(f"{pf:.2f}" if pf < 900 else "∞") if total_trades else "—",
+            fg=(GREEN if pf >= 1.5 else YELLOW if pf >= 1.0 else RED) if total_trades else TEXT,
+        )
+        self.val_perf_exp.config(
+            text=f"${_fmt_money(exp_v, signed=True)}" if total_trades else "—",
+            fg=(GREEN if exp_v > 0 else RED if exp_v < 0 else TEXT),
+        )
+        self.val_perf_avgwin.config(
+            text=f"${_fmt_money(avg_w)}" if wins else "—", fg=GREEN if wins else TEXT,
+        )
+        self.val_perf_avgloss.config(
+            text=f"${_fmt_money(avg_l)}" if losses else "—", fg=RED if losses else TEXT,
+        )
+        if streak and stype:
+            streak_color = GREEN if stype == "W" else RED
+            self.val_perf_streak.config(text=f"{streak}{stype}", fg=streak_color)
+        else:
+            self.val_perf_streak.config(text="—", fg=TEXT)
+        self.val_perf_totalpnl.config(
+            text=f"${_fmt_money(total_pnl, signed=True)}" if total_trades else "—",
+            fg=(GREEN if total_pnl > 0 else RED if total_pnl < 0 else TEXT),
+        )
 
         # ---- symbols ----
         self._clear(self.tree_symbols)
@@ -644,7 +815,6 @@ class LiveMonitorApp:
             self.tree_positions.insert("", "end", values=(
                 p.get("symbol") or "",
                 p.get("side") or "",
-                (p.get("strategy") or "")[:18],
                 f"{float(p.get('qty', 0) or 0):.2f}",
                 _fmt_money(p.get("entry", 0), dec=3),
                 _fmt_money(p.get("current", 0), dec=3),
