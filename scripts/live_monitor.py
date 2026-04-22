@@ -188,7 +188,7 @@ class LiveMonitorApp:
         body.grid_columnconfigure(1, weight=1, uniform="cols")
         body.grid_rowconfigure(0, weight=0)   # account (fixed)
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
-        body.grid_rowconfigure(2, weight=1)   # symbols | signals (medium)
+        body.grid_rowconfigure(2, weight=2, minsize=180)  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
         body.grid_rowconfigure(4, weight=4, minsize=260)  # journal — guaranteed min height
         body.grid_rowconfigure(5, weight=0, minsize=95)   # errors — guaranteed min height
