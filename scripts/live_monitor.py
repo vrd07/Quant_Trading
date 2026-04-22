@@ -190,8 +190,8 @@ class LiveMonitorApp:
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
         body.grid_rowconfigure(2, weight=1)   # symbols | signals (medium)
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=6, minsize=320)  # journal — guaranteed min height
-        body.grid_rowconfigure(5, weight=0)   # errors (tiny, fixed)
+        body.grid_rowconfigure(4, weight=4, minsize=260)  # journal — guaranteed min height
+        body.grid_rowconfigure(5, weight=0, minsize=95)   # errors — guaranteed min height
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
@@ -258,9 +258,14 @@ class LiveMonitorApp:
 
     # --- top banner ---
     def _build_top_banner(self, parent) -> None:
-        # Left: status pill (dot + state + trader name) + status message + quote
+        # Three-column grid: status pill (left) | centered user+quote | KPIs (right)
+        parent.grid_columnconfigure(0, weight=1, uniform="banner")
+        parent.grid_columnconfigure(1, weight=2, uniform="banner")
+        parent.grid_columnconfigure(2, weight=1, uniform="banner")
+
+        # ── Column 0: state pill + sub-message ────────────────────────────
         left = tk.Frame(parent, bg=BG)
-        left.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        left.grid(row=0, column=0, sticky="nw")
 
         pill_row = tk.Frame(left, bg=BG)
         pill_row.pack(anchor="w")
@@ -270,32 +275,35 @@ class LiveMonitorApp:
         self.status_label = tk.Label(pill_row, text="STARTING", bg=BG, fg=TEXT,
                                      font=("Menlo", 17, "bold"))
         self.status_label.pack(side=tk.LEFT)
-        # Trader username — on the same row as the state pill, one notch bigger.
-        self.user_label = tk.Label(
-            pill_row, text="", bg=BG, fg=GOLD, font=("Menlo", 20, "bold"),
-        )
-        self.user_label.pack(side=tk.LEFT, padx=(14, 0))
 
         self.status_sub = tk.Label(left, text="Connecting to bot…", bg=BG,
                                    fg=TEXT_DIM, font=("Menlo", 11))
         self.status_sub.pack(anchor="w", pady=(2, 0))
 
-        # Daily motivational quote — single line, left-aligned under the pill row.
-        self.quote_label = tk.Label(
-            left, text="", bg=BG, fg=YELLOW,
-            font=("Menlo", 10, "italic"), anchor="w", justify="left",
-            wraplength=900,
-        )
-        self.quote_label.pack(anchor="w", pady=(2, 0))
-        self.quote_author_label = tk.Label(
-            left, text="", bg=BG, fg=TEXT_FAINT,
-            font=("Menlo", 9), anchor="w",
-        )
-        self.quote_author_label.pack(anchor="w")
+        # ── Column 1: centered trader name + quote (sits on the RUNNING row) ─
+        center = tk.Frame(parent, bg=BG)
+        center.grid(row=0, column=1, sticky="n")
 
-        # Right: balance / equity / P&L
+        self.user_label = tk.Label(
+            center, text="", bg=BG, fg=GOLD,
+            font=("Menlo", 20, "bold"), anchor="center", justify="center",
+        )
+        self.user_label.pack(anchor="center")
+        self.quote_label = tk.Label(
+            center, text="", bg=BG, fg=YELLOW,
+            font=("Menlo", 10, "italic"), anchor="center", justify="center",
+            wraplength=600,
+        )
+        self.quote_label.pack(anchor="center", pady=(2, 0))
+        self.quote_author_label = tk.Label(
+            center, text="", bg=BG, fg=TEXT_FAINT,
+            font=("Menlo", 9), anchor="center", justify="center",
+        )
+        self.quote_author_label.pack(anchor="center")
+
+        # ── Column 2: balance / equity / P&L KPIs ─────────────────────────
         right = tk.Frame(parent, bg=BG)
-        right.pack(side=tk.RIGHT)
+        right.grid(row=0, column=2, sticky="ne")
 
         def kv(label, init="—", color=TEXT, big=False) -> tk.Label:
             col = tk.Frame(right, bg=BG)
