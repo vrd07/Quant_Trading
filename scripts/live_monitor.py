@@ -258,8 +258,32 @@ class LiveMonitorApp:
 
     # --- top banner ---
     def _build_top_banner(self, parent) -> None:
+        # Row 0: centered trader identity strip — username (big) + daily quote + author.
+        identity = tk.Frame(parent, bg=BG)
+        identity.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
+        self.user_label = tk.Label(
+            identity, text="", bg=BG, fg=GOLD,
+            font=("Menlo", 22, "bold"), anchor="center", justify="center",
+        )
+        self.user_label.pack(fill=tk.X)
+        self.quote_label = tk.Label(
+            identity, text="", bg=BG, fg=YELLOW,
+            font=("Menlo", 12, "italic"), anchor="center", justify="center",
+            wraplength=1200,
+        )
+        self.quote_label.pack(fill=tk.X, pady=(2, 0))
+        self.quote_author_label = tk.Label(
+            identity, text="", bg=BG, fg=TEXT_FAINT,
+            font=("Menlo", 10), anchor="center", justify="center",
+        )
+        self.quote_author_label.pack(fill=tk.X)
+
+        # Row 1: existing left (status pill) / right (KPIs) flex row.
+        flex = tk.Frame(parent, bg=BG)
+        flex.pack(side=tk.TOP, fill=tk.X)
+
         # Left: status pill + status message
-        left = tk.Frame(parent, bg=BG)
+        left = tk.Frame(flex, bg=BG)
         left.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         pill_row = tk.Frame(left, bg=BG)
@@ -270,28 +294,12 @@ class LiveMonitorApp:
         self.status_label = tk.Label(pill_row, text="STARTING", bg=BG, fg=TEXT,
                                      font=("Menlo", 17, "bold"))
         self.status_label.pack(side=tk.LEFT)
-        # Trader username shown next to the state pill (e.g. "RUNNING · Varad").
-        self.user_label = tk.Label(pill_row, text="", bg=BG, fg=GOLD,
-                                   font=("Menlo", 14, "bold"))
-        self.user_label.pack(side=tk.LEFT, padx=(12, 0))
         self.status_sub = tk.Label(left, text="Connecting to bot…", bg=BG,
                                    fg=TEXT_DIM, font=("Menlo", 11))
         self.status_sub.pack(anchor="w", pady=(2, 0))
-        # Motivational quote under the status line (from main.py confirm flow).
-        self.quote_label = tk.Label(
-            left, text="", bg=BG, fg=YELLOW,
-            font=("Menlo", 10, "italic"), anchor="w", justify="left",
-            wraplength=720,
-        )
-        self.quote_label.pack(anchor="w", pady=(1, 0))
-        self.quote_author_label = tk.Label(
-            left, text="", bg=BG, fg=TEXT_FAINT,
-            font=("Menlo", 9), anchor="w",
-        )
-        self.quote_author_label.pack(anchor="w")
 
         # Right: balance / equity / P&L
-        right = tk.Frame(parent, bg=BG)
+        right = tk.Frame(flex, bg=BG)
         right.pack(side=tk.RIGHT)
 
         def kv(label, init="—", color=TEXT, big=False) -> tk.Label:
@@ -600,12 +608,12 @@ class LiveMonitorApp:
         self.status_label.config(text=state, fg=color)
         self.status_sub.config(text=status.get("message", ""), fg=TEXT_DIM)
 
-        # ---- user profile (name beside pill, quote underneath) ----
+        # ---- user profile (centered username strip with quote underneath) ----
         user = d.get("user", {}) or {}
         uname = str(user.get("username", "") or "").strip()
         quote = str(user.get("quote", "") or "").strip()
         author = str(user.get("author", "") or "").strip()
-        self.user_label.config(text=(f"· {uname}" if uname else ""))
+        self.user_label.config(text=uname)
         self.quote_label.config(text=(f"“{quote}”" if quote else ""))
         self.quote_author_label.config(text=(f"— {author}" if author else ""))
 
