@@ -1,46 +1,40 @@
 {
   "symbol": "ETHUSD",
-  "generated_at": "2026-04-23T00:00:00.000000+00:00",
-  "valid_until": "2026-04-24T00:00:00.000000+00:00",
-  "regime": "TREND",
-  "confidence": 0.5,
-  "classifier": "seed-default",
+  "generated_at": "2026-04-22T20:14:16.700378+00:00",
+  "valid_until": "2026-04-23T20:14:16.700378+00:00",
+  "regime": "RANGE",
+  "confidence": 0.52,
+  "classifier": "rule-based (no features)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
     "kalman_regime": true,
     "mean_reversion": false,
-    "vwap": false,
+    "vwap": true,
     "mini_medallion": true,
     "sbr": true,
     "supply_demand": false,
-    "asia_range_fade": false,
+    "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true
   },
-  "diagnostics": {
-    "note": "Seed override for fresh ETHUSD symbol — will be rewritten by nightly regime classifier once historical bars are available."
-  },
+  "diagnostics": {},
   "strategy_weights": {
-    "breakout": 0.85,
-    "momentum": 0.80,
-    "kalman_regime": 0.90,
-    "mean_reversion": 0.00,
-    "vwap": 0.00,
-    "mini_medallion": 0.65,
-    "sbr": 0.80,
-    "supply_demand": 0.20,
-    "asia_range_fade": 0.15,
-    "descending_channel_breakout": 0.70,
-    "smc_ob": 0.70,
-    "fibonacci_retracement": 0.70
+    "breakout": 0.6,
+    "momentum": 0.55,
+    "kalman_regime": 0.75,
+    "mean_reversion": 0.0,
+    "vwap": 0.45,
+    "mini_medallion": 0.6,
+    "sbr": 0.4,
+    "supply_demand": 0.25,
+    "asia_range_fade": 0.7,
+    "descending_channel_breakout": 0.45,
+    "smc_ob": 0.5,
+    "fibonacci_retracement": 0.5
   },
   "performance_scores": {},
   "regime_probabilities": {},
-  "transition_matrix": {
-    "TREND": {"TREND": 0.5, "RANGE": 0.3333, "VOLATILE": 0.1667},
-    "RANGE": {"TREND": 0.3333, "RANGE": 0.5, "VOLATILE": 0.1667},
-    "VOLATILE": {"TREND": 0.3333, "RANGE": 0.3333, "VOLATILE": 0.3333}
-  }
+  "transition_matrix": {}
 }
