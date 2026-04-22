@@ -17,7 +17,7 @@
     "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
-    "fibonacci_retracement": false
+    "fibonacci_retracement": true
   },
   "diagnostics": {
     "adx_14": 28.498026,
@@ -42,7 +42,7 @@
     "asia_range_fade": 0.7,
     "descending_channel_breakout": 0.45,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.2
+    "fibonacci_retracement": 0.5
   },
   "performance_scores": {
     "kalman_regime": -0.0839,
