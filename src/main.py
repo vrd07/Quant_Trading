@@ -55,6 +55,7 @@ from src.core.exceptions import (
 from src.monitoring.logger import get_logger
 from src.monitoring.trade_journal import TradeJournal
 from src.monitoring.performance_dashboard import PerformanceDashboard
+from src.monitoring.live_monitor_emitter import LiveMonitorEmitter
 from src.data.news_filter import load_ff_events, is_news_blackout
 from src.risk.trailing_stop_manager import TrailingStopManager
 from src.core.session_manager import SessionManager
@@ -126,6 +127,16 @@ class TradingSystem:
         # Monitoring
         self.trade_journal: Optional[TradeJournal] = None
         self.dashboard: Optional[PerformanceDashboard] = None
+
+        # Live monitor pop-up feed. Always-on — it is a passive file writer
+        # so the dashboard process can render a UI without touching the hot loop.
+        self.live_monitor: Optional[LiveMonitorEmitter] = LiveMonitorEmitter(
+            state_file="data/metrics/live_monitor_state.json",
+            config_file=config_file,
+            env=self.config.get('environment', 'dev'),
+        )
+        self.live_monitor.install_log_handler()
+        self.live_monitor.set_status("STARTING", "Initialising trading system...")
         
         # State
         self.running = False
@@ -302,6 +313,11 @@ class TradingSystem:
             # 10b. Load ML regime override (if fresh, written by nightly classifier)
             self._apply_regime_override()
 
+            # Let the live monitor know setup is done and emit a first snapshot.
+            if self.live_monitor is not None:
+                self.live_monitor.set_status("RUNNING", "All systems operational.")
+                self.live_monitor.write_snapshot(self, force=True)
+
             return True
 
         except Exception as e:
@@ -384,7 +400,11 @@ class TradingSystem:
                 # 9. Display dashboard periodically (every 5 minutes)
                 if self.loop_iteration % 300 == 0:
                     self._display_dashboard()
-                
+
+                # 9b. Live-monitor snapshot (throttled to 1 Hz internally).
+                if self.live_monitor is not None:
+                    self.live_monitor.write_snapshot(self)
+
                 # Jeff Dean: 250ms loop = 4x better worst-case latency than 1s.
                 # Gold moves $0.50-2.00/s during news — 750ms matters.
                 time.sleep(0.25)
@@ -867,6 +887,27 @@ class TradingSystem:
     def _execute_signal(self, signal) -> None:
         """Execute trading signal."""
         try:
+            # --- live monitor: record the signal as it enters the pipeline ---
+            if self.live_monitor is not None:
+                try:
+                    _sym = signal.symbol.ticker if signal.symbol else "?"
+                    _side = getattr(signal.side, "value", str(signal.side))
+                    _conf = float(signal.metadata.get("confidence",
+                                   getattr(signal, "strength", 0.0) * 100.0))
+                    self.live_monitor.record_signal(
+                        strategy=signal.strategy_name or "?",
+                        symbol=_sym,
+                        side=_side,
+                        confidence=_conf,
+                        price=float(getattr(signal, "entry_price", 0) or 0),
+                        sl=float(getattr(signal, "stop_loss", 0) or 0),
+                        tp=float(getattr(signal, "take_profit", 0) or 0),
+                        status="RECEIVED",
+                        reason=str(signal.metadata.get("reason", "")),
+                    )
+                except Exception:
+                    pass
+
             # Get current account state first (needed for daily P&L and order submission)
             account_info = self._get_effective_account_info()
 
@@ -878,6 +919,11 @@ class TradingSystem:
                     f"[SessionManager] Daily target hit (${float(daily_pnl):.2f}) — signal suppressed",
                     strategy=signal.strategy_name,
                 )
+                if self.live_monitor is not None:
+                    self.live_monitor.mark_last_signal(
+                        "VETOED",
+                        f"Daily profit target hit (${float(daily_pnl):.2f})",
+                    )
                 return
 
             # CRITICAL: Get positions directly from MT5 (live source of truth)
@@ -908,6 +954,11 @@ class TradingSystem:
                             strategy=signal.strategy_name,
                             symbol=signal.symbol.ticker if signal.symbol else '?'
                         )
+                        if self.live_monitor is not None:
+                            self.live_monitor.mark_last_signal(
+                                "VETOED",
+                                f"Low Kalman confidence ({conf:.1f}<{conf_threshold:.1f}) with position open",
+                            )
                         return
 
             # ── The5ers Rule: Directional Lock ────────────────────────────
@@ -929,6 +980,11 @@ class TradingSystem:
                         strategy=signal.strategy_name,
                         symbol=signal.symbol.ticker if signal.symbol else '?'
                     )
+                    if self.live_monitor is not None:
+                        self.live_monitor.mark_last_signal(
+                            "VETOED",
+                            f"Directional lock — {'SHORT' if is_short else 'LONG'} already open",
+                        )
                     return
             
             # ── The5ers Rule: 5-Minute Reversal Buffer ────────────────────
@@ -948,6 +1004,11 @@ class TradingSystem:
                         strategy=signal.strategy_name,
                         symbol=signal.symbol.ticker if signal.symbol else '?'
                     )
+                    if self.live_monitor is not None:
+                        self.live_monitor.mark_last_signal(
+                            "VETOED",
+                            f"Reversal buffer active ({elapsed_min:.1f}m of {self._reversal_buffer_min}m)",
+                        )
                     return
             
             # Submit signal to execution engine
@@ -967,6 +1028,16 @@ class TradingSystem:
                     order_id=str(order.order_id),
                     status=order.status.value
                 )
+                if self.live_monitor is not None:
+                    self.live_monitor.mark_last_signal(
+                        "FIRED",
+                        f"order {str(order.order_id)[:8]} {order.status.value}",
+                    )
+            else:
+                if self.live_monitor is not None:
+                    self.live_monitor.mark_last_signal(
+                        "VETOED", "Blocked by risk engine or execution checks"
+                    )
             
         except Exception as e:
             self.logger.error(
@@ -1391,7 +1462,15 @@ class TradingSystem:
         self.logger.info("=" * 60)
         self.logger.info("Shutting down trading system")
         self.logger.info("=" * 60)
-        
+
+        # Tell the live-monitor pop-up the bot is going down.
+        if self.live_monitor is not None:
+            try:
+                self.live_monitor.set_status("STOPPED", "Bot shutdown in progress.")
+                self.live_monitor.write_snapshot(self, force=True)
+            except Exception:
+                pass
+
         try:
             # Save final state
             self.logger.info("Saving final state...")
@@ -1433,9 +1512,15 @@ class TradingSystem:
             self.logger.info("=" * 60)
             self.logger.info("✓ Shutdown complete")
             self.logger.info("=" * 60)
-            
+
         except Exception as e:
             self.logger.error("Error during shutdown", error=str(e), exc_info=True)
+        finally:
+            if self.live_monitor is not None:
+                try:
+                    self.live_monitor.shutdown("Bot stopped.")
+                except Exception:
+                    pass
 
 
 
