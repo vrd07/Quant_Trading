@@ -293,11 +293,23 @@ class TestDynamicWeighting:
                 assert "vwap" in enabled
 
     def test_weights_table_completeness(self):
-        """Every regime in STRATEGY_WEIGHTS should have all 6 strategies."""
-        expected = {"breakout", "momentum", "kalman_regime",
-                    "mean_reversion", "vwap", "mini_medallion"}
+        """Every regime in STRATEGY_WEIGHTS must cover every enabled strategy
+        so new strategies get regime-adaptive weighting and analytics coverage."""
+        required_core = {
+            "breakout", "momentum", "kalman_regime", "mean_reversion",
+            "vwap", "mini_medallion", "sbr", "supply_demand",
+            "asia_range_fade", "descending_channel_breakout", "smc_ob",
+            "fibonacci_retracement",
+        }
         for regime in REGIMES:
-            assert set(STRATEGY_WEIGHTS[regime].keys()) == expected
+            keys = set(STRATEGY_WEIGHTS[regime].keys())
+            missing = required_core - keys
+            assert not missing, f"{regime} missing strategies: {missing}"
+            # Keys must be consistent across regimes — no per-regime dropouts
+            assert keys == set(STRATEGY_WEIGHTS["TREND"].keys()), (
+                f"{regime} keys diverge from TREND: "
+                f"{keys.symmetric_difference(set(STRATEGY_WEIGHTS['TREND'].keys()))}"
+            )
 
 
 # -- Rule-Based Classifier Tests --------------------------------------------
