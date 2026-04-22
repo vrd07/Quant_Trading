@@ -482,15 +482,11 @@ class TradingSystem:
         min_bars = strategy_config.get('min_bars_required', 10)
         global_primary_tf = strategy_config.get('primary_timeframe', '5m')
 
-        # Per-strategy timeframe overrides
-        strategy_timeframes = {
-            'breakout':      strategy_config.get('breakout', {}).get('timeframe', global_primary_tf),
-            'momentum':      strategy_config.get('momentum', {}).get('timeframe', global_primary_tf),
-            'vwap':          strategy_config.get('vwap', {}).get('timeframe', global_primary_tf),
-            'kalman_regime': strategy_config.get('kalman_regime', {}).get('timeframe', global_primary_tf),
-            'mean_reversion':strategy_config.get('mean_reversion', {}).get('timeframe', global_primary_tf),
-            'smc_ob':        strategy_config.get('smc_ob', {}).get('timeframe', global_primary_tf),
-        }
+        # Per-strategy timeframe overrides — data-driven from config.
+        # Any strategy block with a `timeframe` key contributes its override;
+        # everything else falls back to global_primary_tf at lookup time.
+        def _strategy_timeframe(strat_name: str) -> str:
+            return strategy_config.get(strat_name, {}).get('timeframe', global_primary_tf)
 
         for symbol_ticker in enabled_symbols:
             try:
@@ -503,7 +499,7 @@ class TradingSystem:
                     if allowed_strategies and strategy_name not in allowed_strategies:
                         continue
 
-                    tf = strategy_timeframes.get(strategy_name, global_primary_tf)
+                    tf = _strategy_timeframe(strategy_name)
                     bars = self.data_engine.get_bars(symbol_ticker, tf)
 
                     if len(bars) < min_bars:
