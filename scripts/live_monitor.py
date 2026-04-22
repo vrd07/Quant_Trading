@@ -190,7 +190,7 @@ class LiveMonitorApp:
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
         body.grid_rowconfigure(2, weight=1)   # symbols | signals (medium)
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=4)   # journal (huge)
+        body.grid_rowconfigure(4, weight=6, minsize=320)  # journal — guaranteed min height
         body.grid_rowconfigure(5, weight=0)   # errors (tiny, fixed)
 
         # Row 0: account snapshot (spans both cols)
@@ -258,32 +258,8 @@ class LiveMonitorApp:
 
     # --- top banner ---
     def _build_top_banner(self, parent) -> None:
-        # Row 0: centered trader identity strip — username (big) + daily quote + author.
-        identity = tk.Frame(parent, bg=BG)
-        identity.pack(side=tk.TOP, fill=tk.X, pady=(0, 6))
-        self.user_label = tk.Label(
-            identity, text="", bg=BG, fg=GOLD,
-            font=("Menlo", 22, "bold"), anchor="center", justify="center",
-        )
-        self.user_label.pack(fill=tk.X)
-        self.quote_label = tk.Label(
-            identity, text="", bg=BG, fg=YELLOW,
-            font=("Menlo", 12, "italic"), anchor="center", justify="center",
-            wraplength=1200,
-        )
-        self.quote_label.pack(fill=tk.X, pady=(2, 0))
-        self.quote_author_label = tk.Label(
-            identity, text="", bg=BG, fg=TEXT_FAINT,
-            font=("Menlo", 10), anchor="center", justify="center",
-        )
-        self.quote_author_label.pack(fill=tk.X)
-
-        # Row 1: existing left (status pill) / right (KPIs) flex row.
-        flex = tk.Frame(parent, bg=BG)
-        flex.pack(side=tk.TOP, fill=tk.X)
-
-        # Left: status pill + status message
-        left = tk.Frame(flex, bg=BG)
+        # Left: status pill (dot + state + trader name) + status message + quote
+        left = tk.Frame(parent, bg=BG)
         left.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         pill_row = tk.Frame(left, bg=BG)
@@ -294,12 +270,31 @@ class LiveMonitorApp:
         self.status_label = tk.Label(pill_row, text="STARTING", bg=BG, fg=TEXT,
                                      font=("Menlo", 17, "bold"))
         self.status_label.pack(side=tk.LEFT)
+        # Trader username — on the same row as the state pill, one notch bigger.
+        self.user_label = tk.Label(
+            pill_row, text="", bg=BG, fg=GOLD, font=("Menlo", 20, "bold"),
+        )
+        self.user_label.pack(side=tk.LEFT, padx=(14, 0))
+
         self.status_sub = tk.Label(left, text="Connecting to bot…", bg=BG,
                                    fg=TEXT_DIM, font=("Menlo", 11))
         self.status_sub.pack(anchor="w", pady=(2, 0))
 
+        # Daily motivational quote — single line, left-aligned under the pill row.
+        self.quote_label = tk.Label(
+            left, text="", bg=BG, fg=YELLOW,
+            font=("Menlo", 10, "italic"), anchor="w", justify="left",
+            wraplength=900,
+        )
+        self.quote_label.pack(anchor="w", pady=(2, 0))
+        self.quote_author_label = tk.Label(
+            left, text="", bg=BG, fg=TEXT_FAINT,
+            font=("Menlo", 9), anchor="w",
+        )
+        self.quote_author_label.pack(anchor="w")
+
         # Right: balance / equity / P&L
-        right = tk.Frame(flex, bg=BG)
+        right = tk.Frame(parent, bg=BG)
         right.pack(side=tk.RIGHT)
 
         def kv(label, init="—", color=TEXT, big=False) -> tk.Label:
@@ -529,11 +524,12 @@ class LiveMonitorApp:
         cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "dur", "reason")
         headings = ("Closed", "Symbol", "Strategy", "Side",
                     "Entry", "Exit", "P&L", "Duration", "Why / Exit")
-        widths = (80, 90, 150, 60, 90, 90, 90, 80, 540)
-        self.tree_journal = self._make_tree(body, cols, headings, widths, height=14)
+        widths = (70, 75, 120, 50, 75, 75, 80, 75, 360)
+        self.tree_journal = self._make_tree(body, cols, headings, widths, height=16)
         self.tree_journal.pack(fill=tk.BOTH, expand=True)
         self.tree_journal.tag_configure("win", foreground=GREEN)
         self.tree_journal.tag_configure("loss", foreground=RED)
+        self.tree_journal.tag_configure("flat", foreground=TEXT)
 
     # --- errors body (compact standalone strip) ---
     def _build_errors_body(self, panel) -> None:
@@ -861,7 +857,7 @@ class LiveMonitorApp:
         self._clear(self.tree_journal)
         for j in (d.get("journal", []) or [])[:15]:
             pnl = float(j.get("pnl", 0) or 0)
-            tag = "win" if pnl > 0 else "loss"
+            tag = "win" if pnl > 0 else "loss" if pnl < 0 else "flat"
             self.tree_journal.insert("", "end", values=(
                 _fmt_ts(j.get("ts_close", "")),
                 j.get("symbol") or "",
