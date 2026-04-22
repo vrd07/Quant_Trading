@@ -248,6 +248,12 @@ STRATEGY_WEIGHTS = {
         "mean_reversion": 0.00,  # disabled: -1.63%, PF 0.40, 15% WR — no edge on gold
         "vwap":           0.00,  # disabled: -0.98%, PF 0.77 — loses money on trending gold
         "mini_medallion": 0.65,
+        "sbr":            0.80,  # v2 backtest: PF 1.88, DD 1.61% — strong trend performer
+        "supply_demand":  0.20,  # backtest: PF 1.07, no tunable edge on XAUUSD
+        "asia_range_fade": 0.15, # range-focused; trend regime = not its edge
+        "descending_channel_breakout": 0.70,
+        "smc_ob":         0.70,
+        "fibonacci_retracement": 0.70,  # big_trend sweep: PF 1.75, DD 9.2% (6mo)
     },
     "RANGE": {
         "breakout":       0.60,  # raised: cooldown-improved breakout works across regimes
@@ -256,6 +262,12 @@ STRATEGY_WEIGHTS = {
         "mean_reversion": 0.00,  # disabled: backtest confirmed no edge
         "vwap":           0.45,  # 2026-04-15 refresh: PF 1.67, +1.54%, DD 1.3% over 2yr (30 trades, thin sample) — small clean edge
         "mini_medallion": 0.60,
+        "sbr":            0.40,
+        "supply_demand":  0.25,
+        "asia_range_fade": 0.70, # PF 1.31, WR 45.3%, DD 1.6% — range-optimised
+        "descending_channel_breakout": 0.45,
+        "smc_ob":         0.50,
+        "fibonacci_retracement": 0.20,  # only_in_regime=TREND — gated off in range
     },
     "VOLATILE": {
         "breakout":       0.55,  # raised: breakout captures vol expansion moves
@@ -264,6 +276,12 @@ STRATEGY_WEIGHTS = {
         "mean_reversion": 0.00,  # disabled
         "vwap":           0.45,  # 2026-04-15: re-enabled alongside RANGE (same backtest evidence)
         "mini_medallion": 0.70,
+        "sbr":            0.55,
+        "supply_demand":  0.25,
+        "asia_range_fade": 0.30, # wide ranges hurt fade logic
+        "descending_channel_breakout": 0.55,
+        "smc_ob":         0.60,
+        "fibonacci_retracement": 0.55,  # strong trends with pullbacks = fib's edge
     },
 }
 
