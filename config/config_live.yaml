@@ -28,6 +28,15 @@ symbols:
     value_per_lot: 1
     commission_per_lot: 0.0
 
+  ETHUSD:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 2.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+
 risk:
   # STRICT LIVE RISK LIMITS
   # 5% Max Drawdown ($250)

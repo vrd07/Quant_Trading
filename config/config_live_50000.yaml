@@ -45,6 +45,19 @@ symbols:
     max_spread: 15.0          # $15.00 max spread threshold
 
 
+  ETHUSD:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.04
+    max_lot: 0.04             # Scaled for 50K margin
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 5               # Crypto 1:5
+    min_stops_distance: 1.0   # $1.00 min distance for Ethereum
+    max_spread: 3.0           # $3.00 max spread threshold
+
+
   EURUSD:
     enabled: false
     pip_value: 0.00001
@@ -107,6 +120,7 @@ risk:
     method: fixed                 # GFT account — fixed lot, no martingale/dynamic scaling
     fixed_lots:
       XAUUSD: 0.20                # v3: 0.20 lot × ~100 pip stop × $10/pip = ~$200 risk (targets $500/day)
+      ETHUSD: 0.04                # exchange-min-scaled for 50K margin
       EURUSD: 0.01                # 0.01 lot — conservative fixed size for FX
       default: 0.01               # Fallback for any other symbol
   circuit_breaker:

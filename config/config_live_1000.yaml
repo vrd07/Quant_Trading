@@ -44,6 +44,18 @@ symbols:
     min_stops_distance: 5.0
     max_spread: 15.0
 
+  ETHUSD:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 0.01
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 5
+    min_stops_distance: 1.0
+    max_spread: 3.0
+
   EURUSD:
     enabled: false
     pip_value: 0.00001
@@ -104,6 +116,7 @@ risk:
     method: fixed
     fixed_lots:
       XAUUSD: 0.01
+      ETHUSD: 0.01
       default: 0.01
   circuit_breaker:
     enabled: true

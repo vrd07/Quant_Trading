@@ -270,9 +270,25 @@ class LiveMonitorApp:
         self.status_label = tk.Label(pill_row, text="STARTING", bg=BG, fg=TEXT,
                                      font=("Menlo", 17, "bold"))
         self.status_label.pack(side=tk.LEFT)
+        # Trader username shown next to the state pill (e.g. "RUNNING · Varad").
+        self.user_label = tk.Label(pill_row, text="", bg=BG, fg=GOLD,
+                                   font=("Menlo", 14, "bold"))
+        self.user_label.pack(side=tk.LEFT, padx=(12, 0))
         self.status_sub = tk.Label(left, text="Connecting to bot…", bg=BG,
                                    fg=TEXT_DIM, font=("Menlo", 11))
         self.status_sub.pack(anchor="w", pady=(2, 0))
+        # Motivational quote under the status line (from main.py confirm flow).
+        self.quote_label = tk.Label(
+            left, text="", bg=BG, fg=YELLOW,
+            font=("Menlo", 10, "italic"), anchor="w", justify="left",
+            wraplength=720,
+        )
+        self.quote_label.pack(anchor="w", pady=(1, 0))
+        self.quote_author_label = tk.Label(
+            left, text="", bg=BG, fg=TEXT_FAINT,
+            font=("Menlo", 9), anchor="w",
+        )
+        self.quote_author_label.pack(anchor="w")
 
         # Right: balance / equity / P&L
         right = tk.Frame(parent, bg=BG)
@@ -487,10 +503,10 @@ class LiveMonitorApp:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("sym", "side", "qty", "entry", "now", "sl", "tp", "pnl")
+        cols = ("sym", "side", "qty", "entry", "now", "sl", "tp", "pnl", "dur")
         headings = ("Symbol", "Side", "Qty", "Entry",
-                    "Current", "S/L", "T/P", "P&L ($)")
-        widths = (70, 50, 50, 70, 70, 70, 70, 80)
+                    "Current", "S/L", "T/P", "P&L ($)", "Duration")
+        widths = (70, 50, 50, 70, 70, 70, 70, 80, 80)
         self.tree_positions = self._make_tree(body, cols, headings, widths, height=4)
         self.tree_positions.pack(fill=tk.BOTH, expand=True)
         self.tree_positions.tag_configure("win", foreground=GREEN)
@@ -502,10 +518,10 @@ class LiveMonitorApp:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "reason")
+        cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "dur", "reason")
         headings = ("Closed", "Symbol", "Strategy", "Side",
-                    "Entry", "Exit", "P&L", "Why / Exit")
-        widths = (80, 90, 150, 60, 90, 90, 90, 600)
+                    "Entry", "Exit", "P&L", "Duration", "Why / Exit")
+        widths = (80, 90, 150, 60, 90, 90, 90, 80, 540)
         self.tree_journal = self._make_tree(body, cols, headings, widths, height=14)
         self.tree_journal.pack(fill=tk.BOTH, expand=True)
         self.tree_journal.tag_configure("win", foreground=GREEN)
@@ -583,6 +599,15 @@ class LiveMonitorApp:
         self.status_dot.config(fg=dot_color)
         self.status_label.config(text=state, fg=color)
         self.status_sub.config(text=status.get("message", ""), fg=TEXT_DIM)
+
+        # ---- user profile (name beside pill, quote underneath) ----
+        user = d.get("user", {}) or {}
+        uname = str(user.get("username", "") or "").strip()
+        quote = str(user.get("quote", "") or "").strip()
+        author = str(user.get("author", "") or "").strip()
+        self.user_label.config(text=(f"· {uname}" if uname else ""))
+        self.quote_label.config(text=(f"“{quote}”" if quote else ""))
+        self.quote_author_label.config(text=(f"— {author}" if author else ""))
 
         # ---- top-banner KPIs ----
         acc = d.get("account", {}) or {}
@@ -821,6 +846,7 @@ class LiveMonitorApp:
                 _fmt_money(p.get("sl", 0), dec=3) if p.get("sl") else "—",
                 _fmt_money(p.get("tp", 0), dec=3) if p.get("tp") else "—",
                 _fmt_money(pnl, signed=True),
+                (p.get("duration") or "—"),
             ), tags=(tag,))
 
         # ---- journal ----
@@ -836,6 +862,7 @@ class LiveMonitorApp:
                 _fmt_money(j.get("entry", 0), dec=3),
                 _fmt_money(j.get("exit", 0), dec=3),
                 _fmt_money(pnl, signed=True),
+                (j.get("duration") or "—"),
                 (j.get("psychology") or j.get("exit_reason") or "")[:90],
             ), tags=(tag,))
 

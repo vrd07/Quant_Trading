@@ -40,6 +40,51 @@ def _j(val: Any) -> Any:
     return val
 
 
+def _parse_iso_any(val: Any) -> Optional[datetime]:
+    """Best-effort parse of mixed timestamp formats coming from MT5 / CSV."""
+    if val is None or val == "":
+        return None
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=timezone.utc)
+    s = str(val).strip()
+    if not s:
+        return None
+    # Try ISO first
+    try:
+        dt = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except Exception:
+        pass
+    # Fall back to common "YYYY-MM-DD HH:MM:SS" (journal CSV format)
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d %H:%M:%S.%f", "%Y/%m/%d %H:%M:%S"):
+        try:
+            dt = datetime.strptime(s, fmt)
+            return dt.replace(tzinfo=timezone.utc)
+        except Exception:
+            continue
+    return None
+
+
+def _fmt_duration(seconds: Optional[float]) -> str:
+    """Render a duration in the most natural unit for a human glance."""
+    if seconds is None:
+        return "—"
+    try:
+        secs = max(0, int(seconds))
+    except Exception:
+        return "—"
+    if secs < 60:
+        return f"{secs}s"
+    m, s = divmod(secs, 60)
+    if m < 60:
+        return f"{m}m {s:02d}s"
+    h, m = divmod(m, 60)
+    if h < 24:
+        return f"{h}h {m:02d}m"
+    d, h = divmod(h, 24)
+    return f"{d}d {h:02d}h"
+
+
 def _friendly_error(msg: str) -> str:
     """Translate engineer-jargon errors into plain English for non-technical users."""
     m = msg.lower()
@@ -87,11 +132,18 @@ class LiveMonitorEmitter:
         state_file: str = "data/metrics/live_monitor_state.json",
         config_file: str = "",
         env: str = "live",
+        user_profile: Optional[Dict[str, Any]] = None,
     ):
         self.state_path = Path(state_file)
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_file = config_file
         self.env = env
+        # Trader-supplied identity (shown next to the RUNNING pill + under it).
+        self.user_profile: Dict[str, Any] = {
+            "username": (user_profile or {}).get("username") or "Trader",
+            "quote":    (user_profile or {}).get("quote") or "",
+            "author":   (user_profile or {}).get("author") or "",
+        }
         self.started_at = datetime.now(timezone.utc)
         self._lock = threading.Lock()
 
@@ -200,11 +252,19 @@ class LiveMonitorEmitter:
         tp: float = 0.0,
         exit_reason: str = "unknown",
         psychology: str = "",
+        entry_time: Any = None,
     ) -> None:
         try:
+            now = datetime.now(timezone.utc)
+            entry_dt = _parse_iso_any(entry_time)
+            duration_sec: Optional[int] = None
+            if entry_dt is not None:
+                duration_sec = max(0, int((now - entry_dt).total_seconds()))
             with self._lock:
                 self._trade_closes.appendleft({
-                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "ts": now.isoformat(),
+                    "ts_close": now.isoformat(),
+                    "ts_open": entry_dt.isoformat() if entry_dt else "",
                     "strategy": strategy,
                     "symbol": symbol,
                     "side": side,
@@ -215,6 +275,8 @@ class LiveMonitorEmitter:
                     "tp": round(float(tp or 0), 5),
                     "exit_reason": exit_reason,
                     "psychology": psychology[:240],
+                    "duration_sec": duration_sec,
+                    "duration": _fmt_duration(duration_sec),
                 })
         except Exception:
             pass
@@ -280,6 +342,7 @@ class LiveMonitorEmitter:
 
         return {
             "updated_at": now.isoformat(),
+            "user": dict(self.user_profile),
             "bot": {
                 "running": bool(getattr(ts, "running", False)),
                 "loop_iteration": int(getattr(ts, "loop_iteration", 0)),
@@ -479,6 +542,7 @@ class LiveMonitorEmitter:
             positions = ts.connector.get_positions() if ts.connector else {}
         except Exception:
             positions = {}
+        now_utc = datetime.now(timezone.utc)
         for pid, pos in (positions or {}).items():
             try:
                 sym_obj = getattr(pos, "symbol", None)
@@ -486,6 +550,13 @@ class LiveMonitorEmitter:
                 side_obj = getattr(pos, "side", "?")
                 side = getattr(side_obj, "value", None) or getattr(side_obj, "name", None) or str(side_obj)
                 meta = getattr(pos, "metadata", {}) or {}
+
+                entry_time_raw = getattr(pos, "entry_time", "") or ""
+                entry_dt = _parse_iso_any(entry_time_raw)
+                duration_sec = None
+                if entry_dt is not None:
+                    duration_sec = max(0, int((now_utc - entry_dt).total_seconds()))
+
                 out.append({
                     "ticket": str(meta.get("mt5_ticket", pid)),
                     "symbol": sym_tkr,
@@ -497,7 +568,9 @@ class LiveMonitorEmitter:
                     "tp": float(getattr(pos, "take_profit", 0) or 0),
                     "pnl": float(getattr(pos, "unrealized_pnl", 0) or 0),
                     "strategy": str(meta.get("strategy", "")),
-                    "opened_at": str(getattr(pos, "entry_time", "") or ""),
+                    "opened_at": str(entry_time_raw),
+                    "duration_sec": duration_sec,
+                    "duration": _fmt_duration(duration_sec),
                 })
             except Exception:
                 continue
@@ -880,8 +953,17 @@ class LiveMonitorEmitter:
             exit_reason = rec.get("exit_reason", "unknown")
             psychology = self._psychology_for(strategy, rec.get("side", ""), exit_reason, pnl)
 
+            entry_time = rec.get("entry_time", "") or ""
+            exit_time = rec.get("exit_time", "") or ""
+            entry_dt = _parse_iso_any(entry_time)
+            exit_dt = _parse_iso_any(exit_time)
+            duration_sec: Optional[int] = None
+            if entry_dt is not None and exit_dt is not None:
+                duration_sec = max(0, int((exit_dt - entry_dt).total_seconds()))
+
             rows.append({
-                "ts_close": rec.get("exit_time", "") or rec.get("entry_time", ""),
+                "ts_close": exit_time or entry_time,
+                "ts_open": entry_time,
                 "strategy": strategy,
                 "symbol": rec.get("symbol", ""),
                 "side": (rec.get("side", "") or "").upper(),
@@ -892,6 +974,8 @@ class LiveMonitorEmitter:
                 "tp": 0.0,
                 "exit_reason": exit_reason,
                 "psychology": psychology,
+                "duration_sec": duration_sec,
+                "duration": _fmt_duration(duration_sec),
             })
         rows.reverse()  # most recent first
         return rows[:15]
