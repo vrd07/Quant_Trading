@@ -258,10 +258,13 @@ class LiveMonitorApp:
 
     # --- top banner ---
     def _build_top_banner(self, parent) -> None:
-        # Three-column grid: status pill (left) | centered user+quote | KPIs (right)
-        parent.grid_columnconfigure(0, weight=1, uniform="banner")
-        parent.grid_columnconfigure(1, weight=2, uniform="banner")
-        parent.grid_columnconfigure(2, weight=1, uniform="banner")
+        # Three-column grid: status pill (left) | centered user+quote | KPIs (right).
+        # Weights 2:3:3 give the right-hand KPI column the same space as the centre
+        # column so all five values render; the username's centre point shifts ~80 px
+        # left compared to a 1:2:1 split.
+        parent.grid_columnconfigure(0, weight=2, uniform="banner")
+        parent.grid_columnconfigure(1, weight=3, uniform="banner")
+        parent.grid_columnconfigure(2, weight=3, uniform="banner")
 
         # ── Column 0: state pill + sub-message ────────────────────────────
         left = tk.Frame(parent, bg=BG)
