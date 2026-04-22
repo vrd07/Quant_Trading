@@ -307,11 +307,11 @@ class LiveMonitorApp:
 
         def kv(label, init="—", color=TEXT, big=False) -> tk.Label:
             col = tk.Frame(right, bg=BG)
-            col.pack(side=tk.LEFT, padx=10)
+            col.pack(side=tk.LEFT, padx=5)
             tk.Label(col, text=label, bg=BG, fg=TEXT_DIM,
-                     font=("Menlo", 9, "bold")).pack(anchor="e")
+                     font=("Menlo", 8, "bold")).pack(anchor="e")
             lbl = tk.Label(col, text=init, bg=BG, fg=color,
-                           font=("Menlo", 16 if big else 14, "bold"))
+                           font=("Menlo", 13 if big else 11, "bold"))
             lbl.pack(anchor="e")
             return lbl
 
