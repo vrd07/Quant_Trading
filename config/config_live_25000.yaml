@@ -456,7 +456,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-04-20_news.csv
+    csv_path: news/2026-04-22_news.csv
     currency: USD
     impacts:
       - high
