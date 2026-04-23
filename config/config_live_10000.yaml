@@ -312,6 +312,11 @@ strategies:
       liquidity_sweep: 1.5
       market_regime: 1.2
       volatility_regime: 0.6
+      # SMC signals — computed + logged to metadata; weight 0 means no score influence.
+      # Backtest before opting in via positive weight.
+      bos: 0.0
+      choch: 0.0
+      fvg: 0.0
 
 
   # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
