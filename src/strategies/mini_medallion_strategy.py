@@ -102,7 +102,10 @@ class MiniMedallionStrategy(BaseStrategy):
             'order_flow': self._signal_order_flow(vol_delta),
             'liquidity_sweep': self._signal_liquidity_sweep(bars),
             'market_regime': self._signal_market_regime(bars, adx),
-            'volatility_regime': self._signal_volatility_regime(bars, atr, current_atr)
+            'volatility_regime': self._signal_volatility_regime(bars, atr, current_atr),
+            'bos': self._signal_bos(bars),
+            'choch': self._signal_choch(bars),
+            'fvg': self._signal_fvg(bars),
         }
 
         # Calculate aggregate alpha score
@@ -287,4 +290,82 @@ class MiniMedallionStrategy(BaseStrategy):
         elif current_atr > 1.2 * long_atr:
             # Elevated but not spiking — follow momentum
             return 1 if bars['close'].iloc[-1] > bars['open'].iloc[-1] else -1
+        return 0
+
+    def _signal_bos(self, bars: pd.DataFrame, lookback: int = 20) -> int:
+        """Break of Structure: last close breaks above/below the prior N-bar swing."""
+        if len(bars) < lookback + 2:
+            return 0
+        highs = bars['high'].values
+        lows = bars['low'].values
+        close = float(bars['close'].iloc[-1])
+        prior_high = float(np.max(highs[-lookback - 1:-1]))
+        prior_low = float(np.min(lows[-lookback - 1:-1]))
+        if close > prior_high:
+            return 1
+        if close < prior_low:
+            return -1
+        return 0
+
+    def _signal_choch(self, bars: pd.DataFrame, lookback: int = 20, search: int = 20) -> int:
+        """Change of Character: current BOS direction flips the previous BOS direction
+        found within the last `search` bars. Returns the new direction on a flip, else 0.
+        """
+        n = len(bars)
+        if n < lookback + search + 2:
+            return 0
+        highs = bars['high'].values
+        lows = bars['low'].values
+        closes = bars['close'].values
+
+        def break_dir(idx: int) -> int:
+            if idx - lookback < 0:
+                return 0
+            c = closes[idx]
+            if c > np.max(highs[idx - lookback:idx]):
+                return 1
+            if c < np.min(lows[idx - lookback:idx]):
+                return -1
+            return 0
+
+        curr = break_dir(n - 1)
+        if curr == 0:
+            return 0
+        for j in range(1, search + 1):
+            prior = break_dir(n - 1 - j)
+            if prior == 0:
+                continue
+            return curr if prior != curr else 0
+        return 0
+
+    def _signal_fvg(self, bars: pd.DataFrame, window: int = 10) -> int:
+        """Fair Value Gap: unmitigated 3-bar imbalance in the direction of current price.
+
+        Bullish FVG at i: low[i+1] > high[i-1] (gap up through bar i).
+        Bearish FVG at i: high[i+1] < low[i-1] (gap down through bar i).
+        The FVG is unmitigated if no later bar has traded back into the gap.
+        """
+        n = len(bars)
+        if n < window + 3:
+            return 0
+        highs = bars['high'].values
+        lows = bars['low'].values
+        closes = bars['close'].values
+        last_price = float(closes[-1])
+
+        for i in range(n - 2, n - 2 - window, -1):
+            if i < 1 or i + 1 > n - 1:
+                continue
+            # Bullish FVG
+            if lows[i + 1] > highs[i - 1]:
+                fvg_bot = float(highs[i - 1])
+                later_lows = lows[i + 2:]
+                if (len(later_lows) == 0 or float(np.min(later_lows)) > fvg_bot) and last_price > fvg_bot:
+                    return 1
+            # Bearish FVG
+            if highs[i + 1] < lows[i - 1]:
+                fvg_top = float(lows[i - 1])
+                later_highs = highs[i + 2:]
+                if (len(later_highs) == 0 or float(np.max(later_highs)) < fvg_top) and last_price < fvg_top:
+                    return -1
         return 0
