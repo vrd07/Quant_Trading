@@ -55,7 +55,12 @@ class MiniMedallionStrategy(BaseStrategy):
             'order_flow': 1.1,
             'liquidity_sweep': 1.3,
             'market_regime': 1.0,
-            'volatility_regime': 0.8
+            'volatility_regime': 0.8,
+            # SMC signals — default weight 0.0 so they are logged into Signal.metadata
+            # without influencing the alpha score. Opt in via config after backtest.
+            'bos': 0.0,
+            'choch': 0.0,
+            'fvg': 0.0,
         })
 
     def get_name(self) -> str:
