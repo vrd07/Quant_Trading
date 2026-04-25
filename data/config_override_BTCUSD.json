@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-04-24T17:36:07.202916+00:00",
-  "valid_until": "2026-04-25T17:36:07.202916+00:00",
+  "generated_at": "2026-04-25T11:33:53.084055+00:00",
+  "valid_until": "2026-04-26T11:33:53.084055+00:00",
   "regime": "TREND",
   "confidence": 0.9,
   "classifier": "rule-based",
@@ -20,15 +20,15 @@
     "fibonacci_retracement": true
   },
   "diagnostics": {
-    "adx_14": 63.976302,
-    "atr_pct": 0.982125,
-    "bb_width_ratio": 1.230264,
-    "close_ema20_pct": -0.77721,
-    "momentum_1d": 0.03169,
-    "momentum_5d": -0.871993,
-    "range_atr_ratio": 0.043318,
-    "vol_ratio": 5.333554,
-    "park_vol_zscore": 0.716024
+    "adx_14": 59.767645,
+    "atr_pct": 0.752097,
+    "bb_width_ratio": 1.490393,
+    "close_ema20_pct": -0.744277,
+    "momentum_1d": 0.002979,
+    "momentum_5d": -0.818621,
+    "range_atr_ratio": 0.010075,
+    "vol_ratio": 1.5e-05,
+    "park_vol_zscore": -3.491786
   },
   "strategy_weights": {
     "breakout": 0.85,
@@ -53,9 +53,9 @@
       "VOLATILE": 0.1429
     },
     "RANGE": {
-      "TREND": 0.375,
-      "RANGE": 0.5,
-      "VOLATILE": 0.125
+      "TREND": 0.3,
+      "RANGE": 0.6,
+      "VOLATILE": 0.1
     },
     "VOLATILE": {
       "TREND": 0.3333,
