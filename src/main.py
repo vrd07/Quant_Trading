@@ -1119,6 +1119,10 @@ class TradingSystem:
                 if self.trade_journal is not None:
                     try:
                         from decimal import Decimal as _Dec
+                        # Stamp the regime that is currently active for this symbol
+                        # so the journal can answer regime-conditional questions
+                        # even on broker-side closes that bypass the normal path.
+                        active_regime = self._get_active_regime(symbol_name)
                         self.trade_journal.record_raw_trade(
                             strategy=strategy,
                             symbol=symbol_name,
@@ -1129,7 +1133,11 @@ class TradingSystem:
                             realized_pnl=_Dec(str(realized_pnl)),
                             entry_time=None,
                             exit_time=None,
-                            metadata={'mt5_ticket': ticket, 'source': 'fill_poll'}
+                            metadata={
+                                'mt5_ticket': ticket,
+                                'source': 'fill_poll',
+                                'regime': active_regime,
+                            },
                         )
                     except Exception as _je:
                         self.logger.debug(f"Fill poll: journal record failed for ticket={ticket}: {_je}")
