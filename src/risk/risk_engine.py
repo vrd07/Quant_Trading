@@ -342,9 +342,10 @@ class RiskEngine:
                 current_equity=account_equity
             )
             
-            # Mitnick: default to protection ON — opt-out must be explicit in config
-            bypass_drawdown = self.config.get('risk', {}).get('bypass_drawdown_limit', False)
-            if current_drawdown >= self.max_drawdown_pct and not bypass_drawdown:
+            # Drawdown is the prop-firm hard line — no config bypass exists.
+            # If hit, trigger kill switch and raise; recovery requires manual
+            # intervention (clear data/state/kill_switch_alert.json).
+            if current_drawdown >= self.max_drawdown_pct:
                 reason = f"Drawdown limit reached: {current_drawdown:.2%} >= {self.max_drawdown_pct:.2%}"
                 self.logger.error(
                     "DRAWDOWN LIMIT EXCEEDED",
@@ -357,11 +358,6 @@ class RiskEngine:
                     reason,
                     drawdown=current_drawdown,
                     limit=self.max_drawdown_pct
-                )
-            elif current_drawdown >= self.max_drawdown_pct and bypass_drawdown:
-                self.logger.warning(
-                    f"Drawdown limit reached ({current_drawdown:.2%} >= {self.max_drawdown_pct:.2%}) but BYPASSED via config.",
-                    order_id=str(order.order_id)
                 )
             
             # CHECK 5: Max daily trades limit
@@ -424,11 +420,11 @@ class RiskEngine:
                 value_per_lot = order.symbol.value_per_lot if order.symbol else Decimal("1")
                 risk_amount = sl_distance * order.quantity * value_per_lot
                 # Prefer the user's absolute USD cap (runtime_setup) over the
-                # percentage — lets "max loss per trade" stay fixed even when
-                # balance drifts. Add a 1% tolerance for float/rounding.
+                # percentage — that value is the explicit "max loss per trade"
+                # the operator entered at startup and is enforced exactly.
                 risk_usd_cap = Decimal(str(self.config.get('risk', {}).get('risk_per_trade_usd', 0) or 0))
                 if risk_usd_cap > 0:
-                    max_risk = risk_usd_cap * Decimal("1.01")
+                    max_risk = risk_usd_cap
                 else:
                     max_risk = account_balance * self.risk_per_trade_pct
                 
@@ -495,13 +491,32 @@ class RiskEngine:
         """
         sizing_cfg = self.config.get('risk', {}).get('position_sizing', {})
 
-        # ── Fixed lot mode: always use exactly the configured lot size ─────
+        # ── User-fixed lot from runtime_setup.py: AUTHORITATIVE ───────────
+        # When the operator typed a lot size at startup, runtime_setup writes
+        # symbols.<TKR>.{min_lot,max_lot} == user_lot. That value is law —
+        # honor it verbatim. No silent scaling, no exposure-cap substitution.
+        # If a downstream check disagrees with the user's size it must REJECT
+        # the order, not quietly resize it.
+        if (symbol is not None
+                and symbol.min_lot > 0
+                and symbol.min_lot == symbol.max_lot):
+            user_lot = symbol.min_lot
+            self.logger.info(
+                "Using user-fixed lot from runtime_setup",
+                lots=float(user_lot),
+                symbol=symbol.ticker,
+            )
+            # Manual guard still applies — that scaling is itself an
+            # operator-configured policy, not a hidden override.
+            return self._apply_manual_size_multiplier(user_lot, symbol, strategy_name)
+
+        # ── Fixed lot mode (config method == 'fixed_lot') ─────────────────
         if sizing_cfg.get('method') == 'fixed_lot':
             fixed = Decimal(str(sizing_cfg.get('fixed_lot', '0.01')))
             # Clamp the fixed lot strictly to the symbol boundaries so users can securely override
             # global position sizes via config `max_lot` for expensive instruments like crypto
             fixed = max(symbol.min_lot, min(symbol.max_lot, fixed))
-            
+
             self.logger.debug(
                 "Using fixed_lot sizing with boundaries",
                 lots=float(fixed),
@@ -522,7 +537,10 @@ class RiskEngine:
             signal_strength=signal_strength,
         )
 
-        # 2. Apply exposure limit if context provided
+        # 2. Apply exposure limit if context provided.
+        # Cap to the exposure manager's actual computed limit — never to a
+        # hardcoded constant. The previous code substituted 0.1 lots silently,
+        # which violated user-input lot sizes from runtime_setup.
         if current_positions is not None and account_equity is not None:
             max_exposure_size = self.exposure_manager.get_max_position_size(
                 symbol=symbol,
@@ -532,15 +550,13 @@ class RiskEngine:
             )
 
             if risk_size > max_exposure_size:
-                capped_size = min(max_exposure_size, Decimal("0.1"))
-                self.logger.info(
+                self.logger.warning(
                     "Position size capped by exposure limit",
                     risk_size=float(risk_size),
                     exposure_limit=float(max_exposure_size),
-                    final_size=float(capped_size),
-                    symbol=symbol.ticker
+                    symbol=symbol.ticker,
                 )
-                risk_size = capped_size
+                risk_size = max_exposure_size
 
         # Manual-guard sizing: halve the final size for manual-tagged orders.
         # Applied last so it composes with fixed_lot, risk_pct, and exposure caps.
