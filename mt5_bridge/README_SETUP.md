@@ -148,7 +148,7 @@ The EA is the "robot" inside MetaTrader that receives commands from Python.
 7. ✅ If you see 0 errors, the EA is ready!
 8. Close MetaEditor (click the X)
 
-> ⚠️ **If you see errors:** Make sure you copied `EA_FileBridge.mq5` (NOT `EA_ZeroMQ_Bridge.mq5`). The File Bridge has zero external dependencies and should compile without any issues.
+> ⚠️ **If you see errors:** `EA_FileBridge.mq5` has zero external dependencies and should compile cleanly. If errors persist, re-copy the file to `MQL5/Experts/`.
 
 ### Step 5.4 — Enable Automated Trading
 

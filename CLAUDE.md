@@ -106,7 +106,7 @@ Config files in `config/` follow naming `config_live_{account_size}.yaml`. The a
 
 ### MT5 Bridge
 
-File-based communication via the MT5 Common Files directory (auto-detected per OS). The MQL5 EA (`mt5_bridge/EA_FileBridge.mq5`) polls for command files and writes response files. `mt5_bridge/mt5_file_client.py` is the Python side. An alternative ZeroMQ bridge exists (`mt5_zmq_client.py` + `EA_ZeroMQ_Bridge.mq5`).
+File-based communication via the MT5 Common Files directory (auto-detected per OS). The MQL5 EA (`mt5_bridge/EA_FileBridge.mq5`) polls for command files and writes response files. `mt5_bridge/mt5_file_client.py` is the Python side.
 
 ### Testing Notes
 
