@@ -64,6 +64,8 @@ class FillHandler:
                 metadata={
                     'order_id': str(order.order_id),
                     'strategy': order.metadata.get('strategy'),
+                    'regime': order.metadata.get('regime', 'unknown'),
+                    'signal_strength': order.metadata.get('signal_strength', 0),
                     'mt5_ticket': fill_data.get('ticket'),
                     'commission': float(commission)
                 }
