@@ -111,14 +111,14 @@ class MT5FileClient:
 
 
     
-    def _send_command(self, command_dict, timeout=5):
+    def send_command(self, command_dict, timeout=5):
         """
         Send a command and wait for response.
-        
+
         Args:
             command_dict: Dictionary containing command data
             timeout: Maximum seconds to wait for response
-            
+
         Returns:
             dict: Response from MT5
         """
@@ -187,7 +187,7 @@ class MT5FileClient:
         Returns:
             dict: Heartbeat response with timestamp and status
         """
-        return self._send_command({"command": "HEARTBEAT"})
+        return self.send_command({"command": "HEARTBEAT"})
     
     def get_account_info(self):
         """
@@ -196,7 +196,7 @@ class MT5FileClient:
         Returns:
             dict: Account balance, equity, margin, etc.
         """
-        return self._send_command({"command": "GET_ACCOUNT_INFO"})
+        return self.send_command({"command": "GET_ACCOUNT_INFO"})
     
     def get_positions(self):
         """
@@ -205,7 +205,7 @@ class MT5FileClient:
         Returns:
             dict: List of positions with ticket, symbol, type, volume, etc.
         """
-        return self._send_command({"command": "GET_POSITIONS"})
+        return self.send_command({"command": "GET_POSITIONS"})
     
     def place_order(self, symbol, order_type, volume, sl=None, tp=None, price=None, comment=None):
         """
@@ -235,7 +235,7 @@ class MT5FileClient:
         if price: command["price"] = str(price)
         if comment: command["comment"] = str(comment)
         
-        return self._send_command(command)
+        return self.send_command(command)
     
     def close_position(self, ticket):
         """
@@ -247,7 +247,7 @@ class MT5FileClient:
         Returns:
             dict: Result of close operation
         """
-        return self._send_command({
+        return self.send_command({
             "command": "CLOSE_POSITION",
             "ticket": str(ticket)
         })
@@ -262,7 +262,7 @@ class MT5FileClient:
         Returns:
             dict: Histoy deals including profit
         """
-        return self._send_command({
+        return self.send_command({
             "command": "GET_HISTORY",
             "minutes": str(minutes)
         })
@@ -279,7 +279,7 @@ class MT5FileClient:
         Returns:
             dict with 'bars' list of {time, open, high, low, close, volume}
         """
-        return self._send_command({
+        return self.send_command({
             "command": "GET_BARS",
             "symbol": symbol,
             "timeframe": timeframe,
