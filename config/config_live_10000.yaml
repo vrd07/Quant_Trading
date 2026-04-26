@@ -95,7 +95,6 @@ risk:
   # $10,000 Account Risk Parameters
   max_drawdown_pct: 0.07          # 7% Max Overall/Trailing Drawdown ($700)
   max_daily_loss_pct: 0.015       # 1.5% Max Daily Loss ($150)
-  bypass_drawdown_limit: false    # Enforce drawdown limit
 
   # $15 risk per trade = 0.15% of $10,000
   # Basis: 0.02 lot XAUUSD × 75 pip stop × $10/pip/lot = $15
