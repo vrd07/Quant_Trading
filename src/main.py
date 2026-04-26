@@ -1842,7 +1842,11 @@ def main():
 
     # Create and run system
     try:
-        system = TradingSystem(config_file=config_file, user_profile=user_profile)
+        system = TradingSystem(
+            config_file=config_file,
+            user_profile=user_profile,
+            reset_hwm=args.reset_hwm,
+        )
         log_trace("TradingSystem initialized")
         system.run()
         log_trace("TradingSystem.run() finished")
