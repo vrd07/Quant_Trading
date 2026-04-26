@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-04-25T11:33:53.084055+00:00",
-  "valid_until": "2026-04-26T11:33:53.084055+00:00",
+  "generated_at": "2026-04-26T16:53:14.519001+00:00",
+  "valid_until": "2026-04-27T16:53:14.519001+00:00",
   "regime": "TREND",
   "confidence": 0.9,
   "classifier": "rule-based",
@@ -20,15 +20,15 @@
     "fibonacci_retracement": true
   },
   "diagnostics": {
-    "adx_14": 59.767645,
-    "atr_pct": 0.752097,
-    "bb_width_ratio": 1.490393,
-    "close_ema20_pct": -0.744277,
-    "momentum_1d": 0.002979,
-    "momentum_5d": -0.818621,
-    "range_atr_ratio": 0.010075,
-    "vol_ratio": 1.5e-05,
-    "park_vol_zscore": -3.491786
+    "adx_14": 59.762384,
+    "atr_pct": 0.749169,
+    "bb_width_ratio": 1.489918,
+    "close_ema20_pct": -0.743086,
+    "momentum_1d": 0.005341,
+    "momentum_5d": -0.817745,
+    "range_atr_ratio": 0.015395,
+    "vol_ratio": 2.6e-05,
+    "park_vol_zscore": -3.494703
   },
   "strategy_weights": {
     "breakout": 0.85,
