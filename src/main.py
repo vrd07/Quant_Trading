@@ -73,6 +73,7 @@ class TradingSystem:
         self,
         config_file: str = "config/config.yaml",
         user_profile: Optional[dict] = None,
+        reset_hwm: bool = False,
     ):
         """
         Initialize trading system.
@@ -82,7 +83,12 @@ class TradingSystem:
             user_profile: Optional dict with keys {username, quote, author} from the
                 startup banner — forwarded to LiveMonitorEmitter so the dashboard
                 can render the trader's name + daily quote.
+            reset_hwm: If True, accept a stale equity high-water-mark on restore
+                instead of failing. Required when intentionally switching account
+                size — without it, a stale HWM aborts startup so the drawdown
+                circuit breaker is never silently neutered.
         """
+        self._reset_hwm_acknowledged = bool(reset_hwm)
         # Load configuration
         with open(config_file, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
@@ -647,6 +653,21 @@ class TradingSystem:
             self.logger.warning(
                 f"News filter CSV failed to load ({csv_path}): {e} — filter disabled"
             )
+
+    def _get_active_regime(self, symbol_ticker: str) -> str:
+        """Return the regime currently active for a symbol, or 'unknown'.
+
+        Reads the same per-symbol override files that _apply_regime_override
+        consumes, so the journal stamp matches what the strategy layer saw.
+        Used by the broker-side fill-poll path which has no signal context.
+        """
+        try:
+            override = self._load_regime_override_for(symbol_ticker)
+            if override:
+                return str(override.get("regime", "unknown")).lower()
+        except Exception:
+            pass
+        return "unknown"
 
     def _apply_regime_override(self) -> None:
         """
@@ -1360,24 +1381,42 @@ class TradingSystem:
                         )
                 self.portfolio_engine.add_position(position)
             
-            # Restore risk engine state
-            # Sanity-clamp stale HWM: if the restored high-water mark would
-            # imply a drawdown greater than the configured limit against the
-            # live account equity, it's almost certainly leftover from a
-            # different/larger account. Reset to current equity with a warning.
+            # Restore risk engine state.
+            # Stale HWM guard: if the restored high-water mark would imply a
+            # drawdown greater than the configured limit against the live
+            # account equity, it is almost certainly leftover from a different
+            # account size. Resetting silently disables the drawdown circuit
+            # breaker for this session — refuse to start unless the operator
+            # explicitly opts in via --reset-hwm.
             restored_hwm = state.equity_high_water_mark
             current_equity = mt5_account.get('equity', Decimal("0"))
-            if (
+            stale_hwm = (
                 restored_hwm > 0
                 and current_equity > 0
                 and restored_hwm > current_equity
                 and (restored_hwm - current_equity) / restored_hwm >= self.risk_engine.max_drawdown_pct
-            ):
+            )
+            if stale_hwm:
+                implied_dd = float((restored_hwm - current_equity) / restored_hwm)
+                if not self._reset_hwm_acknowledged:
+                    self.logger.critical(
+                        "Stale equity HWM on restore — REFUSING to start",
+                        restored_hwm=float(restored_hwm),
+                        current_equity=float(current_equity),
+                        implied_drawdown=implied_dd,
+                        limit=float(self.risk_engine.max_drawdown_pct),
+                    )
+                    self.logger.critical(
+                        "If this is an intentional account switch, restart with "
+                        "--reset-hwm. Silently resetting would neuter the drawdown "
+                        "circuit breaker for this session."
+                    )
+                    sys.exit(1)
                 self.logger.warning(
-                    "Stale equity HWM detected on restore — resetting to current equity",
+                    "Stale equity HWM accepted via --reset-hwm — resetting to current equity",
                     restored_hwm=float(restored_hwm),
                     current_equity=float(current_equity),
-                    implied_drawdown=float((restored_hwm - current_equity) / restored_hwm),
+                    implied_drawdown=implied_dd,
                     limit=float(self.risk_engine.max_drawdown_pct),
                 )
                 restored_hwm = current_equity
@@ -1620,6 +1659,11 @@ def main():
         '--trader-name',
         default=None,
         help='Trader name shown on the live monitor dashboard (defaults to "Trader" or interactive prompt)'
+    )
+    parser.add_argument(
+        '--reset-hwm',
+        action='store_true',
+        help='Accept a stale equity high-water-mark on restore (use ONLY when intentionally switching account size; otherwise the drawdown circuit breaker would be silently disabled for this session)'
     )
 
     args = parser.parse_args()
