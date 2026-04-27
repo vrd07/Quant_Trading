@@ -60,6 +60,7 @@ from src.data.news_filter import load_ff_events, is_news_blackout
 from src.risk.trailing_stop_manager import TrailingStopManager
 from src.core.session_manager import SessionManager
 from src.core.types import SessionState
+from src.monitoring.manual_position_tracker import ManualPositionTracker
 
 
 class TradingSystem:
@@ -172,6 +173,12 @@ class TradingSystem:
         # Carmack + TJ: session state grouped into one visible object,
         # managed by a focused SessionManager (not inline in main loop).
         self._session_mgr = SessionManager(self.config)
+
+        # ── Manual position tracker (directional lock vs manual trades) ──
+        self._manual_pos_tracker = ManualPositionTracker()
+        self._manual_directional_lock: bool = bool(
+            self.config.get('risk', {}).get('manual_guard', {}).get('directional_lock', True)
+        )
 
         # ── Trailing stop manager ────────────────────────────────────────
         self._trailing_stop_mgr: Optional[TrailingStopManager] = None
@@ -384,6 +391,9 @@ class TradingSystem:
                 
                 # 3b. Manage trailing stops (breakeven + lock)
                 self._manage_trailing_stops()
+
+                # 3c. Refresh manual position tracker (every tick for fresh lock data)
+                self._refresh_manual_position_tracker()
                 
                 # 4. Process strategies for each symbol
                 self._process_strategies()
@@ -463,6 +473,32 @@ class TradingSystem:
             self._trailing_stop_mgr.update(positions, self.connector)
         except Exception as e:
             self.logger.warning(f"Trailing stop update error (non-critical): {e}")
+
+    def _refresh_manual_position_tracker(self) -> None:
+        """Refresh the manual position tracker with current MT5 positions.
+
+        Called every loop tick so the directional lock in _execute_signal()
+        always has fresh data.  Logs when manual positions appear or disappear.
+        """
+        try:
+            positions = self.connector.get_positions()
+            events = self._manual_pos_tracker.refresh(positions)
+            for ticket, event in events.items():
+                pos = positions.get(ticket)
+                sym = pos.symbol.ticker if pos and pos.symbol else '?'
+                side = getattr(pos, 'side', None)
+                side_str = side.value if side else '?'
+                if event == 'OPENED':
+                    self.logger.info(
+                        f"[ManualTracker] Manual {side_str} position detected on {sym} "
+                        f"(ticket={ticket}) — directional lock active",
+                    )
+                elif event == 'CLOSED':
+                    self.logger.info(
+                        f"[ManualTracker] Manual position closed (ticket={ticket})",
+                    )
+        except Exception as e:
+            self.logger.debug(f"Manual position tracker refresh failed (non-critical): {e}")
 
     def _process_strategies(self) -> None:
         """Process all strategies with per-strategy timeframe routing."""
@@ -990,15 +1026,39 @@ class TradingSystem:
                             )
                         return
 
-            # ── The5ers Rule: Directional Lock ────────────────────────────
-            # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
+            # ── Manual Trade Directional Lock ─────────────────────────────
+            # If a manual position is open, block bot signals in the opposite
+            # direction. Same-direction signals are allowed (stacking).
             from src.core.constants import OrderSide as _OrderSide, PositionSide as _PositionSide
             signal_side = signal.side  # OrderSide.BUY or OrderSide.SELL
+            signal_sym = signal.symbol.ticker if signal.symbol else '?'
+
+            if self._manual_directional_lock and self._manual_pos_tracker.has_manual_positions:
+                manual_dirs = self._manual_pos_tracker.get_manual_directions(symbol=signal_sym)
+                if manual_dirs:
+                    # BUY signal conflicts with SHORT manual; SELL conflicts with LONG manual
+                    if (signal_side == _OrderSide.BUY and 'SHORT' in manual_dirs) or \
+                       (signal_side == _OrderSide.SELL and 'LONG' in manual_dirs):
+                        conflicting = 'SHORT' if 'SHORT' in manual_dirs else 'LONG'
+                        self.logger.info(
+                            f"[ManualLock] {conflicting} manual trade open on {signal_sym} "
+                            f"→ {signal_side.value} bot signal blocked",
+                            strategy=signal.strategy_name,
+                            symbol=signal_sym,
+                        )
+                        if self.live_monitor is not None:
+                            self.live_monitor.mark_last_signal(
+                                "VETOED",
+                                f"Manual {conflicting} open on {signal_sym} — opposite signal blocked",
+                            )
+                        return
+
+            # ── The5ers Rule: Directional Lock (bot positions) ────────────
+            # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
             for pos in mt5_positions.values():
                 pos_side = getattr(pos, 'side', None)
                 if pos_side is None:
                     continue
-                # Map position side to expected signal side
                 is_long = pos_side == _PositionSide.LONG
                 is_short = pos_side == _PositionSide.SHORT
                 if (signal_side == _OrderSide.BUY and is_short) or \
@@ -1007,7 +1067,7 @@ class TradingSystem:
                         f"[The5ers] Directional lock: {'SHORT' if is_short else 'LONG'} open, "
                         f"rejecting {signal_side.value} signal",
                         strategy=signal.strategy_name,
-                        symbol=signal.symbol.ticker if signal.symbol else '?'
+                        symbol=signal_sym,
                     )
                     if self.live_monitor is not None:
                         self.live_monitor.mark_last_signal(
