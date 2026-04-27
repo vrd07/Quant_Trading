@@ -1,9 +1,9 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-04-27T11:34:29.621058+00:00",
-  "valid_until": "2026-04-28T11:34:29.621058+00:00",
+  "generated_at": "2026-04-27T11:35:01.514440+00:00",
+  "valid_until": "2026-04-28T11:35:01.514440+00:00",
   "regime": "RANGE",
-  "confidence": 0.8237,
+  "confidence": 0.8064,
   "classifier": "RandomForest+Markov (n=305 samples)",
   "strategy_overrides": {
     "breakout": true,
@@ -21,13 +21,13 @@
   },
   "diagnostics": {
     "adx_14": 13.542009,
-    "atr_pct": 0.024175,
-    "bb_width_ratio": 0.504527,
-    "close_ema20_pct": -0.007063,
-    "momentum_1d": 0.007718,
-    "momentum_5d": -0.008352,
+    "atr_pct": 0.024228,
+    "bb_width_ratio": 0.507456,
+    "close_ema20_pct": -0.009026,
+    "momentum_1d": 0.005515,
+    "momentum_5d": -0.01052,
     "range_atr_ratio": 0.509168,
-    "vol_ratio": 1.043393,
+    "vol_ratio": 1.485103,
     "park_vol_zscore": -1.486493
   },
   "strategy_weights": {
@@ -50,9 +50,9 @@
     "supply_demand": -0.0128
   },
   "regime_probabilities": {
-    "TREND": 0.1741,
-    "RANGE": 0.8237,
-    "VOLATILE": 0.0022
+    "TREND": 0.1851,
+    "RANGE": 0.8064,
+    "VOLATILE": 0.0085
   },
   "transition_matrix": {
     "TREND": {
