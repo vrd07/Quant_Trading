@@ -946,14 +946,14 @@ class SMCOrderBlockStrategy(BaseStrategy):
             self._log_no_signal(f"SL too wide ({sl_in_atr:.2f} ATR) — sloppy OB rejected")
             return None
 
-        # Enforce minimum TP floor
-        min_tp_distance = self.min_liquidity_premium_mult * current_atr
-        if reward < min_tp_distance:
-            if side == OrderSide.BUY:
-                take_profit = self._ob_zone["high"] + min_tp_distance
-            else:
-                take_profit = self._ob_zone["low"] - min_tp_distance
-            reward = min_tp_distance
+        # Strict 1:2 RR — TP is always reward = 2 × risk regardless of OB
+        # geometry. The OB-derived TP at the call site is overwritten so the
+        # strategy never ships a sub-2R trade.
+        reward = 2.0 * risk
+        if side == OrderSide.BUY:
+            take_profit = entry_price + reward
+        else:
+            take_profit = entry_price - reward
 
         rr_ratio = reward / risk
 
