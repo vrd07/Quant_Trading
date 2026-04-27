@@ -19,14 +19,14 @@ Usage:
 
 import pandas as pd
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 import pytz
 
 
 def load_ff_events(
     csv_path: str = "news/MAR_news.csv",
-    currency: str = "USD",
+    currency: Union[str, Iterable[str]] = "USD",
     impacts: Optional[list] = None,
 ) -> pd.DataFrame:
     """
@@ -34,7 +34,9 @@ def load_ff_events(
 
     Args:
         csv_path: Path to the CSV file.
-        currency: Filter for this currency (default USD for XAUUSD).
+        currency: Currency filter — accepts a single ticker ("USD") or a
+            list/tuple (["USD", "EUR"]). YAML can write either form. Default
+            USD preserves back-compat for configs that only trade USD pairs.
         impacts: List of impact levels to keep (default: ['high', 'red']).
 
     Returns:
@@ -43,14 +45,21 @@ def load_ff_events(
     if impacts is None:
         impacts = ["high", "red"]
 
+    # Normalise currency arg to an upper-cased list so downstream filtering
+    # is uniform whether YAML wrote `currency: USD` or `currency: [USD, EUR]`.
+    if isinstance(currency, str):
+        currencies = [currency.upper()]
+    else:
+        currencies = [str(c).upper() for c in currency]
+
     df = pd.read_csv(csv_path)
 
     # Normalise column names
     df.columns = [c.strip().lower() for c in df.columns]
 
-    # Filter currency
+    # Filter currency (single or multiple)
     if "currency" in df.columns:
-        df = df[df["currency"].str.strip().str.upper() == currency.upper()]
+        df = df[df["currency"].str.strip().str.upper().isin(currencies)]
 
     # Filter impact
     if "impact" in df.columns:

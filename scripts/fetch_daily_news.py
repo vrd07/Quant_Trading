@@ -37,7 +37,11 @@ PROJECT_ROOT = Path(__file__).parent.parent
 NEWS_DIR = PROJECT_ROOT / "news"
 CONFIG_DIR = PROJECT_ROOT / "config"
 
-CURRENCIES_TO_TRACK = {"USD"}
+# Cast a wider net than any single config needs — the CSV is consumed by
+# load_ff_events() which filters per-config. Fetcher's job: capture every
+# currency any enabled symbol might care about, plus a small superset for
+# future-symbol flexibility. Consumer's job: narrow per the active YAML.
+CURRENCIES_TO_TRACK = {"USD", "EUR"}     # add GBP/JPY here when those symbols go live
 HIGH_IMPACT_KEYWORDS = {"high", "red"}   # ForexFactory impact levels we care about
 MAX_RETRIES = 3
 RETRY_DELAY_SEC = 5
@@ -151,7 +155,7 @@ def fetch_forexfactory_events(target_date: datetime) -> list[dict]:
         })
         _log(f"  Found: {current_time} | {currency} | {impact} | {event_name}")
 
-    _log(f"Total high-impact USD events found: {len(events)}")
+    _log(f"Total high-impact events found ({'+'.join(sorted(CURRENCIES_TO_TRACK))}): {len(events)}")
     return events
 
 
@@ -279,7 +283,7 @@ def main():
     _log(f"=== Done! {len(events)} events saved to {csv_path.name} ===")
 
     if len(events) == 0:
-        _log("NOTE: No high-impact USD events found today — news filter will pass all signals")
+        _log(f"NOTE: No high-impact events ({'+'.join(sorted(CURRENCIES_TO_TRACK))}) found today — news filter will pass all signals")
 
 
 if __name__ == "__main__":
