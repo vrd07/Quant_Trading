@@ -174,6 +174,11 @@ class TradingSystem:
         # managed by a focused SessionManager (not inline in main loop).
         self._session_mgr = SessionManager(self.config)
 
+        # Seed today so the first-tick rollover guard in _process_strategies
+        # does not re-fire the regime classifier — the pre-launch shell
+        # wrapper already ran it. Next trigger fires at real UTC midnight.
+        self._session_mgr.state.daily_wins_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
         # ── Manual position tracker (directional lock vs manual trades) ──
         self._manual_pos_tracker = ManualPositionTracker()
         self._manual_directional_lock: bool = bool(
