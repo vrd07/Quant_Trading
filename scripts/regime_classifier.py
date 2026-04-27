@@ -108,18 +108,21 @@ def compute_daily_bars(df_5m: pd.DataFrame) -> pd.DataFrame:
     return daily.sort_values("date").reset_index(drop=True)
 
 
-def _compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, span: int = 14) -> pd.Series:
-    """Compute Average True Range — shared by features and labels.
+def _compute_atr(high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14) -> pd.Series:
+    """Compute Wilder's Average True Range — shared by features and labels.
 
-    Knuth lens: single source of truth for a shared computation.
-    Blow lens: eliminate hidden O(n) duplicate between compute_features and compute_labels.
+    Uses Wilder's smoothing (alpha = 1/period) to match the convention used
+    by the ADX block in compute_features. Pandas' default ewm(span=period)
+    uses alpha = 2/(period+1), which is roughly 2x more reactive — mixing
+    that here would produce a different "ATR" than the rest of the file.
+    Knuth: single source of truth, including the smoothing constant.
     """
     tr = pd.concat([
         high - low,
         (high - close.shift(1)).abs(),
         (low - close.shift(1)).abs(),
     ], axis=1).max(axis=1)
-    return tr.ewm(span=span, adjust=False).mean()
+    return tr.ewm(alpha=1.0 / period, adjust=False).mean()
 
 
 def compute_features(daily: pd.DataFrame) -> pd.DataFrame:
@@ -140,8 +143,8 @@ def compute_features(daily: pd.DataFrame) -> pd.DataFrame:
     high = daily["high"]
     low = daily["low"]
 
-    # ATR (14) — single computation, reused by compute_labels via _compute_atr
-    atr = _compute_atr(high, low, close, span=14)
+    # ATR (14) — single Wilder computation, reused by compute_labels via _compute_atr
+    atr = _compute_atr(high, low, close, period=14)
 
     # ADX (14) — Wilder's smoothing: alpha = 1/period (not EWM span=14 which uses alpha=2/15)
     # Using consistent alpha=1/14 for TR, +DM and -DM so DI ratios are correct.
@@ -222,8 +225,8 @@ def compute_labels(daily: pd.DataFrame, feat: pd.DataFrame) -> pd.Series:
     high = daily["high"]
     low = daily["low"]
 
-    # Reuse shared ATR computation — was previously duplicated O(n)
-    atr = _compute_atr(high, low, close, span=14)
+    # Reuse shared Wilder ATR computation — was previously duplicated O(n)
+    atr = _compute_atr(high, low, close, period=14)
 
     next_move = close.shift(-1) - close
     move_atr_ratio = (next_move.abs() / atr)
@@ -483,14 +486,20 @@ def classify_ml(
     # Calibrate probabilities so confidence=0.67 actually means 67% accuracy,
     # not the raw overconfident RF estimate. Use 'sigmoid' (fast Platt scaling)
     # instead of 'isotonic' (needs more data and is slower).
+    #
+    # Calibration needs at least ~5 minority-class samples per fold to avoid
+    # a degenerate Platt fit on noise (XAUUSD has VOLATILE ~4/280 — that's
+    # one sample per fold at cv=2 and the calibration becomes a coin flip
+    # for that class). Requiring min_class >= 10 keeps cv=2 honest.
     import numpy as np
     min_class_count = int(np.bincount(y_enc).min())
-    cv_folds = min(2, min_class_count)
-    if cv_folds >= 2:
-        clf = CalibratedClassifierCV(base_clf, cv=cv_folds, method="sigmoid")
+    if min_class_count >= 10:
+        clf = CalibratedClassifierCV(base_clf, cv=2, method="sigmoid")
         clf.fit(X, y_enc)
     else:
-        # Insufficient per-class samples for calibration — use base RF directly
+        # Insufficient per-class samples for meaningful calibration — fall
+        # back to the raw RF probabilities. They will be over-confident for
+        # the rare class, which is honest about the underlying data limit.
         base_clf.fit(X, y_enc)
         clf = base_clf
 
