@@ -32,9 +32,12 @@ import json
 import os
 import sys
 import tkinter as tk
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from tkinter import ttk
 from typing import Any, Dict, Optional
+
+IST = timezone(timedelta(hours=5, minutes=30))
 
 
 # ── Color palette (TradingView-ish dark) ────────────────────────────────────
@@ -104,6 +107,20 @@ def _fmt_ts(iso: str) -> str:
     if not iso:
         return ""
     return iso[11:19] if len(iso) >= 19 else iso
+
+
+def _fmt_ts_ist(iso: str) -> str:
+    """Convert a UTC ISO-8601 timestamp to IST HH:MM:SS."""
+    if not iso:
+        return ""
+    try:
+        s = iso.replace("Z", "+00:00")
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(IST).strftime("%H:%M:%S")
+    except Exception:
+        return iso[11:19] if len(iso) >= 19 else iso
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -414,6 +431,12 @@ class LiveMonitorApp:
                                               font=("Menlo", 11, "bold"))
         self.session_countdown_lbl.pack(side=tk.LEFT, padx=(6, 0))
 
+        self.session_utc_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=GOLD,
+                                        font=("Menlo", 11, "bold"))
+        self.session_utc_lbl.pack(side=tk.RIGHT)
+        tk.Label(hdr, text="UTC NOW:", bg=BG_PANEL, fg=TEXT_DIM,
+                 font=("Menlo", 9, "bold")).pack(side=tk.RIGHT, padx=(0, 6))
+
         # Table of all configured sessions (compact: narrower cols, height=4)
         cols = ("active", "name", "window", "lot", "strats")
         headings = ("", "Session", "UTC Window", "Lot ×", "Strategies")
@@ -532,10 +555,10 @@ class LiveMonitorApp:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("ts", "sym", "strat", "side", "entry", "exit", "pnl", "dur", "reason")
-        headings = ("Closed", "Symbol", "Strategy", "Side",
+        cols = ("ts", "ts_ist", "sym", "strat", "side", "entry", "exit", "pnl", "dur", "reason")
+        headings = ("Closed (UTC)", "Closed (IST)", "Symbol", "Strategy", "Side",
                     "Entry", "Exit", "P&L", "Duration", "Why / Exit")
-        widths = (70, 75, 120, 50, 75, 75, 80, 75, 360)
+        widths = (90, 90, 75, 120, 50, 75, 75, 80, 75, 360)
         self.tree_journal = self._make_tree(body, cols, headings, widths, height=16)
         self.tree_journal.pack(fill=tk.BOTH, expand=True)
         self.tree_journal.tag_configure("win", foreground=GREEN)
@@ -698,6 +721,11 @@ class LiveMonitorApp:
             )
         else:
             self.session_countdown_lbl.config(text="—", fg=TEXT_FAINT)
+
+        self.session_utc_lbl.config(
+            text=datetime.now(timezone.utc).strftime("%H:%M:%S"),
+            fg=GOLD,
+        )
 
         self._clear(self.tree_sessions)
         for s in (sess.get("all") or []):
@@ -869,8 +897,10 @@ class LiveMonitorApp:
         for j in (d.get("journal", []) or [])[:15]:
             pnl = float(j.get("pnl", 0) or 0)
             tag = "win" if pnl > 0 else "loss" if pnl < 0 else "flat"
+            ts_close = j.get("ts_close", "") or ""
             self.tree_journal.insert("", "end", values=(
-                _fmt_ts(j.get("ts_close", "")),
+                _fmt_ts(ts_close),
+                _fmt_ts_ist(ts_close),
                 j.get("symbol") or "",
                 (j.get("strategy") or "")[:18],
                 (j.get("side") or "")[:5],
