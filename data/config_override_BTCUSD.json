@@ -1,66 +1,70 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-04-27T05:16:57.905760+00:00",
-  "valid_until": "2026-04-28T05:16:57.905760+00:00",
-  "regime": "TREND",
-  "confidence": 0.9,
-  "classifier": "rule-based",
+  "generated_at": "2026-04-27T05:29:29.711257+00:00",
+  "valid_until": "2026-04-28T05:29:29.711257+00:00",
+  "regime": "RANGE",
+  "confidence": 0.8154,
+  "classifier": "RandomForest+Markov (n=34 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
     "kalman_regime": true,
     "mean_reversion": false,
-    "vwap": false,
+    "vwap": true,
     "mini_medallion": true,
     "sbr": true,
     "supply_demand": false,
-    "asia_range_fade": false,
+    "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true
   },
   "diagnostics": {
-    "adx_14": 59.762384,
-    "atr_pct": 0.644868,
-    "bb_width_ratio": 1.489918,
-    "close_ema20_pct": -0.743086,
-    "momentum_1d": 0.005341,
-    "momentum_5d": -0.817745,
-    "range_atr_ratio": 0.017885,
-    "vol_ratio": 2.6e-05,
-    "park_vol_zscore": -3.494703
+    "adx_14": 29.019419,
+    "atr_pct": 0.028403,
+    "bb_width_ratio": 0.859071,
+    "close_ema20_pct": 0.047249,
+    "momentum_1d": 0.01391,
+    "momentum_5d": 0.030079,
+    "range_atr_ratio": 0.733661,
+    "vol_ratio": 0.238195,
+    "park_vol_zscore": -2.221506
   },
   "strategy_weights": {
-    "breakout": 0.85,
-    "momentum": 0.8,
-    "kalman_regime": 0.9,
+    "breakout": 0.6,
+    "momentum": 0.55,
+    "kalman_regime": 0.75,
     "mean_reversion": 0.0,
-    "vwap": 0.0,
-    "mini_medallion": 0.65,
-    "sbr": 0.8,
-    "supply_demand": 0.2,
-    "asia_range_fade": 0.15,
-    "descending_channel_breakout": 0.7,
-    "smc_ob": 0.7,
-    "fibonacci_retracement": 0.7
+    "vwap": 0.45,
+    "mini_medallion": 0.6,
+    "sbr": 0.4,
+    "supply_demand": 0.25,
+    "asia_range_fade": 0.7,
+    "descending_channel_breakout": 0.45,
+    "smc_ob": 0.5,
+    "fibonacci_retracement": 0.5
   },
   "performance_scores": {},
-  "regime_probabilities": {},
+  "regime_probabilities": {
+    "TREND": 0.176,
+    "RANGE": 0.8154,
+    "VOLATILE": 0.0086
+  },
   "transition_matrix": {
     "TREND": {
-      "TREND": 0.375,
-      "RANGE": 0.375,
-      "VOLATILE": 0.25
+      "TREND": 0.2,
+      "RANGE": 0.6,
+      "VOLATILE": 0.2
     },
     "RANGE": {
-      "TREND": 0.25,
-      "RANGE": 0.625,
-      "VOLATILE": 0.125
+      "TREND": 0.0857,
+      "RANGE": 0.8857,
+      "VOLATILE": 0.0286
     },
     "VOLATILE": {
-      "TREND": 0.5,
-      "RANGE": 0.25,
-      "VOLATILE": 0.25
+      "TREND": 0.3333,
+      "RANGE": 0.3333,
+      "VOLATILE": 0.3333
     }
   }
 }
