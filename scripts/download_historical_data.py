@@ -32,7 +32,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 TICKER_MAP = {
     "XAUUSD": "GC=F",       # Gold Futures (COMEX) — closest to XAUUSD spot
     "EURUSD": "EURUSD=X",   # EUR/USD spot
-    "BTCUSD": "BTC-USD",    # Bitcoin / USD
+    "BTCUSD": "BTC-USD",    # Bitcoin / USD spot
+    "ETHUSD": "ETH-USD",    # Ethereum / USD spot
     "US30":   "YM=F",       # Dow Jones Futures
     "USOIL":  "CL=F",       # WTI Crude Futures
 }
