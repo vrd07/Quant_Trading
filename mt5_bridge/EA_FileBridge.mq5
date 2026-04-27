@@ -532,6 +532,7 @@ void ProcessCommands()
    if(command == "HEARTBEAT")           HandleHeartbeat();
    else if(command == "GET_ACCOUNT_INFO") HandleGetAccountInfo();
    else if(command == "GET_POSITIONS")    HandleGetPositions();
+   else if(command == "GET_ALL_POSITIONS") HandleGetAllPositions();
    else if(command == "GET_HISTORY")      HandleGetHistory(commandJson);
    else if(command == "PLACE_ORDER")      HandlePlaceOrder(commandJson);
    else if(command == "CLOSE_POSITION")   HandleClosePosition(commandJson);
@@ -654,6 +655,43 @@ void HandleGetPositions()
 
          // Knuth: use per-symbol digits — _Digits is chart symbol only,
          // truncates prices for cross-symbol positions (e.g. EURUSD 5dp → 2dp)
+         string posSymbol = PositionGetString(POSITION_SYMBOL);
+         int posDigits = (int)SymbolInfoInteger(posSymbol, SYMBOL_DIGITS);
+
+         if(count > 0) json += ",";
+         json += "{";
+         json += "\"ticket\":" + IntegerToString(ticket) + ",";
+         json += "\"symbol\":\"" + posSymbol + "\",";
+         json += "\"type\":" + IntegerToString(PositionGetInteger(POSITION_TYPE)) + ",";
+         json += "\"volume\":" + DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + ",";
+         json += "\"price_open\":" + DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN), posDigits) + ",";
+         json += "\"price_current\":" + DoubleToString(PositionGetDouble(POSITION_PRICE_CURRENT), posDigits) + ",";
+         json += "\"profit\":" + DoubleToString(PositionGetDouble(POSITION_PROFIT), 2) + ",";
+         json += "\"sl\":" + DoubleToString(PositionGetDouble(POSITION_SL), posDigits) + ",";
+         json += "\"tp\":" + DoubleToString(PositionGetDouble(POSITION_TP), posDigits) + ",";
+         json += "\"comment\":\"" + PositionGetString(POSITION_COMMENT) + "\",";
+         json += "\"magic\":" + IntegerToString(PositionGetInteger(POSITION_MAGIC));
+         json += "}";
+         count++;
+      }
+   }
+   json += "]}";
+   WriteResponse(json);
+}
+
+// Returns ALL open positions (no magic filter) so the Python side can detect
+// manually opened MT5 trades for the directional lock and manual-trade monitor.
+void HandleGetAllPositions()
+{
+   string json = "{\"positions\":[";
+   int total = PositionsTotal();
+   int count = 0;
+
+   for(int i = 0; i < total; i++)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(ticket > 0)
+      {
          string posSymbol = PositionGetString(POSITION_SYMBOL);
          int posDigits = (int)SymbolInfoInteger(posSymbol, SYMBOL_DIGITS);
 
