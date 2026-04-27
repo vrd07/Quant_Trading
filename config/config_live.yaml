@@ -244,13 +244,18 @@ trading_hours:
       strategies: [mini_medallion, fibonacci_retracement]
 
   news_filter:
-    enabled: true  # ALWAYS ON FOR LIVE
+    enabled: true
     csv_path: news/2026-04-27_news.csv
-    currency: USD
+    # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
+    # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
+    # both currencies into the CSV; the loader filters to this list.
+    currency:
+      - USD
+      - EUR
     impacts:
       - high
       - red
-    buffer_min: 10
+    buffer_min: 5
     timezone: Asia/Kolkata
 
 monitoring:

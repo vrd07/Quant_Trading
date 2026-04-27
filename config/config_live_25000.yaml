@@ -506,7 +506,12 @@ trading_hours:
   news_filter:
     enabled: true
     csv_path: news/2026-04-27_news.csv
-    currency: USD
+    # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
+    # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
+    # both currencies into the CSV; the loader filters to this list.
+    currency:
+      - USD
+      - EUR
     impacts:
       - high
       - red
