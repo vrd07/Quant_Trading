@@ -539,6 +539,14 @@ class TradingSystem:
         # -- Intra-day regime shift check (self-throttled to every 4h) ------
         self._check_intraday_regime_shift()
 
+        # Poll for a late-arriving news CSV. The midnight reset above runs
+        # at 00:00 UTC, but the cron that fetches today's CSV runs at
+        # 00:30 UTC — so on the first reload of the day we'd otherwise miss
+        # it for 24 hours. _load_news_filter() is mtime-idempotent so this
+        # is a cheap no-op once today's file is loaded.
+        if self.loop_iteration % 60 == 1:
+            self._load_news_filter()
+
         # TJ: one call replaces ~80 lines of inline session/news/profit/loss logic
         daily_pnl = float(self._get_daily_pnl())
         allowed, reason, allowed_strategies, lot_multiplier = (
@@ -656,8 +664,11 @@ class TradingSystem:
     def _load_news_filter(self) -> None:
         """(Re)load the ForexFactory news CSV into SessionManager.
 
-        Safe to call repeatedly — each call picks the freshest dated CSV
-        available (today → yesterday → monthly → config fallback).
+        Idempotent: when the freshest available CSV is the same (path, mtime)
+        we already loaded, this is a cheap no-op. That makes it safe to call
+        on every loop iteration so today's CSV gets picked up minutes after
+        the 00:30 UTC cron writes it — the 00:00 UTC midnight reload misses
+        it by 30 minutes otherwise.
         """
         nf_cfg = self.config.get('trading_hours', {}).get('news_filter', {})
         if not nf_cfg.get('enabled', False):
@@ -676,10 +687,25 @@ class TradingSystem:
         csv_path = next((c for c in candidates if Path(c).exists()), None)
 
         if csv_path is None:
-            self.logger.warning(
-                "No news CSV found — news filter disabled. "
-                "Run: python scripts/fetch_daily_news.py"
-            )
+            # Only log the missing-CSV warning on a state transition so
+            # repeated polling doesn't spam the log.
+            if getattr(self, '_last_news_csv', None) is not None:
+                self.logger.warning(
+                    "No news CSV found — news filter disabled. "
+                    "Run: python scripts/fetch_daily_news.py"
+                )
+            self._last_news_csv = None
+            self._last_news_mtime = None
+            return
+
+        try:
+            mtime = Path(csv_path).stat().st_mtime
+        except OSError:
+            mtime = None
+
+        # Cheap no-op when the chosen CSV is unchanged since the last load.
+        if (csv_path == getattr(self, '_last_news_csv', None)
+                and mtime == getattr(self, '_last_news_mtime', None)):
             return
 
         try:
@@ -690,6 +716,7 @@ class TradingSystem:
             )
             self._session_mgr.set_news_events(news_df)
             self._last_news_csv = csv_path
+            self._last_news_mtime = mtime
             self.logger.info(
                 f"✓ News filter loaded: {csv_path} ({len(news_df)} events)"
             )
