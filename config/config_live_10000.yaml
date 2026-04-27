@@ -144,6 +144,7 @@ risk:
     size_multiplier: 0.5               # Half-size manual orders
     max_risk_per_trade_usd: 15         # Per-trade $ cap on manual clicks (monitor enforces)
     auto_close_violations: false       # If true, monitor closes violating manual positions
+    directional_lock: true             # Block bot signals opposite to manual trades
 
   trailing_stop:
     enabled: false

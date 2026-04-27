@@ -138,6 +138,7 @@ risk:
     size_multiplier: 0.5
     max_risk_per_trade_usd: 25         # matches risk_per_trade_pct × balance
     auto_close_violations: false
+    directional_lock: true             # Block bot signals opposite to manual trades
 
   trailing_stop:
     enabled: true
