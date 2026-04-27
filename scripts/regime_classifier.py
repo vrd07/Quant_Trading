@@ -183,8 +183,15 @@ def compute_features(daily: pd.DataFrame) -> pd.DataFrame:
     momentum_1d = close.pct_change(1)
     momentum_5d = close.pct_change(5)
 
-    # Volume ratio
-    vol_ratio = daily["volume"] / daily["volume"].rolling(20).mean()
+    # Volume ratio — robust to volumeless symbols (forex spot from yfinance
+    # reports volume=0 for every bar, which would collapse this to 0/0=NaN
+    # for every row and knock the symbol out of the ML pipeline entirely).
+    # Fall back to neutral 1.0 when volume data is missing so the feature
+    # contributes no information instead of poisoning the row.
+    vol_mean = daily["volume"].rolling(20).mean().replace(0, np.nan)
+    vol_ratio = (daily["volume"] / vol_mean).replace(
+        [np.inf, -np.inf], np.nan
+    ).fillna(1.0)
 
     # Parkinson volatility estimator: σ² = (1/4ln2) × E[ln(H/L)²]
     # Responds faster to intraday volatility shifts than EWM-ATR (no lag from close-to-close).

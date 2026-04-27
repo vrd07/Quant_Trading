@@ -58,7 +58,7 @@ symbols:
     max_spread: 3.0
 
   EURUSD:
-    enabled: false
+    enabled: true
     pip_value: 0.00001
     min_lot: 0.01
     max_lot: 0.02

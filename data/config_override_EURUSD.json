@@ -1,40 +1,66 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-04-27T06:05:58.392626+00:00",
-  "valid_until": "2026-04-28T06:05:58.392626+00:00",
-  "regime": "RANGE",
-  "confidence": 0.52,
-  "classifier": "rule-based (no features)",
+  "generated_at": "2026-04-27T06:43:42.698921+00:00",
+  "valid_until": "2026-04-28T06:43:42.698921+00:00",
+  "regime": "TREND",
+  "confidence": 0.9,
+  "classifier": "rule-based",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
     "kalman_regime": true,
     "mean_reversion": false,
-    "vwap": true,
+    "vwap": false,
     "mini_medallion": true,
     "sbr": true,
     "supply_demand": false,
-    "asia_range_fade": true,
+    "asia_range_fade": false,
     "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true
   },
-  "diagnostics": {},
+  "diagnostics": {
+    "adx_14": 40.244444,
+    "atr_pct": 0.005731,
+    "bb_width_ratio": 1.100327,
+    "close_ema20_pct": 0.002122,
+    "momentum_1d": 0.003401,
+    "momentum_5d": -0.001407,
+    "range_atr_ratio": 0.754008,
+    "vol_ratio": 1.0,
+    "park_vol_zscore": -1.038677
+  },
   "strategy_weights": {
-    "breakout": 0.6,
-    "momentum": 0.55,
-    "kalman_regime": 0.75,
+    "breakout": 0.85,
+    "momentum": 0.8,
+    "kalman_regime": 0.9,
     "mean_reversion": 0.0,
-    "vwap": 0.45,
-    "mini_medallion": 0.6,
-    "sbr": 0.4,
-    "supply_demand": 0.25,
-    "asia_range_fade": 0.7,
-    "descending_channel_breakout": 0.45,
-    "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5
+    "vwap": 0.0,
+    "mini_medallion": 0.65,
+    "sbr": 0.8,
+    "supply_demand": 0.2,
+    "asia_range_fade": 0.15,
+    "descending_channel_breakout": 0.7,
+    "smc_ob": 0.7,
+    "fibonacci_retracement": 0.7
   },
   "performance_scores": {},
   "regime_probabilities": {},
-  "transition_matrix": {}
+  "transition_matrix": {
+    "TREND": {
+      "TREND": 0.25,
+      "RANGE": 0.5,
+      "VOLATILE": 0.25
+    },
+    "RANGE": {
+      "TREND": 0.0909,
+      "RANGE": 0.8636,
+      "VOLATILE": 0.0455
+    },
+    "VOLATILE": {
+      "TREND": 0.3333,
+      "RANGE": 0.3333,
+      "VOLATILE": 0.3333
+    }
+  }
 }
