@@ -479,9 +479,12 @@ class TradingSystem:
 
         Called every loop tick so the directional lock in _execute_signal()
         always has fresh data.  Logs when manual positions appear or disappear.
+
+        Uses ``get_all_positions`` (unfiltered) — ``get_positions`` only
+        returns bot-magic positions, so manual trades would be invisible.
         """
         try:
-            positions = self.connector.get_positions()
+            positions = self.connector.get_all_positions()
             events = self._manual_pos_tracker.refresh(positions)
             for ticket, event in events.items():
                 pos = positions.get(ticket)

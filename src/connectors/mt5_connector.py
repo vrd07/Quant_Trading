@@ -219,7 +219,34 @@ class MT5Connector:
         except Exception as e:
             logger.error("Failed to get positions: %s", e, exc_info=True)
             raise MT5ConnectionError(f"Failed to get positions: {e}")
-    
+
+    def get_all_positions(self) -> Dict[str, Position]:
+        """Get ALL open positions including manual MT5 trades (no magic filter).
+
+        Used by ManualPositionTracker (directional lock) and ManualTradeMonitor.
+        Falls back to ``get_positions`` if the EA hasn't been recompiled with
+        the GET_ALL_POSITIONS handler yet, so old EAs degrade gracefully.
+        """
+        try:
+            response = self.client.get_all_positions()
+            if not isinstance(response, dict) or response.get("status") == "ERROR":
+                logger.warning(
+                    "GET_ALL_POSITIONS unavailable on EA — falling back to filtered "
+                    "positions (manual directional lock will not see manual trades). "
+                    "Recompile EA_FileBridge.mq5 to enable."
+                )
+                return self.get_positions()
+
+            positions: Dict[str, Position] = {}
+            for mt5_pos in response.get("positions", []):
+                position = self._convert_mt5_position(mt5_pos)
+                ticket_str = str(mt5_pos.get("ticket", position.position_id))
+                positions[ticket_str] = position
+            return positions
+        except Exception as e:
+            logger.error("Failed to get all positions: %s", e, exc_info=True)
+            raise MT5ConnectionError(f"Failed to get all positions: {e}")
+
     def place_order(
         self,
         symbol: str,

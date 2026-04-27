@@ -201,11 +201,15 @@ class MT5FileClient:
     def get_positions(self):
         """
         Get current open positions.
-        
+
         Returns:
             dict: List of positions with ticket, symbol, type, volume, etc.
         """
         return self.send_command({"command": "GET_POSITIONS"})
+
+    def get_all_positions(self):
+        """Get ALL open positions including manual trades (no magic-number filter)."""
+        return self.send_command({"command": "GET_ALL_POSITIONS"})
     
     def place_order(self, symbol, order_type, volume, sl=None, tp=None, price=None, comment=None):
         """

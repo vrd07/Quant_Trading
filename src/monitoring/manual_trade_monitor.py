@@ -158,10 +158,14 @@ class ManualTradeMonitor:
 
     def check_once(self) -> List[Violation]:
         """Poll positions once, return all current violations. Public so tests
-        and the main loop can drive cadence."""
+        and the main loop can drive cadence.
+
+        Uses ``get_all_positions`` (unfiltered) so manual MT5 trades are
+        actually visible — ``get_positions`` filters by bot magic.
+        """
         if not self.enabled:
             return []
-        positions: Dict[str, Position] = self.connector.get_positions()
+        positions: Dict[str, Position] = self.connector.get_all_positions()
         findings: List[Violation] = []
         for ticket, pos in positions.items():
             if not _is_manual(pos):
