@@ -20,7 +20,7 @@ Critical Design:
 from typing import Dict, List, Optional, Tuple, TYPE_CHECKING
 from uuid import UUID
 from decimal import Decimal
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 if TYPE_CHECKING:
     from ..monitoring.trade_journal import TradeJournal
@@ -364,10 +364,11 @@ class PortfolioEngine:
                             + Decimal(str(matching_deal.get('commission', 0)))
                         )
 
+                        broker_offset = getattr(self.connector, "broker_offset", timedelta(0))
                         self.close_position(
                             position_id=position.position_id,
                             exit_price=Decimal(str(matching_deal.get('price', 0))),
-                            exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc),
+                            exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc) - broker_offset,
                             override_pnl=actual_pnl,
                         )
                         
