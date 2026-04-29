@@ -65,9 +65,13 @@ def load_ff_events(
     if "impact" in df.columns:
         df = df[df["impact"].str.strip().str.lower().isin([i.lower() for i in impacts])]
 
-    # Parse time
+    # Parse time. fetch_daily_news.py writes 12-hour times with am/pm suffix
+    # ("11:30pm", "07:00am") and uses "00:00am" as a placeholder when the
+    # ForexFactory row has no time. Normalise case for %p, drop placeholders.
     if "time" in df.columns:
-        df["time"] = pd.to_datetime(df["time"], format="%H:%M", errors="coerce")
+        times = df["time"].astype(str).str.strip().str.upper()
+        times = times.where(~times.isin({"", "NAN", "00:00AM", "ALL DAY", "TENTATIVE"}), other=pd.NA)
+        df["time"] = pd.to_datetime(times, format="%I:%M%p", errors="coerce")
 
     return df.reset_index(drop=True)
 

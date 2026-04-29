@@ -716,68 +716,46 @@ class LiveMonitorEmitter:
         except Exception:
             pass
 
-        # Try several common attribute names for the upcoming-events cache.
-        events: List[Any] = []
+        # SessionManager stores the loaded ForexFactory events DataFrame as
+        # _news_events_df (see src/core/session_manager.py:set_news_events).
+        # CSV times are time-of-day in the news-filter config TZ (default IST,
+        # matching is_news_blackout) — rebuild today's datetime in that TZ and
+        # convert to UTC for the mins_until math.
+        df = getattr(sm, "_news_events_df", None) if sm else None
+        if df is None or getattr(df, "empty", True):
+            return out
+
+        nf_cfg = getattr(sm, "_news_filter_cfg", {}) or {}
+        tz_name = nf_cfg.get("timezone", "Asia/Kolkata")
         try:
-            for attr in ("upcoming_events", "upcoming_news", "news_events", "events"):
-                ev = getattr(sm, attr, None) if sm else None
-                if ev:
-                    events = list(ev)
-                    break
-            if not events and sm is not None:
-                nf = getattr(sm, "news_filter", None)
-                if nf is not None:
-                    for attr in ("upcoming_events", "upcoming_news", "events"):
-                        ev = getattr(nf, attr, None)
-                        if ev:
-                            events = list(ev)
-                            break
+            import pandas as pd
+            import pytz
+            tz = pytz.timezone(tz_name)
         except Exception:
-            events = []
+            return out
 
-        def _to_dt(v: Any) -> Optional[datetime]:
-            if v is None:
-                return None
-            if isinstance(v, datetime):
-                return v if v.tzinfo else v.replace(tzinfo=timezone.utc)
-            if isinstance(v, str):
-                try:
-                    dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-                except Exception:
-                    return None
-            return None
+        today_local = now_utc.astimezone(tz).date()
 
-        for e in events[:20]:
+        for _, row in df.iterrows():
             try:
-                if isinstance(e, dict):
-                    t = _to_dt(
-                        e.get("time_utc") or e.get("time") or e.get("datetime")
-                        or e.get("timestamp")
-                    )
-                    impact = str(e.get("impact", "") or "").upper()
-                    currency = str(e.get("currency", "") or e.get("ccy", ""))
-                    title = str(e.get("title", "") or e.get("event", "") or e.get("name", ""))
-                else:
-                    t = _to_dt(
-                        getattr(e, "time_utc", None) or getattr(e, "time", None)
-                        or getattr(e, "datetime", None) or getattr(e, "timestamp", None)
-                    )
-                    impact = str(getattr(e, "impact", "") or "").upper()
-                    currency = str(getattr(e, "currency", "") or getattr(e, "ccy", ""))
-                    title = str(
-                        getattr(e, "title", "") or getattr(e, "event", "")
-                        or getattr(e, "name", "")
-                    )
-                if t is None:
+                t = row.get("time")
+                if t is None or pd.isna(t):
                     continue
-                mins_until = int((t - now_utc).total_seconds() / 60)
+                local_naive = datetime(
+                    today_local.year, today_local.month, today_local.day,
+                    int(t.hour), int(t.minute),
+                )
+                evt_utc = tz.localize(local_naive).astimezone(timezone.utc)
+                mins_until = int((evt_utc - now_utc).total_seconds() / 60)
                 if mins_until < -15:
                     continue
-                t_ist = t + ist_offset
+                evt_ist = evt_utc + ist_offset
+                impact = str(row.get("impact", "") or "").upper()
+                currency = str(row.get("currency", "") or "")
+                title = str(row.get("event", "") or row.get("title", "") or "")
                 out["upcoming"].append({
-                    "time_ist": t_ist.strftime("%H:%M"),
-                    "date_ist": t_ist.strftime("%d %b"),
+                    "time_ist": evt_ist.strftime("%H:%M"),
+                    "date_ist": evt_ist.strftime("%d %b"),
                     "impact": impact or "MED",
                     "currency": currency or "",
                     "title": title[:70],
