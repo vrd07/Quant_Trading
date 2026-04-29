@@ -469,33 +469,81 @@ class LiveMonitorApp:
                                   font=("Menlo", 9, "bold"), padx=4, pady=3)
         self.news_chip.pack(side=tk.RIGHT)
 
-        # Cards container — repopulated each tick by _render_news_cards.
+        # Cards container — widgets are CREATED ONCE and reused. Each tick we
+        # only call .config() / pack_forget() on existing widgets so the panel
+        # never blinks (no destroy/recreate cycle).
         self.news_cards_frame = tk.Frame(body, bg=BG_PANEL)
         self.news_cards_frame.pack(fill=tk.BOTH, expand=True)
-        self._news_card_widgets: list = []
+        self._news_card_pool: list = []
+        self._news_empty_lbl = tk.Label(
+            self.news_cards_frame,
+            text="✓  No high-impact events ahead",
+            bg=BG_PANEL, fg=TEXT_DIM,
+            font=("Menlo", 10, "italic"), pady=14,
+        )
+
+    def _make_news_card(self) -> Dict[str, Any]:
+        outer = tk.Frame(self.news_cards_frame, bg=BG_PANEL, pady=3)
+        stripe = tk.Frame(outer, bg=BG_PANEL_2, width=4)
+        stripe.pack(side=tk.LEFT, fill=tk.Y)
+        card = tk.Frame(outer, bg=BG_PANEL_2, padx=10, pady=6)
+        card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        top = tk.Frame(card, bg=BG_PANEL_2)
+        top.pack(fill=tk.X)
+        title_lbl = tk.Label(top, text="—", bg=BG_PANEL_2, fg=TEXT,
+                             font=("Menlo", 10, "bold"), anchor="w")
+        title_lbl.pack(side=tk.LEFT)
+        ccy_lbl = tk.Label(top, text=" — ", bg=GOLD, fg=BG,
+                           font=("Menlo", 8, "bold"), padx=4)
+        ccy_lbl.pack(side=tk.RIGHT)
+
+        bot = tk.Frame(card, bg=BG_PANEL_2)
+        bot.pack(fill=tk.X, pady=(4, 0))
+        time_lbl = tk.Label(bot, text="⏱ — IST", bg=BG_PANEL_2, fg=GOLD,
+                            font=("Menlo", 9, "bold"))
+        time_lbl.pack(side=tk.LEFT, padx=(0, 8))
+        impact_lbl = tk.Label(bot, text=" MED ", bg=YELLOW, fg=BG,
+                              font=("Menlo", 8, "bold"), padx=4)
+        impact_lbl.pack(side=tk.LEFT)
+        urgency_lbl = tk.Label(bot, text="", bg=RED, fg=BG,
+                               font=("Menlo", 8, "bold"), padx=4)
+        # urgency_lbl is packed/unpacked dynamically — initially hidden.
+        countdown_lbl = tk.Label(bot, text="—", bg=BG_PANEL_2, fg=TEXT_DIM,
+                                 font=("Menlo", 10, "bold"))
+        countdown_lbl.pack(side=tk.RIGHT)
+
+        return {
+            "outer": outer, "stripe": stripe, "bot": bot,
+            "title": title_lbl, "ccy": ccy_lbl,
+            "time": time_lbl, "impact": impact_lbl,
+            "urgency": urgency_lbl, "countdown": countdown_lbl,
+            "impact_widget_str": str(impact_lbl),
+        }
 
     def _render_news_cards(self, upcoming: list) -> None:
-        """Replace stacked event-card widgets with the latest upcoming events."""
-        for w in self._news_card_widgets:
-            w.destroy()
-        self._news_card_widgets = []
-
+        """Update the persistent card widgets in place — no destroy/recreate."""
         if not upcoming:
-            empty = tk.Label(
-                self.news_cards_frame,
-                text="✓  No high-impact events ahead",
-                bg=BG_PANEL, fg=TEXT_DIM,
-                font=("Menlo", 10, "italic"), pady=14,
-            )
-            empty.pack(fill=tk.X)
-            self._news_card_widgets.append(empty)
+            for c in self._news_card_pool:
+                if c["outer"].winfo_ismapped():
+                    c["outer"].pack_forget()
+            if not self._news_empty_lbl.winfo_ismapped():
+                self._news_empty_lbl.pack(fill=tk.X)
             return
 
-        for e in upcoming[:5]:
+        if self._news_empty_lbl.winfo_ismapped():
+            self._news_empty_lbl.pack_forget()
+
+        visible = upcoming[:5]
+        for i, e in enumerate(visible):
+            if i >= len(self._news_card_pool):
+                self._news_card_pool.append(self._make_news_card())
+            card = self._news_card_pool[i]
+            if not card["outer"].winfo_ismapped():
+                card["outer"].pack(fill=tk.X)
+
             mins = int(e.get("mins_until", 0) or 0)
             impact = (e.get("impact") or "").upper()
-
-            # Stripe + accent picked by urgency first, then impact.
             if 0 <= mins <= 30:
                 stripe, accent, urgency = RED, RED, "IMMINENT"
             elif mins < 0:
@@ -515,37 +563,29 @@ class LiveMonitorApp:
                 h, m = divmod(mins, 60)
                 countdown = f"in {h}h {m:02d}m"
 
-            card_outer = tk.Frame(self.news_cards_frame, bg=BG_PANEL, pady=3)
-            card_outer.pack(fill=tk.X)
-            tk.Frame(card_outer, bg=stripe, width=4).pack(side=tk.LEFT, fill=tk.Y)
-
-            card = tk.Frame(card_outer, bg=BG_PANEL_2, padx=10, pady=6)
-            card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-            top = tk.Frame(card, bg=BG_PANEL_2)
-            top.pack(fill=tk.X)
-            title = (e.get("title") or "—")[:48]
-            tk.Label(top, text=title, bg=BG_PANEL_2, fg=TEXT,
-                     font=("Menlo", 10, "bold"), anchor="w").pack(side=tk.LEFT)
-            ccy = e.get("currency") or "—"
-            tk.Label(top, text=f" {ccy} ", bg=GOLD, fg=BG,
-                     font=("Menlo", 8, "bold"), padx=4).pack(side=tk.RIGHT)
-
-            bot = tk.Frame(card, bg=BG_PANEL_2)
-            bot.pack(fill=tk.X, pady=(4, 0))
-            tk.Label(bot, text=f"⏱ {e.get('time_ist', '—')} IST",
-                     bg=BG_PANEL_2, fg=GOLD,
-                     font=("Menlo", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
-            tk.Label(bot, text=f" {impact or 'MED'} ", bg=accent, fg=BG,
-                     font=("Menlo", 8, "bold"), padx=4).pack(side=tk.LEFT)
+            card["stripe"].config(bg=stripe)
+            card["title"].config(text=(e.get("title") or "—")[:48])
+            card["ccy"].config(text=f" {e.get('currency') or '—'} ")
+            card["time"].config(text=f"⏱ {e.get('time_ist', '—')} IST")
+            card["impact"].config(text=f" {impact or 'MED'} ", bg=accent)
             if urgency:
-                tk.Label(bot, text=f" {urgency} ", bg=RED, fg=BG,
-                         font=("Menlo", 8, "bold"), padx=4).pack(side=tk.LEFT, padx=(4, 0))
-            tk.Label(bot, text=countdown, bg=BG_PANEL_2,
-                     fg=accent if mins <= 30 else TEXT_DIM,
-                     font=("Menlo", 10, "bold")).pack(side=tk.RIGHT)
+                card["urgency"].config(text=f" {urgency} ")
+                if not card["urgency"].winfo_ismapped():
+                    card["urgency"].pack(
+                        in_=card["bot"], side=tk.LEFT, padx=(4, 0),
+                        after=card["impact"],
+                    )
+            elif card["urgency"].winfo_ismapped():
+                card["urgency"].pack_forget()
+            card["countdown"].config(
+                text=countdown,
+                fg=accent if mins <= 30 else TEXT_DIM,
+            )
 
-            self._news_card_widgets.append(card_outer)
+        # Hide trailing unused cards (preserves order — we never re-pack mid-list).
+        for j in range(len(visible), len(self._news_card_pool)):
+            if self._news_card_pool[j]["outer"].winfo_ismapped():
+                self._news_card_pool[j]["outer"].pack_forget()
 
     # --- performance metrics body ---
     def _build_performance_body(self, panel) -> None:
