@@ -450,30 +450,102 @@ class LiveMonitorApp:
 
     # --- news body (IST) ---
     def _build_news_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
+        body = tk.Frame(panel, bg=BG_PANEL, padx=10, pady=6)
         body.pack(fill=tk.BOTH, expand=True)
 
+        # Header: clock glyph + IST time/date on left, status chip on right.
         hdr = tk.Frame(body, bg=BG_PANEL)
-        hdr.pack(fill=tk.X, pady=(0, 4))
-        tk.Label(hdr, text="IST NOW:", bg=BG_PANEL, fg=TEXT_DIM,
-                 font=("Menlo", 9, "bold")).pack(side=tk.LEFT)
-        self.news_ist_lbl = tk.Label(hdr, text="—", bg=BG_PANEL, fg=GOLD,
-                                     font=("Menlo", 11, "bold"))
-        self.news_ist_lbl.pack(side=tk.LEFT, padx=(6, 14))
+        hdr.pack(fill=tk.X, pady=(0, 8))
 
-        self.news_chip = tk.Label(hdr, text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM,
-                                  font=("Menlo", 9, "bold"), padx=8, pady=2)
+        left = tk.Frame(hdr, bg=BG_PANEL)
+        left.pack(side=tk.LEFT)
+        tk.Label(left, text="◷", bg=BG_PANEL, fg=GOLD,
+                 font=("Menlo", 14)).pack(side=tk.LEFT, padx=(0, 6))
+        self.news_ist_lbl = tk.Label(left, text="—", bg=BG_PANEL, fg=GOLD,
+                                     font=("Menlo", 12, "bold"))
+        self.news_ist_lbl.pack(side=tk.LEFT)
+
+        self.news_chip = tk.Label(hdr, text="  NEWS CLEAR  ", bg=BG_PANEL_2, fg=TEXT_DIM,
+                                  font=("Menlo", 9, "bold"), padx=4, pady=3)
         self.news_chip.pack(side=tk.RIGHT)
 
-        cols = ("in", "time", "impact", "ccy", "title")
-        headings = ("In", "IST", "Impact", "Ccy", "Event")
-        widths = (60, 60, 65, 45, 260)
-        self.tree_news = self._make_tree(body, cols, headings, widths, height=4)
-        self.tree_news.pack(fill=tk.BOTH, expand=True)
-        self.tree_news.tag_configure("imminent", foreground=RED)
-        self.tree_news.tag_configure("high", foreground=ORANGE)
-        self.tree_news.tag_configure("medium", foreground=YELLOW)
-        self.tree_news.tag_configure("low", foreground=TEXT_DIM)
+        # Cards container — repopulated each tick by _render_news_cards.
+        self.news_cards_frame = tk.Frame(body, bg=BG_PANEL)
+        self.news_cards_frame.pack(fill=tk.BOTH, expand=True)
+        self._news_card_widgets: list = []
+
+    def _render_news_cards(self, upcoming: list) -> None:
+        """Replace stacked event-card widgets with the latest upcoming events."""
+        for w in self._news_card_widgets:
+            w.destroy()
+        self._news_card_widgets = []
+
+        if not upcoming:
+            empty = tk.Label(
+                self.news_cards_frame,
+                text="✓  No high-impact events ahead",
+                bg=BG_PANEL, fg=TEXT_DIM,
+                font=("Menlo", 10, "italic"), pady=14,
+            )
+            empty.pack(fill=tk.X)
+            self._news_card_widgets.append(empty)
+            return
+
+        for e in upcoming[:5]:
+            mins = int(e.get("mins_until", 0) or 0)
+            impact = (e.get("impact") or "").upper()
+
+            # Stripe + accent picked by urgency first, then impact.
+            if 0 <= mins <= 30:
+                stripe, accent, urgency = RED, RED, "IMMINENT"
+            elif mins < 0:
+                stripe, accent, urgency = TEXT_FAINT, TEXT_DIM, "LIVE/PAST"
+            elif impact == "HIGH":
+                stripe, accent, urgency = ORANGE, ORANGE, ""
+            elif impact == "MEDIUM":
+                stripe, accent, urgency = YELLOW, YELLOW, ""
+            else:
+                stripe, accent, urgency = TEXT_FAINT, TEXT_DIM, ""
+
+            if mins < 0:
+                countdown = f"{abs(mins)}m ago"
+            elif mins < 60:
+                countdown = f"in {mins}m"
+            else:
+                h, m = divmod(mins, 60)
+                countdown = f"in {h}h {m:02d}m"
+
+            card_outer = tk.Frame(self.news_cards_frame, bg=BG_PANEL, pady=3)
+            card_outer.pack(fill=tk.X)
+            tk.Frame(card_outer, bg=stripe, width=4).pack(side=tk.LEFT, fill=tk.Y)
+
+            card = tk.Frame(card_outer, bg=BG_PANEL_2, padx=10, pady=6)
+            card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+            top = tk.Frame(card, bg=BG_PANEL_2)
+            top.pack(fill=tk.X)
+            title = (e.get("title") or "—")[:48]
+            tk.Label(top, text=title, bg=BG_PANEL_2, fg=TEXT,
+                     font=("Menlo", 10, "bold"), anchor="w").pack(side=tk.LEFT)
+            ccy = e.get("currency") or "—"
+            tk.Label(top, text=f" {ccy} ", bg=GOLD, fg=BG,
+                     font=("Menlo", 8, "bold"), padx=4).pack(side=tk.RIGHT)
+
+            bot = tk.Frame(card, bg=BG_PANEL_2)
+            bot.pack(fill=tk.X, pady=(4, 0))
+            tk.Label(bot, text=f"⏱ {e.get('time_ist', '—')} IST",
+                     bg=BG_PANEL_2, fg=GOLD,
+                     font=("Menlo", 9, "bold")).pack(side=tk.LEFT, padx=(0, 8))
+            tk.Label(bot, text=f" {impact or 'MED'} ", bg=accent, fg=BG,
+                     font=("Menlo", 8, "bold"), padx=4).pack(side=tk.LEFT)
+            if urgency:
+                tk.Label(bot, text=f" {urgency} ", bg=RED, fg=BG,
+                         font=("Menlo", 8, "bold"), padx=4).pack(side=tk.LEFT, padx=(4, 0))
+            tk.Label(bot, text=countdown, bg=BG_PANEL_2,
+                     fg=accent if mins <= 30 else TEXT_DIM,
+                     font=("Menlo", 10, "bold")).pack(side=tk.RIGHT)
+
+            self._news_card_widgets.append(card_outer)
 
     # --- performance metrics body ---
     def _build_performance_body(self, panel) -> None:
@@ -764,38 +836,7 @@ class LiveMonitorApp:
         else:
             self.news_chip.config(text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM)
 
-        self._clear(self.tree_news)
-        upcoming = news.get("upcoming") or []
-        if not upcoming:
-            self.tree_news.insert("", "end", values=(
-                "—", "—", "—", "—", "No upcoming events tracked",
-            ), tags=("low",))
-        else:
-            for e in upcoming:
-                mins = int(e.get("mins_until", 0) or 0)
-                if mins < 0:
-                    in_txt = f"{abs(mins)}m ago"
-                elif mins < 60:
-                    in_txt = f"{mins}m"
-                else:
-                    h, m = divmod(mins, 60)
-                    in_txt = f"{h}h {m:02d}m"
-                impact = (e.get("impact") or "").upper()
-                if 0 <= mins <= 30:
-                    tag = "imminent"
-                elif impact == "HIGH":
-                    tag = "high"
-                elif impact == "MEDIUM":
-                    tag = "medium"
-                else:
-                    tag = "low"
-                self.tree_news.insert("", "end", values=(
-                    in_txt,
-                    e.get("time_ist", "—"),
-                    impact or "—",
-                    e.get("currency", "") or "—",
-                    (e.get("title") or "—")[:60],
-                ), tags=(tag,))
+        self._render_news_cards(news.get("upcoming") or [])
 
         # ---- performance metrics ----
         perf = d.get("performance", {}) or {}
