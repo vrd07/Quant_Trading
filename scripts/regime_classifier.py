@@ -264,6 +264,7 @@ STRATEGY_WEIGHTS = {
         "descending_channel_breakout": 0.70,
         "smc_ob":         0.70,
         "fibonacci_retracement": 0.70,  # big_trend sweep: PF 1.75, DD 9.2% (6mo)
+        "continuation_breakout": 0.75,  # stair-step pattern: needs trend to fire
     },
     "RANGE": {
         "breakout":       0.60,  # raised: cooldown-improved breakout works across regimes
@@ -278,6 +279,7 @@ STRATEGY_WEIGHTS = {
         "descending_channel_breakout": 0.45,
         "smc_ob":         0.50,
         "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
+        "continuation_breakout": 0.30,  # range regime is mostly chop, not stair-step
     },
     "VOLATILE": {
         "breakout":       0.55,  # raised: breakout captures vol expansion moves
@@ -292,6 +294,7 @@ STRATEGY_WEIGHTS = {
         "descending_channel_breakout": 0.55,
         "smc_ob":         0.60,
         "fibonacci_retracement": 0.55,  # strong trends with pullbacks = fib's edge
+        "continuation_breakout": 0.55,  # vol expansions sometimes form clean stair-steps
     },
 }
 
