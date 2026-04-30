@@ -17,7 +17,8 @@
     "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
-    "fibonacci_retracement": true
+    "fibonacci_retracement": true,
+    "continuation_breakout": false
   },
   "diagnostics": {
     "adx_14": 30.235759,
@@ -42,7 +43,8 @@
     "asia_range_fade": 0.7,
     "descending_channel_breakout": 0.45,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5
+    "fibonacci_retracement": 0.5,
+    "continuation_breakout": 0.3
   },
   "performance_scores": {},
   "regime_probabilities": {
