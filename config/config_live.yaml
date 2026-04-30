@@ -207,7 +207,7 @@ strategies:
   # re-accumulation cluster → fires on second breakout in same direction.
   # Disabled by default — backtest before enabling live.
   continuation_breakout:
-    enabled: false
+    enabled: true
     timeframe: 5m
     donchian_period: 20
     lookback_window: 60
@@ -225,6 +225,8 @@ strategies:
     long_only: false
     cooldown_bars: 6
     session_hours: null            # null = all hours
+    atr_stop_multiplier: 1.0       # SL = cluster boundary ± 1.0 × ATR buffer
+    rr_ratio: 2.0                  # TP = 2 × risk
 
 trading_hours:
   sessions:
