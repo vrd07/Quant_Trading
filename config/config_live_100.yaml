@@ -460,6 +460,31 @@ strategies:
     min_strength: 0.0
     session_hours: null
 
+  # ── CONTINUATION BREAKOUT (Wyckoff stair-step) ───────────────────────
+  # Two-leg breakout: tight range → impulse → re-accumulation → continuation.
+  # State-machine: detects accumulation range → fast move (impulse) →
+  # re-accumulation cluster → fires on second breakout in same direction.
+  # Disabled by default — backtest before enabling live.
+  continuation_breakout:
+    enabled: false
+    timeframe: 5m
+    donchian_period: 20
+    lookback_window: 60
+    min_consolidation_bars: 5
+    max_consolidation_bars: 25
+    impulse_max_age_bars: 40
+    impulse_body_atr: 1.2          # impulse bar body >= 1.2 × ATR
+    continuation_body_atr: 0.5     # entry bar body >= 0.5 × ATR
+    consolidation_max_height_atr: 2.0  # re-accumulation height <= 2 × ATR
+    adx_min_threshold: 20
+    rsi_overbought: 78
+    rsi_oversold: 22
+    ema_trend_period: 50
+    use_ema_filter: true
+    long_only: false
+    cooldown_bars: 6
+    session_hours: null            # null = all hours
+
 trading_hours:
   sessions:
     # ── ASIA (Tokyo/Sydney) 00:00–07:00 UTC — low vol, range-fade alpha ──────
@@ -476,7 +501,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [sbr, kalman_regime, momentum, smc_ob, descending_channel_breakout, mini_medallion, fibonacci_retracement]
+      strategies: [sbr, kalman_regime, momentum, smc_ob, descending_channel_breakout, mini_medallion, fibonacci_retracement, continuation_breakout]
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -484,7 +509,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, vwap, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement, continuation_breakout]
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -492,7 +517,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, sbr, mini_medallion, fibonacci_retracement, smc_ob]
+      strategies: [momentum, kalman_regime, sbr, mini_medallion, fibonacci_retracement, smc_ob, continuation_breakout]
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
