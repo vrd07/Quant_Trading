@@ -35,10 +35,11 @@ from src.strategies.asia_range_fade_strategy import AsiaRangeFadeStrategy
 from src.strategies.descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
 from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementStrategy
+from src.strategies.continuation_breakout_strategy import ContinuationBreakoutStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'smc_ob', 'fibonacci_retracement', 'all']
+STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'smc_ob', 'fibonacci_retracement', 'continuation_breakout', 'all']
 
 
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
@@ -115,6 +116,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('fibonacci_retracement', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return FibonacciRetracementStrategy(symbol, cfg)
+    elif strategy_name == 'continuation_breakout':
+        cfg = dict(strats.get('continuation_breakout', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return ContinuationBreakoutStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
