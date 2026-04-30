@@ -87,6 +87,7 @@ All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orches
 | 10 | **SMCOrderBlock** | `smc_ob_strategy.py` | 5-phase ICT order-block state machine (OB formed → touched → sweep → waiting-entry → fire) |
 | 11 | **SupplyDemand** | `supply_demand_strategy.py` | First retest of a fresh ATR-sized S/D zone after an impulse candle (currently disabled live) |
 | 12 | **AsiaRangeFade** | `asia_range_fade_strategy.py` | Range-fade for the UTC 09–14 low-volatility window with BB compression + RSI extremes |
+| 13 | **ContinuationBreakout** | `continuation_breakout_strategy.py` | Wyckoff stair-step: tight range → impulse → re-accumulation → second breakout in the same direction (disabled live, awaiting backtest) |
 
 Support modules alongside the strategies:
 - `base_strategy.py` — abstract base class
