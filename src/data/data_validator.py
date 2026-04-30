@@ -58,11 +58,18 @@ class DataValidator:
             return False  # Invalid spread
         
         # Check for price spike
-        if self._is_spike(tick):
-            return False
-        
-        # Update price history
+        is_spike = self._is_spike(tick)
+
+        # ALWAYS update price history — even for spikes — so the detector
+        # self-recovers after legitimate large moves. Gold regularly moves
+        # $20-50+ intraday; a frozen 100-tick window at old prices causes a
+        # permanent self-reinforcing lockout where every tick is rejected and
+        # the history never updates. The 100-tick rolling window naturally
+        # phases out stale prices within ~25 seconds of live data.
         self._update_price_history(tick)
+
+        if is_spike:
+            return False
         
         return True
     
