@@ -219,6 +219,37 @@ class RiskProcessor:
             tp_dist = risk * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
+        elif strategy_name == 'continuation_breakout':
+            # Continuation breakout (Wyckoff stair-step): the re-accumulation
+            # cluster is the structural anchor. If price re-enters the cluster
+            # against our direction, the continuation thesis is invalidated.
+            # SL sits just past the opposite cluster boundary by atr_mult × ATR.
+            atr = Decimal(str(signal.metadata.get('atr', 0)))
+            cluster_high = Decimal(str(signal.metadata.get('cluster_high', entry)))
+            cluster_low = Decimal(str(signal.metadata.get('cluster_low', entry)))
+            atr_mult = Decimal(str(strat_cfg.get('atr_stop_multiplier', 1.0)))
+            rr = Decimal(str(strat_cfg.get('rr_ratio', 2.0)))
+
+            sl_buffer = atr_mult * atr
+            if side == OrderSide.BUY:
+                structure_sl = cluster_low - sl_buffer
+                atr_sl = entry - (Decimal('2.0') * atr)
+                sl = min(structure_sl, atr_sl)
+                max_dist = atr * Decimal('3.0')
+                if (entry - sl) > max_dist:
+                    sl = entry - max_dist
+            else:
+                structure_sl = cluster_high + sl_buffer
+                atr_sl = entry + (Decimal('2.0') * atr)
+                sl = max(structure_sl, atr_sl)
+                max_dist = atr * Decimal('3.0')
+                if (sl - entry) > max_dist:
+                    sl = entry + max_dist
+
+            risk = abs(entry - sl)
+            tp_dist = risk * rr
+            tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
+
         else:
             # Fallback for unknown strategies (fail-safe ATR stop if available)
             self.logger.warning(f"RiskProcessor: Unknown strategy '{strategy_name}'. Using fallback.")
