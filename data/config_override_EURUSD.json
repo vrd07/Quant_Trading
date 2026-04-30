@@ -1,7 +1,7 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-04-29T18:45:25.725217+00:00",
-  "valid_until": "2026-04-30T18:45:25.725217+00:00",
+  "generated_at": "2026-04-30T04:56:45.428445+00:00",
+  "valid_until": "2026-05-01T04:56:45.428445+00:00",
   "regime": "TREND",
   "confidence": 0.55,
   "classifier": "rule-based",
@@ -18,7 +18,7 @@
     "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true,
-    "continuation_breakout": false
+    "continuation_breakout": true
   },
   "diagnostics": {
     "adx_14": 38.971096,
