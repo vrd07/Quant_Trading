@@ -163,11 +163,19 @@ class BacktestEngine:
         elif not isinstance(bars.index, pd.DatetimeIndex):
             bars.index = pd.to_datetime(bars.index)
 
-        # Filter by date range
+        # Filter by date range — coerce CLI strings to match the bars' tz.
+        idx_tz = getattr(bars.index, 'tz', None)
+        def _coerce(d):
+            ts = pd.to_datetime(d)
+            if idx_tz is not None and ts.tzinfo is None:
+                ts = ts.tz_localize(idx_tz)
+            elif idx_tz is None and ts.tzinfo is not None:
+                ts = ts.tz_convert(None)
+            return ts
         if start_date:
-            bars = bars[bars.index >= pd.to_datetime(start_date)]
+            bars = bars[bars.index >= _coerce(start_date)]
         if end_date:
-            bars = bars[bars.index <= pd.to_datetime(end_date)]
+            bars = bars[bars.index <= _coerce(end_date)]
 
         self.logger.info(f"Bars After Date Filter: {len(bars)}")
         self.logger.info(f"Date Range: {bars.index[0]} to {bars.index[-1]}")
