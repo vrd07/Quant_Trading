@@ -299,7 +299,7 @@ class TestDynamicWeighting:
             "breakout", "momentum", "kalman_regime", "mean_reversion",
             "vwap", "mini_medallion", "sbr", "supply_demand",
             "asia_range_fade", "descending_channel_breakout", "smc_ob",
-            "fibonacci_retracement",
+            "fibonacci_retracement", "continuation_breakout",
         }
         for regime in REGIMES:
             keys = set(STRATEGY_WEIGHTS[regime].keys())
