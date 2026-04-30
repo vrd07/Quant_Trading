@@ -129,6 +129,21 @@ class DataEngine:
             if loaded > 0:
                 results[symbol_ticker] = loaded
 
+        # Seed the DataValidator's price_history from preloaded bars so the
+        # spike detector has a realistic price distribution from the start.
+        # Without this, the first 100 live ticks (≈25s) cluster tightly
+        # around the current price, giving a tiny std — then normal gold
+        # moves get flagged as "spikes" and cause a permanent lockout.
+        for symbol_ticker in results:
+            bars_1m = self.candle_stores[symbol_ticker]['1m'].get_bars(count=100)
+            if not bars_1m.empty:
+                closes = [Decimal(str(row['close'])) for _, row in bars_1m.iterrows()]
+                self.data_validator.price_history[symbol_ticker] = closes[-100:]
+                logger.info(
+                    f"Seeded spike detector for {symbol_ticker} with "
+                    f"{len(closes[-100:])} historical close prices"
+                )
+
         return results
 
     def _preload_from_mt5(self, symbol_ticker: str, symbol, bars_count: int) -> int:
