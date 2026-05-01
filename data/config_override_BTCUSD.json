@@ -1,10 +1,10 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-05-01T12:25:21.732861+00:00",
-  "valid_until": "2026-05-02T12:25:21.732861+00:00",
+  "generated_at": "2026-05-01T12:37:19.986817+00:00",
+  "valid_until": "2026-05-02T12:37:19.986817+00:00",
   "regime": "RANGE",
-  "confidence": 0.7651,
-  "classifier": "RandomForest+Markov (n=35 samples)",
+  "confidence": 0.8154,
+  "classifier": "RandomForest+Markov (n=34 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -17,19 +17,18 @@
     "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
-    "fibonacci_retracement": true,
-    "continuation_breakout": false
+    "fibonacci_retracement": true
   },
   "diagnostics": {
-    "adx_14": 30.235759,
-    "atr_pct": 0.028553,
-    "bb_width_ratio": 0.835484,
-    "close_ema20_pct": 0.030951,
-    "momentum_1d": -0.011763,
-    "momentum_5d": -0.006649,
-    "range_atr_ratio": 0.91778,
-    "vol_ratio": 4e-06,
-    "park_vol_zscore": -2.573749
+    "adx_14": 29.059685,
+    "atr_pct": 0.028364,
+    "bb_width_ratio": 0.8593,
+    "close_ema20_pct": 0.047237,
+    "momentum_1d": 0.013682,
+    "momentum_5d": 0.030235,
+    "range_atr_ratio": 0.714206,
+    "vol_ratio": 0.226225,
+    "park_vol_zscore": -2.23644
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -43,14 +42,13 @@
     "asia_range_fade": 0.7,
     "descending_channel_breakout": 0.45,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5,
-    "continuation_breakout": 0.3
+    "fibonacci_retracement": 0.5
   },
   "performance_scores": {},
   "regime_probabilities": {
-    "TREND": 0.2266,
-    "RANGE": 0.7651,
-    "VOLATILE": 0.0083
+    "TREND": 0.176,
+    "RANGE": 0.8154,
+    "VOLATILE": 0.0086
   },
   "transition_matrix": {
     "TREND": {
@@ -59,9 +57,9 @@
       "VOLATILE": 0.2
     },
     "RANGE": {
-      "TREND": 0.0833,
-      "RANGE": 0.8889,
-      "VOLATILE": 0.0278
+      "TREND": 0.0857,
+      "RANGE": 0.8857,
+      "VOLATILE": 0.0286
     },
     "VOLATILE": {
       "TREND": 0.3333,
