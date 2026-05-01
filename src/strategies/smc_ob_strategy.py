@@ -2,6 +2,12 @@
 SMC Order Block (OB) Strategy — Pure SMC/ICT trade logic for XAUUSD.
 Trades BOTH BUY and SELL setups as mirror-image 5-phase state machines.
 
+PDF-aligned filters (Advanced SMC & Price Action Course — Taufiq Sayyedd):
+  - Module 5/6: Rejection-wick quality on sweep candle (min_rejection_wick_ratio).
+  - Module 2:   Equal-Highs/Lows liquidity-target detection near OB zone.
+  - Module 6:   Strong-close confirmation on the entry break candle.
+  - Module 5:   Killzone session hours (config-only — session_hours already supported).
+
 BUY Setup:
   1. Bearish impulse candle opens from a swing-HIGH area (new sellers active).
   2. Last bearish candle before impulse = Demand OB zone {high, low}.
@@ -196,6 +202,170 @@ def _build_ob_zone(bars: pd.DataFrame, impulse_iloc: int) -> Optional[Dict[str, 
         return None
 
     return {"high": ob_high, "low": ob_low}
+
+
+def _has_rejection_wick(
+    bar_high: float,
+    bar_low: float,
+    bar_open: float,
+    bar_close: float,
+    direction: str,
+    min_ratio: float,
+) -> bool:
+    """Return True when the sweep candle shows a quality rejection wick.
+
+    Module 5/6: "Strong momentum candle which sweeps HTF highs/lows" +
+    "candle should close at highs or lows".
+
+    For BUY sweeps the rejection wick is the LOWER wick; its length must be
+    >= min_ratio × total candle range.  Mirror for SELL.
+
+    Args:
+        bar_high, bar_low, bar_open, bar_close: OHLC of the sweep candle.
+        direction: DIR_BUY or DIR_SELL.
+        min_ratio: Minimum wick-to-range ratio (0.0–1.0).
+
+    Returns:
+        True when the wick on the sweep side meets the quality threshold.
+    """
+    candle_range = bar_high - bar_low
+    if candle_range <= 0:
+        return False
+
+    body_low = min(bar_open, bar_close)
+    body_high = max(bar_open, bar_close)
+
+    if direction == DIR_BUY:
+        # Lower wick = distance from bar_low to body_low
+        wick = body_low - bar_low
+    else:
+        # Upper wick = distance from body_high to bar_high
+        wick = bar_high - body_high
+
+    return (wick / candle_range) >= min_ratio
+
+
+def _find_equal_pivots(
+    bars: pd.DataFrame,
+    direction: str,
+    atr: float,
+    epsilon_mult: float,
+    min_pivots: int,
+    lookback: int,
+    ob_level: float,
+    proximity_mult: float,
+) -> Optional[Dict[str, Any]]:
+    """Detect equal-highs or equal-lows clusters near the OB boundary.
+
+    Module 2: "Above equal highs / Below equal lows / Tight consolidation
+    zones". Liquidity sits at clusters of equal swing pivots — that's the
+    magnet smart money targets.
+
+    For BUY setups: find >= min_pivots swing-LOW pivots within
+    epsilon_mult * ATR of each other, near the OB low (within
+    proximity_mult * ATR).  Mirror for SELL.
+
+    Args:
+        bars: OHLCV DataFrame.
+        direction: DIR_BUY or DIR_SELL.
+        atr: Current ATR value.
+        epsilon_mult: Max spread between pivots as ATR multiple.
+        min_pivots: Minimum number of equal pivots to qualify.
+        lookback: Number of bars to scan for pivots.
+        ob_level: The OB boundary (low for BUY, high for SELL).
+        proximity_mult: Max distance from ob_level as ATR multiple.
+
+    Returns:
+        {'count': int, 'level': float, 'spread': float} or None.
+    """
+    n = len(bars)
+    if n < lookback + 4 or atr <= 0:
+        return None
+
+    epsilon = epsilon_mult * atr
+    proximity = proximity_mult * atr
+    start = max(0, n - lookback)
+
+    hi = bars["high"].values
+    lo = bars["low"].values
+
+    # Collect simple 3-bar swing pivots in the scan window
+    pivots: list[float] = []
+    for i in range(start + 1, n - 1):
+        if direction == DIR_BUY:
+            # Swing low: low[i] < low[i-1] and low[i] < low[i+1]
+            if lo[i] < lo[i - 1] and lo[i] < lo[i + 1]:
+                if abs(lo[i] - ob_level) <= proximity:
+                    pivots.append(float(lo[i]))
+        else:
+            # Swing high: high[i] > high[i-1] and high[i] > high[i+1]
+            if hi[i] > hi[i - 1] and hi[i] > hi[i + 1]:
+                if abs(hi[i] - ob_level) <= proximity:
+                    pivots.append(float(hi[i]))
+
+    if len(pivots) < min_pivots:
+        return None
+
+    # Cluster: sort and find the largest group within epsilon
+    pivots.sort()
+    best_count = 0
+    best_level = 0.0
+    best_spread = 0.0
+
+    for i in range(len(pivots)):
+        cluster = [pivots[i]]
+        for j in range(i + 1, len(pivots)):
+            if pivots[j] - pivots[i] <= epsilon:
+                cluster.append(pivots[j])
+            else:
+                break
+        if len(cluster) > best_count:
+            best_count = len(cluster)
+            best_level = sum(cluster) / len(cluster)
+            best_spread = cluster[-1] - cluster[0]
+
+    if best_count >= min_pivots:
+        return {
+            "count": best_count,
+            "level": round(best_level, 2),
+            "spread": round(best_spread, 4),
+        }
+    return None
+
+
+def _is_strong_close(
+    bar_open: float,
+    bar_high: float,
+    bar_low: float,
+    bar_close: float,
+    direction: str,
+    threshold: float,
+) -> bool:
+    """Return True when the entry-break candle closes in the strong zone.
+
+    Module 6: "candle should close at highs or lows".
+    BUY: close must be in the top `threshold` fraction of the candle range.
+    SELL: close must be in the bottom `threshold` fraction.
+
+    Args:
+        bar_open, bar_high, bar_low, bar_close: OHLC of entry candle.
+        direction: DIR_BUY or DIR_SELL.
+        threshold: Fraction of range (e.g. 0.35 = top/bottom 35%).
+
+    Returns:
+        True when the close sits in the strong zone.
+    """
+    candle_range = bar_high - bar_low
+    if candle_range <= 0:
+        return True  # Doji — pass through, other filters gate quality
+
+    position = (bar_close - bar_low) / candle_range  # 0.0 = low, 1.0 = high
+
+    if direction == DIR_BUY:
+        return position >= (1.0 - threshold)
+    else:
+        return position <= threshold
+
 
 
 def _price_in_zone(
@@ -515,6 +685,23 @@ class SMCOrderBlockStrategy(BaseStrategy):
         self.cooldown_bars: int              = config.get("cooldown_bars", 10)
         self._bars_since_signal: int         = self.cooldown_bars
 
+        # PDF Module 5/6: Rejection-wick quality on the sweep candle.
+        # Wick on sweep side must be >= this fraction of the candle range.
+        self.min_rejection_wick_ratio: float = config.get("min_rejection_wick_ratio", 0.40)
+
+        # PDF Module 2: Equal-highs/lows liquidity-target requirement.
+        # When enabled, the sweep wick must take out a cluster of equal pivots.
+        self.require_equal_pivots: bool         = config.get("require_equal_pivots", False)
+        self.equal_pivot_epsilon_atr: float     = config.get("equal_pivot_epsilon_atr", 0.15)
+        self.equal_pivot_min_count: int         = config.get("equal_pivot_min_count", 2)
+        self.equal_pivot_lookback: int          = config.get("equal_pivot_lookback", 60)
+        self.equal_pivot_proximity_atr: float   = config.get("equal_pivot_proximity_atr", 1.5)
+
+        # PDF Module 6: Strong-close on the entry break candle.
+        # Close must sit in top/bottom `strong_close_threshold` of the range.
+        self.require_strong_close: bool      = config.get("require_strong_close", True)
+        self.strong_close_threshold: float   = config.get("strong_close_threshold", 0.40)
+
         # EMA trend filter: only BUY when price > EMA, only SELL when price < EMA.
         # Prevents shorting into a bull run and buying into a bear trend.
         self.use_ema_trend_filter: bool = config.get("use_ema_trend_filter", True)
@@ -572,6 +759,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
         self._trigger_low  = None
         self._sl_level     = None
         self._sweep_close  = None
+        self._equal_pivots_meta: Optional[Dict[str, Any]] = None
 
     def _start_cycle(self, direction: str, ob_zone: Dict[str, float]) -> None:
         """Transition to OB_FORMED with a fresh zone."""
@@ -583,6 +771,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
         self._trigger_low  = None
         self._sl_level     = None
         self._sweep_close  = None
+        self._equal_pivots_meta = None
         self.logger.info(
             "SMC OB zone formed",
             direction=direction,
@@ -729,6 +918,29 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if _is_liquidity_sweep_buy(current_low, current_close, self._ob_zone["low"]):
+                    # PDF Module 5/6: Rejection-wick quality gate
+                    if not _has_rejection_wick(
+                        current_high, current_low, current_open, current_close,
+                        DIR_BUY, self.min_rejection_wick_ratio,
+                    ):
+                        self._log_no_signal("BUY sweep: rejection wick too small")
+                        return None
+
+                    # PDF Module 2: Equal-lows liquidity target
+                    if self.require_equal_pivots:
+                        eq = _find_equal_pivots(
+                            bars, DIR_BUY, current_atr,
+                            self.equal_pivot_epsilon_atr,
+                            self.equal_pivot_min_count,
+                            self.equal_pivot_lookback,
+                            self._ob_zone["low"],
+                            self.equal_pivot_proximity_atr,
+                        )
+                        if eq is None:
+                            self._log_no_signal("BUY sweep: no equal-lows cluster near OB")
+                            return None
+                        self._equal_pivots_meta = eq
+
                     self._state       = SWEEP_CONFIRMED
                     self._sweep_close = current_close
                     self.logger.info(
@@ -746,6 +958,29 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if _is_liquidity_sweep_sell(current_high, current_close, self._ob_zone["high"]):
+                    # PDF Module 5/6: Rejection-wick quality gate
+                    if not _has_rejection_wick(
+                        current_high, current_low, current_open, current_close,
+                        DIR_SELL, self.min_rejection_wick_ratio,
+                    ):
+                        self._log_no_signal("SELL sweep: rejection wick too small")
+                        return None
+
+                    # PDF Module 2: Equal-highs liquidity target
+                    if self.require_equal_pivots:
+                        eq = _find_equal_pivots(
+                            bars, DIR_SELL, current_atr,
+                            self.equal_pivot_epsilon_atr,
+                            self.equal_pivot_min_count,
+                            self.equal_pivot_lookback,
+                            self._ob_zone["high"],
+                            self.equal_pivot_proximity_atr,
+                        )
+                        if eq is None:
+                            self._log_no_signal("SELL sweep: no equal-highs cluster near OB")
+                            return None
+                        self._equal_pivots_meta = eq
+
                     self._state       = SWEEP_CONFIRMED
                     self._sweep_close = current_close
                     self.logger.info(
@@ -812,6 +1047,14 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if current_high > self._trigger_high:
+                    # PDF Module 6: Strong-close confirmation
+                    if self.require_strong_close and not _is_strong_close(
+                        current_open, current_high, current_low, current_close,
+                        DIR_BUY, self.strong_close_threshold,
+                    ):
+                        self._log_no_signal("BUY: entry candle close not in top zone")
+                        return None
+
                     fvg_meta = self._check_fvg_confluence(bars, current_atr)
                     if self.require_fvg_confluence and fvg_meta is None:
                         self._log_no_signal("BUY: no unmitigated FVG near OB — skipping entry")
@@ -832,6 +1075,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         sweep_low=current_low,
                         fvg_meta=fvg_meta,
                         structure_meta=structure_meta,
+                        equal_pivots_meta=getattr(self, '_equal_pivots_meta', None),
                     )
 
             else:  # DIR_SELL
@@ -844,6 +1088,14 @@ class SMCOrderBlockStrategy(BaseStrategy):
                     return None
 
                 if current_low < self._trigger_low:
+                    # PDF Module 6: Strong-close confirmation
+                    if self.require_strong_close and not _is_strong_close(
+                        current_open, current_high, current_low, current_close,
+                        DIR_SELL, self.strong_close_threshold,
+                    ):
+                        self._log_no_signal("SELL: entry candle close not in bottom zone")
+                        return None
+
                     fvg_meta = self._check_fvg_confluence(bars, current_atr)
                     if self.require_fvg_confluence and fvg_meta is None:
                         self._log_no_signal("SELL: no unmitigated FVG near OB — skipping entry")
@@ -864,6 +1116,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
                         sweep_high=current_high,
                         fvg_meta=fvg_meta,
                         structure_meta=structure_meta,
+                        equal_pivots_meta=getattr(self, '_equal_pivots_meta', None),
                     )
 
         self._log_no_signal(
@@ -918,6 +1171,7 @@ class SMCOrderBlockStrategy(BaseStrategy):
         sweep_high: float = 0.0,
         fvg_meta: Optional[Dict[str, float]] = None,
         structure_meta: Optional[Dict[str, Any]] = None,
+        equal_pivots_meta: Optional[Dict[str, Any]] = None,
     ) -> Optional[Signal]:
         """Validate, compute strength, reset state, and emit the signal."""
         assert self._ob_zone is not None
@@ -1019,6 +1273,10 @@ class SMCOrderBlockStrategy(BaseStrategy):
             metadata["structure_level"] = round(structure_meta["level"], 2)
             metadata["structure_confirmed_age"] = int(structure_meta["confirmed_age"])
             metadata["structure_pivot_age"]     = int(structure_meta["pivot_age"])
+        if equal_pivots_meta is not None:
+            metadata["equal_pivot_count"]  = int(equal_pivots_meta["count"])
+            metadata["equal_pivot_level"]  = equal_pivots_meta["level"]
+            metadata["equal_pivot_spread"] = equal_pivots_meta["spread"]
 
         return self._create_signal(
             side=side,
