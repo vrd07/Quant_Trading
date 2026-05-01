@@ -1,0 +1,113 @@
+environment: backtest
+
+account:
+  initial_balance: 50000.0
+  currency: USD
+  leverage: 100
+
+symbols:
+  XAUUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.10
+    max_lot: 0.10
+    lot_step: 0.01
+    value_per_lot: 100
+    commission_per_lot: 0.0
+    leverage: 30
+    min_stops_distance: 1.0
+    max_spread: 3.5
+
+risk:
+  max_drawdown_pct: 0.10
+  max_daily_loss_pct: 0.05
+  risk_per_trade_pct: 0.01
+  absolute_max_loss_usd: 2500
+  max_drawdown_usd: 5000
+  max_daily_profit_usd: 5000
+  daily_loss_budget_safety_pct: 0.85
+  max_positions: 5
+  max_daily_trades: 50
+  max_exposure_per_symbol_pct: 5.0
+  max_daily_wins: 20
+
+  position_sizing:
+    method: fixed
+    fixed_lots:
+      XAUUSD: 0.10
+      default: 0.10
+
+  circuit_breaker:
+    enabled: false
+    max_consecutive_losses: 10
+    cooldown_minutes: 0
+    loss_pause_consecutive: 10
+    loss_pause_minutes: 0
+
+  trading_windows:
+    enabled: false
+    blocked_hours_utc: []
+
+  manual_guard:
+    enabled: false
+
+  trailing_stop:
+    enabled: true
+    breakeven_atr_mult: 1.2
+    lock_atr_mult: 2.0
+    lock_fraction: 0.5
+    ml_exhaustion_factor: 0.8
+
+strategies:
+  signal_cooldown_minutes: 5
+  primary_timeframe: 5m
+  min_bars_required: 5
+
+  smc_ob:
+    enabled: true
+    timeframe: 5m
+    long_only: true
+    swing_lookback: 5
+    min_impulse_atr_mult: 0.5
+    ob_max_age_bars: 120
+    ob_touch_tolerance_atr: 1.0
+    cooldown_bars: 3
+    adx_min_threshold: 8
+    use_ema_trend_filter: true
+    ema_trend_period: 50
+    liquidity_premium_mult: 15.0
+    min_liquidity_premium_mult: 8.0
+    max_sl_atr: 4.0
+    min_sl_atr: 0.05
+    require_fvg_confluence: true
+    fvg_ob_proximity_atr: 2.0
+    fvg_max_age_bars: 50
+    min_rejection_wick_ratio: 0.40
+    require_equal_pivots: false
+    equal_pivot_epsilon_atr: 0.15
+    equal_pivot_min_count: 2
+    equal_pivot_lookback: 60
+    equal_pivot_proximity_atr: 1.5
+    require_strong_close: true
+    strong_close_threshold: 0.40
+
+trading_hours:
+  sessions:
+    - name: london
+      start: "07:00"
+      end: "12:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [smc_ob]
+    - name: overlap
+      start: "12:00"
+      end: "16:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [smc_ob]
+    - name: new_york
+      start: "16:00"
+      end: "22:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [smc_ob]
