@@ -187,6 +187,7 @@ class TradingSystem:
 
         # ── Trailing stop manager ────────────────────────────────────────
         self._trailing_stop_mgr: Optional[TrailingStopManager] = None
+        self._trailing_stop_fail_streak: int = 0
         
         # Shutdown handler
         signal.signal(signal.SIGINT, self._signal_handler)
@@ -467,17 +468,27 @@ class TradingSystem:
     
     def _manage_trailing_stops(self) -> None:
         """
-        Called every main-loop iteration.
-        Moves SL to breakeven (at +1×ATR) and locks partial profit (at +1.5×ATR).
+        Throttled to 1 Hz (every 4th 250ms iteration). Trailing logic only
+        needs second-resolution data; polling 4×/sec just multiplied bridge
+        timeout errors without changing SL behaviour.
         """
         if self._trailing_stop_mgr is None or self.connector is None:
+            return
+        if self.loop_iteration % 4 != 0:
             return
         try:
             positions = self.connector.get_positions()
             self._trailing_stop_mgr.cleanup_closed(set(positions.keys()))
             self._trailing_stop_mgr.update(positions, self.connector)
+            self._trailing_stop_fail_streak = 0
         except Exception as e:
-            self.logger.warning(f"Trailing stop update error (non-critical): {e}")
+            self._trailing_stop_fail_streak += 1
+            # Log the first failure and then every 5th to surface persistent
+            # bridge issues without flooding the log on transient hiccups.
+            if self._trailing_stop_fail_streak == 1 or self._trailing_stop_fail_streak % 5 == 0:
+                self.logger.warning(
+                    f"Trailing stop update error (streak={self._trailing_stop_fail_streak}): {e}"
+                )
 
     def _refresh_manual_position_tracker(self) -> None:
         """Refresh the manual position tracker with current MT5 positions.
