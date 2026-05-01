@@ -412,7 +412,7 @@ void WriteStatus()
 
    for(int i = 0; i < maxRetries; i++)
    {
-      handle = FileOpen(StatusFile, FILE_WRITE|FILE_TXT|FILE_COMMON);
+      handle = FileOpen(StatusFile, FILE_WRITE|FILE_TXT|FILE_COMMON|FILE_SHARE_READ|FILE_SHARE_WRITE);
       if(handle != INVALID_HANDLE)
          break;
       Sleep(20);
@@ -1051,12 +1051,28 @@ bool SendOrderWithRetry(MqlTradeRequest& request, MqlTradeResult& result)
 
 void WriteResponse(string json)
 {
-   // Carmack: retry loop matches WriteStatus — prevents lost responses
-   // when Python reads the file at the same instant we try to write.
-   int handle = INVALID_HANDLE;
-   for(int i = 0; i < 20; i++)
+   // Stamp response with the request_ts of the command currently in
+   // lastCommandContent so Python can match request → response and reject
+   // stale ones (a timed-out send whose answer arrives after the retry).
+   string request_ts = ExtractJsonValue(lastCommandContent, "timestamp");
+   if(request_ts != "")
    {
-      handle = FileOpen(ResponseFile, FILE_WRITE|FILE_TXT|FILE_COMMON);
+      // Insert "request_ts":<ts>, right after the opening brace.
+      int brace = StringFind(json, "{");
+      if(brace >= 0)
+         json = StringSubstr(json, 0, brace + 1)
+              + "\"request_ts\":" + request_ts + ","
+              + StringSubstr(json, brace + 1);
+   }
+
+   // SHARE_READ|SHARE_WRITE: without these, Python's read-open holds an
+   // exclusive handle and our FileOpen returns INVALID_HANDLE every time —
+   // the response is silently lost and Python times out after 5s. This was
+   // the dominant source of "No response from MT5" errors in production.
+   int handle = INVALID_HANDLE;
+   for(int i = 0; i < 200; i++)  // 200 × 5ms = 1s budget (was 100ms)
+   {
+      handle = FileOpen(ResponseFile, FILE_WRITE|FILE_TXT|FILE_COMMON|FILE_SHARE_READ|FILE_SHARE_WRITE);
       if(handle != INVALID_HANDLE) break;
       Sleep(5);
    }
@@ -1067,7 +1083,9 @@ void WriteResponse(string json)
    }
    else
    {
-      Print("WriteResponse FAILED after 20 retries — response lost: ", StringSubstr(json, 0, 80));
+      // Log the full payload so we can identify which command was dropped.
+      Print("WriteResponse FAILED after 200 retries — response lost. request_ts=",
+            request_ts, " payload=", json);
    }
 }
 
