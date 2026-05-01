@@ -102,9 +102,10 @@ strategies:
     only_in_regime: RANGE
     mtf_confirmation: false
   
-  # VWAP Deviation Strategy 
+  # VWAP Deviation Strategy
   vwap:
     enabled: true
+    timeframe: 15m
     atr_multiplier: 1.5
     stop_atr_multiplier: 2.0
     atr_period: 14

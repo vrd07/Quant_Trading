@@ -204,7 +204,7 @@ strategies:
 
   vwap:
     enabled: true               # v4: enabled as low-freq diversifier — PF 1.85, 50% WR (6mo)
-    timeframe: 5m
+    timeframe: 15m
     band_std_mult: 1.0          # v4: 2σ rarely touched on 5m gold → 1σ
     partial_std_mult: 0.3
     stop_atr_multiplier: 1.8
@@ -283,7 +283,7 @@ strategies:
   # v2 changes: long-only, session filter, lower threshold, higher RR, ADX filter
   mini_medallion:
     enabled: true                   # v5: backtest-validated tuning — 51% WR, PF 1.31, 6.9% annualized
-    timeframe: 5m
+    timeframe: 15m
     score_threshold: 3.5            # v5: stronger conviction gate
     cooldown_bars: 10
     risk_atr_multiplier: 2.2        # v5: widened SL — tight stops were noise-tagged (77% SL rate)
@@ -312,7 +312,7 @@ strategies:
   # v2: +5.30%, PF 1.88, DD 1.61% — EMA trend + session filter + strength gate
   sbr:
     enabled: true
-    timeframe: 5m
+    timeframe: 15m
     lookback_period: 20
     retest_tolerance_atr: 0.4
     min_rejection_ratio: 0.55
@@ -357,7 +357,7 @@ strategies:
   # 214 trades, WR 45.3%, PF 1.31, DD 1.6% on $10k.
   asia_range_fade:
     enabled: true
-    timeframe: 5m
+    timeframe: 15m
     session_hours: [9, 10, 11, 12, 13]
     lookback_bars: 20
     adx_max: 28.0
