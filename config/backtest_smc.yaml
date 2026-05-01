@@ -83,7 +83,7 @@ strategies:
     fvg_ob_proximity_atr: 2.0
     fvg_max_age_bars: 50
     min_rejection_wick_ratio: 0.40
-    require_equal_pivots: false
+    require_equal_pivots: true
     equal_pivot_epsilon_atr: 0.15
     equal_pivot_min_count: 2
     equal_pivot_lookback: 60
