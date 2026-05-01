@@ -40,6 +40,7 @@ paper_trading.log
 trading_system.pid
 syntax_result.txt
 test_output_tool.txt
+*.txt
 *.log
 
 # ============================================
