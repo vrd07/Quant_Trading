@@ -127,7 +127,7 @@ risk:
   # News/high-loss blackout — suppresses ALL orders during these UTC hours.
   trading_windows:
     enabled: true
-    blocked_hours_utc: [14, 15, 16]
+    blocked_hours_utc: []
 
   # Per-trade + daily cap enforcement for manual MT5 clicks.
   manual_guard:

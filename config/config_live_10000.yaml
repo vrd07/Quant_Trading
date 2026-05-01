@@ -134,7 +134,7 @@ risk:
   # 14h-16h UTC lost $196 of $400 total bleed. Block those hours.
   trading_windows:
     enabled: true
-    blocked_hours_utc: [14, 15, 16]    # London close + US news overlap
+    blocked_hours_utc: []    # London close + US news overlap
 
   # 'manual'-tagged orders accounted for -$358 of -$400 net. Cap the daily
   # bleed from manual, and halve position size while discipline is proven.
