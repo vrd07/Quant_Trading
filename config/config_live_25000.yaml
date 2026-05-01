@@ -441,7 +441,7 @@ strategies:
     # PDF Module 2: Equal-highs/lows liquidity-target cluster.
     # When true, sweep must take out a cluster of equal swing pivots.
     # Off by default -- enable after backtesting on your pair/TF.
-    require_equal_pivots: false
+    require_equal_pivots: true
     equal_pivot_epsilon_atr: 0.15
     equal_pivot_min_count: 2
     equal_pivot_lookback: 60
