@@ -16,11 +16,14 @@ Usage:
 import json
 import time
 import os
+import threading
 from pathlib import Path
 from datetime import datetime
 
 class MT5FileClient:
     """File-based client for MT5 communication."""
+
+    _send_lock = threading.Lock()
     
     def __init__(self, data_dir=None):
         """
@@ -39,7 +42,8 @@ class MT5FileClient:
         self.data_dir = Path(data_dir).expanduser()
         
         self.command_file = self.data_dir / "mt5_commands.json"
-        self.status_file = self.data_dir / "mt5_status.json"
+        self.command_tmp  = self.data_dir / "mt5_commands.json.tmp"
+        self.status_file  = self.data_dir / "mt5_status.json"
         self.response_file = self.data_dir / "mt5_responses.json"
         
         # Create directory if it doesn't exist
@@ -111,51 +115,67 @@ class MT5FileClient:
 
 
     
-    def send_command(self, command_dict, timeout=5):
+    def send_command(self, command_dict, timeout=5, retry_on_timeout=False):
         """
         Send a command and wait for response.
 
         Args:
             command_dict: Dictionary containing command data
             timeout: Maximum seconds to wait for response
+            retry_on_timeout: If True, retry once on TimeoutError before
+                raising. Off by default — a retry doubles the worst-case
+                blocking time of the 250ms trading loop on a real broker
+                outage. Opt in only for idempotent paths where a dropped
+                response is more likely than a real outage.
 
         Returns:
             dict: Response from MT5
         """
-        # Clear old response file
-        if self.response_file.exists():
-            self.response_file.unlink()
-        
-        # Small delay to ensure file is deleted
-        time.sleep(0.05)
-        
-        # Add timestamp and AuthToken for security (Mitnick rule)
-        command_dict['timestamp'] = time.time()
+        # Serialize concurrent callers — multiple threads writing the same
+        # command/response files race and clobber each other's payloads.
+        with self._send_lock:
+            try:
+                return self._send_once(command_dict, timeout)
+            except TimeoutError:
+                if not retry_on_timeout:
+                    raise
+                return self._send_once(command_dict, timeout)
+
+    def _send_once(self, command_dict, timeout):
+        # Stamp request — used to match response and reject stale ones from
+        # a previous (timed-out) send that the EA answered late.
+        request_ts = time.time()
+        command_dict['timestamp'] = request_ts
         command_dict['auth'] = "ANTIGRAVITY_TOKEN"
-        
-        # Write command in UTF-16 format (MT5 expects this)
-        with open(self.command_file, 'w', encoding='utf-16') as f:
+
+        # Atomic command write: write to .tmp then os.replace().
+        # MT5 EA polls every 20ms — a non-atomic open('w') exposes a window
+        # where the file is empty/half-written and the EA reads garbage.
+        with open(self.command_tmp, 'w', encoding='utf-16') as f:
             json.dump(command_dict, f)
-        
-        # Wait for response file to be created
+        os.replace(self.command_tmp, self.command_file)
+
+        # Poll for a response that matches our request timestamp.
         start_time = time.time()
-        
+        last_seen_ts = None
         while time.time() - start_time < timeout:
-            if self.response_file.exists():
-                try:
-                    # Small delay to ensure file is fully written
-                    time.sleep(0.05)
-                    
-                    # MT5 writes files in UTF-16 format with BOM
-                    with open(self.response_file, 'r', encoding='utf-16') as f:
-                        response = json.load(f)
-                        return response
-                except (json.JSONDecodeError, FileNotFoundError, UnicodeDecodeError):
-                    # File not ready yet, wait and retry
-                    pass
+            try:
+                with open(self.response_file, 'r', encoding='utf-16') as f:
+                    response = json.load(f)
+                resp_ts = response.get('request_ts')
+                if resp_ts is None or resp_ts == request_ts:
+                    return response
+                last_seen_ts = resp_ts
+            except (json.JSONDecodeError, FileNotFoundError, UnicodeDecodeError, OSError):
+                # FileNotFoundError = EA hasn't written yet; OSError covers
+                # Windows sharing-violation while EA is mid-write.
+                pass
             time.sleep(0.02)
-        
-        raise TimeoutError(f"No response from MT5 after {timeout} seconds")
+
+        msg = f"No response from MT5 after {timeout} seconds"
+        if last_seen_ts is not None:
+            msg += f" (last stale response_ts={last_seen_ts}, expected {request_ts})"
+        raise TimeoutError(msg)
     
     def get_status(self):
         """
