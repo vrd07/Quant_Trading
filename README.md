@@ -3,6 +3,8 @@
 > **This guide is written for non-technical users who want to run the trading bot on a fresh Windows 11 PC.**
 > No coding knowledge needed — just follow each step in order.
 
+📄 **For the full system design, all 13 strategies, the risk engine, and the empirical lessons — read the research paper:** [`RESEARCH_PAPER.md`](RESEARCH_PAPER.md)
+
 ---
 
 ## ⚠️ Important Disclaimer
