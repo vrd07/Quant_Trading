@@ -1,16 +1,85 @@
-# 📈 Quant Trading Bot — Windows 11 Setup Guide
+# Quant Trading System
 
-> **This guide is written for non-technical users who want to run the trading bot on a fresh Windows 11 PC.**
-> No coding knowledge needed — just follow each step in order.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
+[![Platform: MetaTrader 5](https://img.shields.io/badge/platform-MetaTrader%205-orange.svg)](https://www.metatrader5.com/)
+[![Stars](https://img.shields.io/github/stars/vrd07/Quant_Trading?style=social)](https://github.com/vrd07/Quant_Trading/stargazers)
+[![Last Commit](https://img.shields.io/github/last-commit/vrd07/Quant_Trading)](https://github.com/vrd07/Quant_Trading/commits/main)
 
-📄 **For the full system design, all 13 strategies, the risk engine, and the empirical lessons — read the research paper:** [`RESEARCH_PAPER.md`](RESEARCH_PAPER.md)
+> A production-grade multi-strategy algorithmic trading system for **XAUUSD** (spot gold), BTC, ETH, and EUR/USD on **MetaTrader 5**. Built to survive prop-firm risk rules — daily-loss caps, trailing drawdowns, and one-strike-you're-out evaluations.
+
+📄 **[Read the full research paper →](RESEARCH_PAPER.md)** *(15,500 words covering every subsystem)*
 
 ---
+
+## ✨ What makes it different
+
+- **13 independent strategies** — Kalman regime, Donchian breakout, momentum, VWAP reversion, a 10-signal Mini Medallion composite, SMC order blocks with FVG confluence, Wyckoff continuation, Fibonacci golden zone, descending channel, Asia range fade, and more — each independently configurable, regime-gated, and session-whitelisted.
+- **A 16-step risk engine** that has absolute veto power over every order. No order reaches MT5 without passing kill-switch, circuit-breaker, hour-blackout, daily-loss budget, drawdown, exposure, and per-trade-risk checks. Any breach trips a one-way kill switch that requires manual reset.
+- **A nightly ML regime classifier** (RandomForest + Markov chain smoother + RL-lite performance feedback) that rewrites strategy weights once per UTC day so the system adapts to TREND / RANGE / VOLATILE regimes without code changes.
+- **Crash-safe state management** — every state mutation is serialised to disk every 10 seconds; a power outage at 03:00 UTC produces a recoverable system at 03:01 UTC.
+- **Cross-platform** — runs on Windows natively and on macOS / Linux via Wine-hosted MT5; the file-based bridge speaks the same protocol on every OS.
+- **Audit-driven, not vibes-driven** — every parameter in the live config is annotated with the backtest or production-audit decision that produced it.
+
+## 📊 The strategy stack
+
+| # | Strategy | TF | Style | Regime | Live |
+|---|---|---|---|---|---|
+| 1 | Kalman Regime | 15m | Trend / OU mean-rev hybrid | TREND + RANGE | ✅ |
+| 2 | Breakout | 5m | Donchian + multi-TF + BB squeeze | TREND | ✅ |
+| 3 | Momentum | 5m | RSI + MACD + EMA stack | TREND | ✅ |
+| 4 | VWAP | 15m | Institutional reversion | RANGE | ✅ |
+| 5 | Mini Medallion | 15m | 10-signal composite alpha | All | ✅ |
+| 6 | Structure-Break Retest | 15m | Donchian break + retest rejection | TREND | ✅ |
+| 7 | Fibonacci Retracement | 5m | Golden-zone pullback (50–61.8 %) | All | ✅ |
+| 8 | Descending Channel Breakout | 5m | LR channel + higher-low shift | TREND | ✅ |
+| 9 | SMC Order Block | 5m | 5-phase ICT state machine + FVG | All | ✅ |
+| 10 | Asia Range Fade | 15m | UTC 09–14 low-vol fade | RANGE | ✅ |
+| 11 | Continuation Breakout | 5m | Wyckoff stair-step | TREND | ✅ |
+| 12 | Supply / Demand | 5m | Impulse-zone retest | — | ❌ disabled |
+| 13 | Mean Reversion | 5m | Pure z-score (baseline) | — | ❌ disabled |
+
+## 🏗️ Architecture
+
+```
+  MT5 Terminal
+       │
+       ▼
+  EA_FileBridge.mq5  ◄────►  shared JSON files  ◄────►  mt5_file_client.py
+                                                            │
+                                                            ▼
+                                                     MT5Connector
+                                                            │
+                                                            ▼
+                                                      DataEngine ── ticks → bars (5 TFs) → indicators
+                                                            │
+                                                            ▼
+                                                  StrategyManager (13 strategies fire on bar close)
+                                                            │
+                                                            ▼
+                                                ┌─── RiskEngine ──── 16 sequential checks ──── ✗ reject
+                                                │     │ kill switch · circuit breaker · drawdown
+                                                │     │ daily-loss budget · exposure · risk-per-trade
+                                                │     ▼
+                                                │  ExecutionEngine ──► MT5 ──► Market
+                                                │     │
+                                                │     ▼
+                                                │  PortfolioEngine ──► TradeJournal · StateManager
+                                                │
+                                                └── nightly: regime_classifier.py rewrites weights
+```
 
 ## ⚠️ Important Disclaimer
 
 > This bot trades **real money** on a live account. You can lose your entire balance.
 > Only run this if you fully understand the risks and have tested everything first.
+> No part of this repository constitutes financial advice.
+
+---
+
+## 🚀 Quick Start (Windows 11, non-technical users)
+
+> The setup guide below is written for non-technical users running the bot on a fresh Windows 11 PC. No coding knowledge needed — just follow each step in order.
 
 ---
 
