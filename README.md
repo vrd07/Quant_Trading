@@ -39,6 +39,21 @@
 | 12 | Supply / Demand | 5m | Impulse-zone retest | — | ❌ disabled |
 | 13 | Mean Reversion | 5m | Pure z-score (baseline) | — | ❌ disabled |
 
+## 📈 Backtest results (audit-v3 budget run)
+
+![Per-strategy equity curves, Jan 2025 → Mar 2026](docs/equity_curves.png)
+
+All four strategies were run on the same period (Jan 2025 → Mar 2026, XAUUSD 5-minute / 15-minute bars) under an identical per-trade USD risk budget so the comparison isolates the strategy from the position-sizer's choices.
+
+| Strategy | Return | PF | Trades | Max DD |
+|---|---:|---:|---:|---:|
+| **Kalman Regime** | **+4.62%** | 1.15 | 1,252 | −2.74% |
+| **Momentum** | **+4.68%** | 1.10 | 2,023 | −5.33% |
+| **Breakout** | +1.23% | 1.02 | 907 | −5.60% |
+| Mini Medallion v1 | −3.44% | 0.85 | 668 | −4.07% |
+
+Mini Medallion v1 lost money and was disabled, then re-enabled as v5 with retuned parameters (51 % WR, PF 1.31, 6.9 % annualised on a fresh 12-month sample). The audit-driven discipline is documented in [Section 18 of the paper](RESEARCH_PAPER.md#18-empirical-lessons).
+
 ## 🏗️ Architecture
 
 ```
