@@ -1,7 +1,7 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-05-04T06:00:43.207929+00:00",
-  "valid_until": "2026-05-05T06:00:43.207929+00:00",
+  "generated_at": "2026-05-04T06:23:02.921075+00:00",
+  "valid_until": "2026-05-05T06:23:02.921075+00:00",
   "regime": "RANGE",
   "confidence": 0.7929,
   "classifier": "RandomForest+Markov (n=307 samples)",
