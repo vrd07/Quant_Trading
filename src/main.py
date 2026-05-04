@@ -174,11 +174,6 @@ class TradingSystem:
         # managed by a focused SessionManager (not inline in main loop).
         self._session_mgr = SessionManager(self.config)
 
-        # Seed today so the first-tick rollover guard in _process_strategies
-        # does not re-fire the regime classifier — the pre-launch shell
-        # wrapper already ran it. Next trigger fires at real UTC midnight.
-        self._session_mgr.state.daily_wins_date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-
         # ── Manual position tracker (directional lock vs manual trades) ──
         self._manual_pos_tracker = ManualPositionTracker()
         self._manual_directional_lock: bool = bool(
@@ -332,7 +327,48 @@ class TradingSystem:
             self.logger.info("9. Checking for previous state...")
             self._restore_state()
             self.logger.info("✓ State restored")
-            
+
+            # 9b. Initialize daily metrics if the restored state is stale.
+            # Mid-day restarts must preserve today's running daily_pnl /
+            # daily_start_equity (prop-firm loss limits are anchored to
+            # today's 00:00 UTC equity). But a restart after the UTC date
+            # rollover would otherwise carry yesterday's figures forward,
+            # because the midnight gate in _process_strategies is suppressed
+            # by reset_daily() seeding daily_wins_date below.
+            try:
+                saved = self.state_manager.load_state()
+                today_utc = datetime.now(timezone.utc).date()
+                cross_midnight = (
+                    saved is None
+                    or saved.timestamp.astimezone(timezone.utc).date() != today_utc
+                )
+                # daily_start_equity == 0 means no valid anchor for today's
+                # P&L — the previous run never ran reset_daily_metrics. Treat
+                # as stale so we re-anchor against current MT5 equity.
+                missing_anchor = self.risk_engine.daily_start_equity <= 0
+                stale = cross_midnight or missing_anchor
+                # Always seed daily_wins_date so the mid-loop gate doesn't
+                # re-fire the regime classifier on the first iteration —
+                # the pre-launch shell wrapper already ran it.
+                self._session_mgr.state.daily_wins_date = today_utc.strftime('%Y-%m-%d')
+                if stale:
+                    account_info = self._get_effective_account_info()
+                    self.risk_engine.reset_daily_metrics(account_info['equity'])
+                    self.risk_engine.update_equity_hwm(account_info['equity'])
+                    self.portfolio_engine.reset_daily_pnl()
+                    self._session_mgr.state.reset_daily()
+                    self.logger.info(
+                        f"[Startup] Stale state detected — daily metrics reset "
+                        f"(equity={float(account_info['equity']):.2f})"
+                    )
+                else:
+                    self.logger.info(
+                        f"[Startup] State is from today — preserving running daily metrics "
+                        f"(daily_pnl=${float(self.portfolio_engine.daily_realized_pnl):.2f})"
+                    )
+            except Exception as e:
+                self.logger.warning(f"[Startup] Daily reset check failed (non-critical): {e}")
+
             self.logger.info("=" * 60)
             self.logger.info("✓ ALL SYSTEMS OPERATIONAL")
             self.logger.info("=" * 60)
