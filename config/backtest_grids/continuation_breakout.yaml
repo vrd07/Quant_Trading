@@ -1,0 +1,52 @@
+strategy: continuation_breakout
+file: src/strategies/continuation_breakout_strategy.py
+description: Wyckoff stair-step — tight range -> impulse -> re-accumulation -> 2nd breakout same direction.
+notes: |
+  Strategy #13, enabled 2026-04-30 against backtest rec (PF 1.18 was below G3 threshold of 1.4).
+  This grid is a re-evaluation gate — auto-retune must produce PF >= 1.4 OOS or strategy
+  is auto-disabled. Cluster-anchored SL was added in risk_processor; that's external to grid.
+
+anchor:
+  donchian_period: 20
+  lookback_window: 60
+  min_consolidation_bars: 5
+  max_consolidation_bars: 25
+  impulse_max_age_bars: 40
+  impulse_body_atr: 1.2
+  continuation_body_atr: 0.5
+  consolidation_max_height_atr: 2.0
+  adx_min_threshold: 20
+  ema_trend_period: 50
+  use_ema_filter: true
+  long_only: false
+  cooldown_bars: 6
+  atr_stop_multiplier: 1.0
+  rr_ratio: 2.0
+
+tier1_entry:
+  donchian_period: [15, 20, 30]                  # 3
+  impulse_body_atr: [0.8, 1.2, 1.5]              # 3
+  continuation_body_atr: [0.3, 0.5, 0.8]         # 3
+  consolidation_max_height_atr: [1.5, 2.0, 3.0]  # 3
+  adx_min_threshold: [15, 20, 25]                # 3
+  max_consolidation_bars: [15, 25, 40]           # 3
+  # combos = 3^6 = 729 -> sampled to 200
+
+tier2_risk:
+  atr_stop_multiplier: [0.5, 1.0, 1.5, 2.0]
+  rr_ratio: [1.5, 2.0, 2.5, 3.0]
+  cooldown_bars: [3, 6, 10]
+  # one-dim total = 4 + 4 + 3 = 11
+
+tier3_filters:
+  use_ema_filter: [true, false]
+  long_only: [false, true]
+  ema_trend_period: [20, 50, 100, 200]
+  session_preset: [all, london_ny, ny]
+  regime_preset: [trend_only, trend_volatile, all]
+  # combos = 2*2*4*3*3 = 144 -> sampled to 50
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

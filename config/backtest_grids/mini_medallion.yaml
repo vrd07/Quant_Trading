@@ -1,0 +1,76 @@
+strategy: mini_medallion
+file: src/strategies/mini_medallion_strategy.py
+description: 10 weak alpha signals combined into composite score. Long-only on gold per v5 backtest.
+notes: |
+  v5 anchor: long_only=true, score_threshold 3.5, allowed_hours [5,7,8] (only net-positive hrs).
+  Weight gridding is combinatorial — using 4 named presets instead of cartesian over weights.
+  TF bumped 5m -> 15m 2026-05-01 (unvalidated); grid covers both.
+
+anchor:
+  score_threshold: 3.5
+  cooldown_bars: 10
+  risk_atr_multiplier: 2.2
+  rr_ratio: 1.2
+  long_only: true
+  adx_min_threshold: 22
+  min_signal_strength: 0.0
+  weights_preset: current
+
+tier1_entry:
+  score_threshold: [2.5, 3.0, 3.5, 4.0, 4.5]  # 5
+  cooldown_bars: [5, 8, 12, 20]               # 4
+  adx_min_threshold: [18, 22, 28]             # 3
+  weights_preset: [current, momentum_heavy, mr_heavy]  # 3
+  # combos = 5*4*3*3 = 180
+
+tier2_risk:
+  risk_atr_multiplier: [1.5, 2.0, 2.5, 3.0]
+  rr_ratio: [1.0, 1.5, 2.0, 2.5]
+  # one-dim total = 4 + 4 = 8
+
+tier3_filters:
+  long_only: [true, false]
+  session_preset: [current, london, london_ny, all]
+  timeframe: [5m, 15m]
+  # combos = 2*4*2 = 16
+
+# Weight presets — resolved by driver. Keeps grid manageable.
+weights_presets:
+  current:
+    mean_reversion: 1.0
+    momentum_burst: 1.2
+    volatility_expansion: 1.3
+    order_flow: 1.1
+    liquidity_sweep: 1.5
+    market_regime: 1.2
+    volatility_regime: 0.6
+    bos: 0.0
+    choch: 0.0
+    fvg: 0.0
+  momentum_heavy:
+    mean_reversion: 0.5
+    momentum_burst: 2.0
+    volatility_expansion: 1.5
+    order_flow: 1.5
+    liquidity_sweep: 1.0
+    market_regime: 1.5
+    volatility_regime: 0.5
+    bos: 0.0
+    choch: 0.0
+    fvg: 0.0
+  mr_heavy:
+    mean_reversion: 2.0
+    momentum_burst: 0.5
+    volatility_expansion: 0.8
+    order_flow: 1.0
+    liquidity_sweep: 1.5
+    market_regime: 0.8
+    volatility_regime: 1.5
+    bos: 0.0
+    choch: 0.0
+    fvg: 0.0
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

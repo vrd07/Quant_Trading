@@ -84,3 +84,6 @@ graphify-out/
 
 # Per-user runtime risk overrides (written by scripts/runtime_setup.py)
 config/runtime_overrides.yaml
+
+# Local backtest docs
+backtest.md

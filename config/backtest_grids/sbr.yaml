@@ -1,0 +1,48 @@
+strategy: sbr
+file: src/strategies/structure_break_retest.py
+description: Donchian break -> retest of broken level -> rejection-candle entry. Tighter SL than raw breakout.
+notes: |
+  v2 anchor (+5.30% PF 1.88 DD 1.61% backtest): EMA50 trend filter, session_hours [5,6,7,13,16,17,22],
+  min_strength 0.65. Stop widened to 1.8x ATR for retest wick room.
+  TF bumped 5m -> 15m 2026-05-01 (unvalidated per memory).
+
+anchor:
+  lookback_period: 20
+  retest_tolerance_atr: 0.4
+  min_rejection_ratio: 0.55
+  retest_window_bars: 20
+  adx_min_threshold: 22
+  adx_max_threshold: 55
+  atr_stop_multiplier: 1.8
+  rr_ratio: 2.0
+  cooldown_bars: 8
+  ema_trend_period: 50
+  min_strength: 0.65
+  long_only: false
+
+tier1_entry:
+  lookback_period: [10, 20, 30]              # 3
+  retest_tolerance_atr: [0.2, 0.4, 0.6]      # 3
+  min_rejection_ratio: [0.40, 0.55, 0.70]    # 3
+  min_strength: [0.50, 0.65, 0.80]           # 3
+  adx_min_threshold: [15, 22, 28]            # 3
+  # combos = 3^5 = 243 -> sampled to 200
+
+tier2_risk:
+  atr_stop_multiplier: [1.0, 1.5, 1.8, 2.5]
+  rr_ratio: [1.5, 2.0, 2.5, 3.0]
+  cooldown_bars: [4, 8, 12]
+  # one-dim total = 4 + 4 + 3 = 11
+
+tier3_filters:
+  regime_preset: [trend_only, trend_range, all]
+  ema_trend_period: [20, 50, 100, 200]
+  long_only: [false, true]
+  session_preset: [current, london_ny, all]
+  timeframe: [5m, 15m]
+  # combos = 3*4*2*3*2 = 144 -> sampled to 50
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

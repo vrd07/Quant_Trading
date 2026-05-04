@@ -23,6 +23,8 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.backtest.backtest_engine import BacktestEngine
+from src.backtest.grid_loader import load_grid_for
+from src.backtest.tiered_retune import TieredRetune, Gates
 from src.strategies.breakout_strategy import BreakoutStrategy
 from src.strategies.mean_reversion_strategy import MeanReversionStrategy
 from src.strategies.momentum_strategy import MomentumStrategy
@@ -40,6 +42,22 @@ from src.core.types import Symbol
 import yaml
 
 STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'smc_ob', 'fibonacci_retracement', 'continuation_breakout', 'all']
+
+STRATEGY_CLASS_MAP = {
+    'breakout': BreakoutStrategy,
+    'mean_reversion': MeanReversionStrategy,
+    'momentum': MomentumStrategy,
+    'vwap': VWAPStrategy,
+    'kalman_regime': KalmanRegimeStrategy,
+    'mini_medallion': MiniMedallionStrategy,
+    'sbr': StructureBreakRetestStrategy,
+    'supply_demand': SupplyDemandStrategy,
+    'asia_range_fade': AsiaRangeFadeStrategy,
+    'descending_channel_breakout': DescendingChannelBreakoutStrategy,
+    'smc_ob': SMCOrderBlockStrategy,
+    'fibonacci_retracement': FibonacciRetracementStrategy,
+    'continuation_breakout': ContinuationBreakoutStrategy,
+}
 
 
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
@@ -232,6 +250,89 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
     return result
 
 
+def run_grid_search(strategy_name: str, symbol: Symbol, bars: pd.DataFrame,
+                    config: dict, initial_capital: Decimal, args) -> None:
+    """Run backtest.md §7 tiered auto-retune for one strategy on one symbol."""
+    if strategy_name not in STRATEGY_CLASS_MAP:
+        print(f"[ERROR] Grid search not supported for strategy '{strategy_name}'")
+        sys.exit(1)
+    strategy_class = STRATEGY_CLASS_MAP[strategy_name]
+
+    grids_dir = Path(args.grids_dir) if args.grids_dir else Path("config/backtest_grids")
+    grid_path = grids_dir / f"{strategy_name}.yaml"
+    if not grid_path.exists():
+        print(f"[ERROR] No grid file at {grid_path}")
+        sys.exit(1)
+    grid = load_grid_for(strategy_name, grids_dir=grids_dir)
+
+    if args.smoke:
+        grid.max_combos['tier1'] = 3
+        grid.max_combos['tier2'] = 3
+        grid.max_combos['tier3'] = 3
+        print("  [SMOKE] Caps overridden: tier1=3, tier2=3, tier3=3")
+
+    idx_tz = bars.index.tz
+    def _ts(s: str) -> pd.Timestamp:
+        t = pd.Timestamp(s)
+        if idx_tz is not None and t.tz is None:
+            t = t.tz_localize(idx_tz)
+        return t
+    if args.start:
+        bars = bars[bars.index >= _ts(args.start)]
+    if args.end:
+        bars = bars[bars.index <= _ts(args.end)]
+    if len(bars) < 1000:
+        print(f"[ERROR] Only {len(bars)} bars after filtering — need >=1000 for IS/OOS split")
+        sys.exit(1)
+
+    split_idx = int(len(bars) * (1 - args.oos_ratio))
+    is_bars = bars.iloc[:split_idx].copy()
+    oos_bars = bars.iloc[split_idx:].copy()
+
+    print("\n" + "=" * 70)
+    print(f"GRID SEARCH — {strategy_name.upper()} × {symbol.ticker}")
+    print("=" * 70)
+    print(f"  Grid file:        {grid_path}")
+    print(f"  IS bars:          {len(is_bars):>6}  ({is_bars.index.min().date()} -> {is_bars.index.max().date()})")
+    print(f"  OOS bars:         {len(oos_bars):>6}  ({oos_bars.index.min().date()} -> {oos_bars.index.max().date()})")
+    print(f"  Tier1 combo cap:  {grid.max_combos.get('tier1', 200)}")
+    print(f"  Tier1 grid keys:  {list(grid.tier1_entry.keys())}")
+    print("=" * 70)
+
+    retune = TieredRetune(
+        strategy_class=strategy_class,
+        symbol=symbol,
+        is_bars=is_bars,
+        oos_bars=oos_bars,
+        grid=grid,
+        full_config=config,
+        initial_capital=initial_capital,
+        commission_per_trade=Decimal(str(args.commission)),
+        slippage_model=args.slippage,
+    )
+    result = retune.run()
+
+    print("\n" + "=" * 70)
+    print("RETUNE RESULT")
+    print("=" * 70)
+    print(f"  {result.summary}")
+    if result.gate_status:
+        print(f"\n  Gate status (G1..G6):")
+        for gate, ok in result.gate_status.items():
+            mark = "PASS" if ok else "FAIL"
+            print(f"    [{mark}] {gate}")
+    if result.passed:
+        print(f"\n  Winning params (anchor + combo, tier {result.tier}):")
+        for k, v in sorted(result.winning_params.items()):
+            print(f"    {k}: {v}")
+    else:
+        print(f"\n  Best-effort params (all tiers failed):")
+        for k, v in sorted(result.winning_params.items()):
+            print(f"    {k}: {v}")
+        print(f"\n  Reason: {result.reason}")
+    print("=" * 70)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run strategy backtest")
     parser.add_argument('--strategy', default='all', choices=STRATEGY_CHOICES,
@@ -251,6 +352,14 @@ def main():
                         help='Output file prefix')
     parser.add_argument('--enforce-risk', action='store_true', default=False,
                         help='Enforce kill-switch/circuit-breaker during backtest (default: bypassed)')
+    parser.add_argument('--grid-search', action='store_true', default=False,
+                        help='Run backtest.md §7 tiered auto-retune instead of single backtest')
+    parser.add_argument('--grids-dir', default=None,
+                        help='Directory containing per-strategy grid YAMLs (default: config/backtest_grids)')
+    parser.add_argument('--oos-ratio', type=float, default=0.30,
+                        help='Out-of-sample fraction for grid-search IS/OOS split (default: 0.30)')
+    parser.add_argument('--smoke', action='store_true', default=False,
+                        help='Smoke-test mode: cap tier1/tier2/tier3 grid sizes to 3 combos')
 
     args = parser.parse_args()
 
@@ -290,6 +399,14 @@ def main():
     bars = load_historical_data(args.symbol, args.timeframe)
     print(f"  Loaded {len(bars)} bars")
     print(f"  Date range: {bars.index.min()} to {bars.index.max()}")
+
+    if args.grid_search:
+        if args.strategy == 'all':
+            print("[ERROR] --grid-search requires a specific --strategy (not 'all')")
+            sys.exit(1)
+        run_grid_search(args.strategy, symbol, bars, config, initial_capital, args)
+        print("\nGrid search complete!")
+        return
 
     strategies_to_run = (
         ['breakout', 'momentum', 'kalman_regime', 'vwap', 'mini_medallion', 'sbr']

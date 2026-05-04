@@ -1,0 +1,59 @@
+strategy: smc_ob
+file: src/strategies/smc_ob_strategy.py
+description: 5-phase ICT order-block state machine — OB formed -> touched -> sweep -> waiting -> fire.
+notes: |
+  Long-only on gold (Apr 2026 backtest). FVG confluence + equal-pivots + strong-close all on.
+  These three filters lifted WR 8.6% -> 16.7% so tier 3 toggles them individually to prove
+  each is still net-positive. min_impulse_atr_mult deliberately loose (0.5) for setup volume.
+
+anchor:
+  long_only: true
+  swing_lookback: 5
+  min_impulse_atr_mult: 0.5
+  ob_max_age_bars: 120
+  ob_touch_tolerance_atr: 1.0
+  cooldown_bars: 3
+  adx_min_threshold: 8
+  use_ema_trend_filter: true
+  ema_trend_period: 50
+  liquidity_premium_mult: 15.0
+  min_liquidity_premium_mult: 8.0
+  max_sl_atr: 4.0
+  min_sl_atr: 0.05
+  require_fvg_confluence: true
+  fvg_ob_proximity_atr: 2.0
+  min_rejection_wick_ratio: 0.40
+  require_equal_pivots: true
+  equal_pivot_min_count: 2
+  require_strong_close: true
+  strong_close_threshold: 0.40
+
+tier1_entry:
+  min_impulse_atr_mult: [0.3, 0.5, 1.0]           # 3
+  ob_touch_tolerance_atr: [0.5, 1.0, 1.5]         # 3
+  min_rejection_wick_ratio: [0.30, 0.40, 0.55]    # 3
+  strong_close_threshold: [0.30, 0.40, 0.50]      # 3
+  min_liquidity_premium_mult: [4.0, 8.0, 12.0]    # 3
+  adx_min_threshold: [5, 8, 15]                    # 3
+  # combos = 3^6 = 729 -> sampled to 200
+
+tier2_risk:
+  max_sl_atr: [2.0, 4.0, 6.0]
+  liquidity_premium_mult: [8.0, 15.0, 20.0]
+  cooldown_bars: [3, 6, 12]
+  ob_max_age_bars: [60, 120, 200]
+  # one-dim total = 3 + 3 + 3 + 3 = 12
+
+tier3_filters:
+  long_only: [true, false]
+  require_fvg_confluence: [true, false]
+  require_equal_pivots: [true, false]
+  require_strong_close: [true, false]
+  use_ema_trend_filter: [true, false]
+  session_preset: [current, london_ny, ny, all]
+  # combos = 2^5 * 4 = 128 -> sampled to 50
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

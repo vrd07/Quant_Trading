@@ -1,0 +1,47 @@
+strategy: kalman_regime
+file: src/strategies/kalman_regime_strategy.py
+description: Kalman trend-follow + OU mean-reversion two-regime alpha. Highest-weight strategy in TREND.
+notes: |
+  v3 loose tuning (2026-04-19) doubled trades + return at same PF/Sharpe with 2.4x DD.
+  Tier 1 leans on entry_threshold + min_signal_strength because backtests show
+  those swing PF most. Tier 2 tp_atr_multiplier is wide (3..12) because v2 found
+  big-trend capture lives at 8x; need to confirm not a regime-of-2024 artifact.
+  Two-sided (long_only=false) is anchor; tier 3 will check if long-only beats it.
+
+anchor:
+  entry_threshold: 1.5
+  trend_adx_min: 17
+  min_signal_strength: 0.35
+  kalman_confirm_bars: 1
+  cooldown_bars: 1
+  sl_atr_multiplier: 1.5
+  tp_atr_multiplier: 8.0
+  zscore_window: 20
+  long_only: false
+  high_confidence_threshold: 90.0
+
+tier1_entry:
+  entry_threshold: [1.0, 1.5, 2.0, 2.5]      # 4
+  trend_adx_min: [15, 17, 20, 25]            # 4
+  min_signal_strength: [0.25, 0.35, 0.50, 0.65]  # 4
+  kalman_confirm_bars: [1, 2, 3]             # 3
+  # combos = 4*4*4*3 = 192
+
+tier2_risk:
+  sl_atr_multiplier: [1.0, 1.5, 2.0, 2.5, 3.0]
+  tp_atr_multiplier: [3.0, 5.0, 8.0, 10.0, 12.0]
+  cooldown_bars: [1, 2, 3, 4, 6]
+  # one-dim sweep total = 5 + 5 + 5 = 15 runs
+
+tier3_filters:
+  long_only: [false, true]
+  ema_confirm_enabled: [false, true]
+  macd_confirmation: [false, true]
+  session_filter_enabled: [true, false]
+  regime_preset: [trend_only, trend_volatile, all]
+  # combos = 2*2*2*2*3 = 48
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

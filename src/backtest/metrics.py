@@ -8,11 +8,13 @@ Metrics:
 - Win Rate
 - Profit Factor
 - Expectancy
+- Daily win-rate (G1 in backtest.md §1)
+- Worst-day R-multiple (G2)
 """
 
 import pandas as pd
 import numpy as np
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 class PerformanceMetrics:
@@ -121,3 +123,64 @@ class PerformanceMetrics:
         """Reset metrics."""
         self.trades = []
         self.equity_history = []
+
+    # ------------------------------------------------------------------
+    # Daily-level metrics (backtest.md §1 gates G1, G2)
+    # ------------------------------------------------------------------
+    @staticmethod
+    def daily_pnl_from_trades(trades: List[Dict]) -> pd.Series:
+        """
+        Group closed trades by date (entry timestamp) and sum P&L.
+
+        Returns pd.Series indexed by date, NaN-free, including only days that had
+        at least one trade. Days with no trades are excluded (consistent with
+        spec §1: gates evaluate "trading days").
+        """
+        if not trades:
+            return pd.Series(dtype=float)
+        rows = []
+        for t in trades:
+            ts = t.get("timestamp") or t.get("entry_time")
+            pnl = t.get("pnl", 0.0)
+            if ts is None:
+                continue
+            day = pd.to_datetime(ts).normalize()
+            rows.append((day, float(pnl)))
+        if not rows:
+            return pd.Series(dtype=float)
+        df = pd.DataFrame(rows, columns=["day", "pnl"])
+        return df.groupby("day")["pnl"].sum().sort_index()
+
+    @staticmethod
+    def calculate_daily_win_rate(trades: List[Dict]) -> float:
+        """
+        G1: fraction of trading days that finished net green (pnl > 0).
+        Days with exactly zero net P&L count as non-green.
+        """
+        daily = PerformanceMetrics.daily_pnl_from_trades(trades)
+        if daily.empty:
+            return 0.0
+        return float((daily > 0).sum() / len(daily))
+
+    @staticmethod
+    def calculate_worst_day_r(
+        trades: List[Dict],
+        risk_per_trade_dollars: float,
+    ) -> float:
+        """
+        G2: worst single trading day's net P&L expressed as an R-multiple.
+
+        R = `risk_per_trade_dollars` (account-relative; pass
+        `risk_per_trade_pct * initial_capital`). Returns a NEGATIVE float for
+        losing days, 0.0 if no trades. Spec floor is -2R.
+        """
+        daily = PerformanceMetrics.daily_pnl_from_trades(trades)
+        if daily.empty or risk_per_trade_dollars <= 0:
+            return 0.0
+        return float(daily.min() / risk_per_trade_dollars)
+
+    @staticmethod
+    def calculate_trading_days(trades: List[Dict]) -> int:
+        """Count of distinct days that had at least one trade."""
+        daily = PerformanceMetrics.daily_pnl_from_trades(trades)
+        return int(len(daily))

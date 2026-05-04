@@ -1,0 +1,50 @@
+strategy: descending_channel_breakout
+file: src/strategies/descending_channel_breakout_strategy.py
+description: Linear-regression descending channel + higher-low structure shift -> upper trendline break.
+notes: |
+  Anchor relaxed for frequency: channel_lookback 60 (5h on 5m), min_hl_count=1, slope_max -0.0003.
+  This was tuned to surface enough setups; tier1 will explore tightening for quality vs quantity.
+  require_correction_phase currently false; tier 3 will toggle it.
+
+anchor:
+  channel_lookback: 60
+  swing_period: 5
+  min_hl_count: 1
+  channel_slope_max: -0.0003
+  breakout_atr_buffer: 0.20
+  rejection_min_ratio: 0.50
+  adx_min_threshold: 20
+  adx_max_threshold: 55
+  ema_trend_period: 50
+  atr_stop_multiplier: 1.5
+  rr_ratio: 2.0
+  cooldown_bars: 3
+  min_strength: 0.45
+  require_correction_phase: false
+
+tier1_entry:
+  channel_lookback: [40, 60, 90]              # 3
+  swing_period: [3, 5, 7]                     # 3
+  min_hl_count: [1, 2]                        # 2
+  breakout_atr_buffer: [0.10, 0.20, 0.30]     # 3
+  channel_slope_max: [-0.0001, -0.0003, -0.0008]  # 3
+  rejection_min_ratio: [0.40, 0.50, 0.65]     # 3
+  # combos = 3*3*2*3*3*3 = 162
+
+tier2_risk:
+  atr_stop_multiplier: [1.0, 1.5, 2.0]
+  rr_ratio: [1.5, 2.0, 2.5, 3.0]
+  min_strength: [0.30, 0.45, 0.60]
+  # one-dim total = 3 + 4 + 3 = 10
+
+tier3_filters:
+  regime_preset: [trend_only, trend_range, all]
+  require_correction_phase: [false, true]
+  long_only: [false, true]
+  session_preset: [current, london_ny, all]
+  # combos = 3*2*2*3 = 36
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

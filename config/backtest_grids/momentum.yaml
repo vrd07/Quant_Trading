@@ -1,0 +1,47 @@
+strategy: momentum
+file: src/strategies/momentum_strategy.py
+description: Short-term ROC + RSI + MACD with ADX confirmation. TREND-regime primary.
+notes: |
+  v3 anchor (Apr 2026): RSI thresholds asymmetric (53/47), min_signal_strength split
+  long/short (0.60/0.65 — sell harder to qualify because gold has long bias).
+  Hours hard-pinned to journal-derived profitable list. Tier 1 sweeps RSI thresholds
+  in symmetric pairs around midline; the long/short asymmetry is preserved by adding
+  a fixed offset rather than gridding both.
+
+anchor:
+  rsi_period: 14
+  ema_period: 20
+  rr_ratio: 2.0
+  atr_stop_multiplier: 2.0
+  rsi_bull_threshold: 53
+  rsi_bear_threshold: 47
+  rsi_overbought: 78
+  rsi_oversold: 22
+  adx_min_threshold: 22
+  min_signal_strength: 0.60
+  min_signal_strength_sell: 0.65
+
+tier1_entry:
+  rsi_bull_threshold: [50, 53, 56]           # 3 — pair with bear=100-bull
+  adx_min_threshold: [18, 22, 26, 30]        # 4
+  min_signal_strength: [0.40, 0.50, 0.60, 0.70]  # 4
+  ema_period: [10, 20, 30]                   # 3
+  rsi_period: [9, 14, 21]                    # 3
+  # combos = 3*4*4*3*3 = 432 -> sampled to 200
+
+tier2_risk:
+  atr_stop_multiplier: [1.5, 2.0, 2.5, 3.0]
+  rr_ratio: [1.5, 2.0, 2.5, 3.0]
+  min_signal_strength_sell: [0.55, 0.65, 0.75]
+  # one-dim total = 4 + 4 + 3 = 11
+
+tier3_filters:
+  regime_preset: [trend_only, trend_volatile, all]
+  session_preset: [current, london_ny, all]
+  volume_confirmation: [false, true]
+  # combos = 3*3*2 = 18
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

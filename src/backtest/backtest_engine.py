@@ -56,6 +56,10 @@ class BacktestResult:
     equity_curve: pd.Series
     trades: List[Dict]
     daily_returns: pd.Series
+    # backtest.md §1 gates G1/G2
+    daily_win_rate: float = 0.0
+    worst_day_r: float = 0.0
+    trading_days: int = 0
 
 
 class BacktestEngine:
@@ -88,7 +92,8 @@ class BacktestEngine:
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.commission_per_trade = commission_per_trade
-        
+        self.risk_config = risk_config
+
         # Trailing stop config from risk section
         trailing_stop_config = risk_config.get('risk', {}).get('trailing_stop', {})
 
@@ -525,7 +530,20 @@ class BacktestEngine:
         
         largest_win = max((t['pnl'] for t in winning_trades), default=0)
         largest_loss = min((t['pnl'] for t in losing_trades), default=0)
-        
+
+        # G1/G2 daily metrics (backtest.md §1).
+        # R = risk_per_trade_pct * initial_capital, account-relative.
+        # Per-trade R from stop_loss is a TODO (needs value_per_lot on each trade).
+        risk_pct = 0.01  # default fallback
+        if isinstance(self.risk_config, dict):
+            r = self.risk_config.get("risk", self.risk_config)
+            if isinstance(r, dict):
+                risk_pct = float(r.get("risk_per_trade_pct", 0.01))
+        r_dollars = float(self.initial_capital) * risk_pct
+        daily_win_rate = PerformanceMetrics.calculate_daily_win_rate(trades)
+        worst_day_r = PerformanceMetrics.calculate_worst_day_r(trades, r_dollars)
+        trading_days = PerformanceMetrics.calculate_trading_days(trades)
+
         return BacktestResult(
             total_return=float(total_return),
             total_return_pct=float(total_return_pct),
@@ -545,7 +563,10 @@ class BacktestEngine:
             largest_loss=float(largest_loss),
             equity_curve=equity_curve,
             trades=trades,
-            daily_returns=daily_returns
+            daily_returns=daily_returns,
+            daily_win_rate=float(daily_win_rate),
+            worst_day_r=float(worst_day_r),
+            trading_days=int(trading_days),
         )
     
     def get_strategy(self) -> BaseStrategy:

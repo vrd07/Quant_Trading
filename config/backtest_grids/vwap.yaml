@@ -1,0 +1,41 @@
+strategy: vwap
+file: src/strategies/vwap_strategy.py
+description: Deviation from rolling VWAP, RSI/CCI gated, RANGE-regime mean reversion.
+notes: |
+  v4 anchor: 1σ band (2σ rarely touched on 5m gold), allowed_hours data-driven [2,11,15,19].
+  TF was bumped 5m -> 15m on 2026-05-01 (NOT backtest-validated per memory) — backtest grid
+  must include both TFs to sanity-check that bump.
+
+anchor:
+  band_std_mult: 1.0
+  partial_std_mult: 0.3
+  stop_atr_multiplier: 1.8
+  rsi_oversold_entry: 45
+  rsi_overbought_entry: 55
+  cci_oversold_entry: -60
+  cci_overbought_entry: 60
+  cci_period: 20
+  min_volume_ratio: 0.0
+
+tier1_entry:
+  band_std_mult: [0.5, 1.0, 1.5, 2.0]        # 4
+  rsi_oversold_entry: [35, 40, 45, 50]       # 4
+  rsi_overbought_entry: [50, 55, 60, 65]     # 4
+  cci_oversold_entry: [-80, -60, -40]        # 3
+  # combos = 4*4*4*3 = 192
+
+tier2_risk:
+  stop_atr_multiplier: [1.0, 1.5, 1.8, 2.5, 3.0]
+  partial_std_mult: [0.0, 0.3, 0.5]
+  # one-dim total = 5 + 3 = 8
+
+tier3_filters:
+  regime_preset: [range_only, trend_range, all]
+  session_preset: [current, asia, london_ny, all]
+  timeframe: [5m, 15m]
+  # combos = 3*4*2 = 24
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50

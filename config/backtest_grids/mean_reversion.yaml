@@ -1,0 +1,37 @@
+strategy: mean_reversion
+file: src/strategies/mean_reversion_strategy.py
+description: OU z-score entries at extremes (|z| > 2) with ATR-stop. RANGE-regime by default.
+notes: |
+  Currently disabled in live configs. Treat this grid as a re-evaluation gate — if it
+  passes G1-G7, propose re-enabling in RANGE-only mode. Sensitivity is highest on
+  entry_threshold and stop_threshold; widening stop is the usual rescue path for MR.
+
+anchor:
+  zscore_lookback: 20
+  entry_threshold: 2.0
+  exit_threshold: 0.5
+  stop_threshold: 3.0
+  rr_ratio: 2.5
+  mtf_confirmation: false
+
+tier1_entry:
+  zscore_lookback: [15, 20, 30]              # 3
+  entry_threshold: [1.5, 2.0, 2.5]           # 3
+  stop_threshold: [2.5, 3.0, 4.0]            # 3
+  exit_threshold: [0.0, 0.5, 1.0]            # 3
+  # combos = 3*3*3*3 = 81
+
+tier2_risk:
+  rr_ratio: [1.5, 2.0, 2.5, 3.0]
+  # one-dim total = 4
+
+tier3_filters:
+  regime_preset: [range_only, trend_range, all]
+  mtf_confirmation: [false, true]
+  long_only: [false, true]
+  # combos = 3*2*2 = 12
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50
