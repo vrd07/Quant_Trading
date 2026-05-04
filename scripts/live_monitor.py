@@ -469,11 +469,59 @@ class LiveMonitorApp:
                                   font=("Menlo", 9, "bold"), padx=4, pady=3)
         self.news_chip.pack(side=tk.RIGHT)
 
-        # Cards container — widgets are CREATED ONCE and reused. Each tick we
-        # only call .config() / pack_forget() on existing widgets so the panel
-        # never blinks (no destroy/recreate cycle).
-        self.news_cards_frame = tk.Frame(body, bg=BG_PANEL)
-        self.news_cards_frame.pack(fill=tk.BOTH, expand=True)
+        # Scrollable cards container — canvas + inner frame. Cards are CREATED
+        # ONCE and reused; each tick only call .config() / pack_forget() on
+        # existing widgets so the panel never blinks (no destroy/recreate).
+        canvas_wrap = tk.Frame(body, bg=BG_PANEL)
+        canvas_wrap.pack(fill=tk.X, expand=False)
+
+        self.news_canvas = tk.Canvas(
+            canvas_wrap, bg=BG_PANEL,
+            highlightthickness=0, bd=0, height=150,
+        )
+        news_scroll = ttk.Scrollbar(
+            canvas_wrap, orient="vertical", command=self.news_canvas.yview,
+        )
+        self.news_canvas.configure(yscrollcommand=news_scroll.set)
+        news_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.news_canvas.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        self.news_cards_frame = tk.Frame(self.news_canvas, bg=BG_PANEL)
+        self._news_canvas_window = self.news_canvas.create_window(
+            (0, 0), window=self.news_cards_frame, anchor="nw",
+        )
+
+        def _on_frame_configure(_e):
+            self.news_canvas.configure(scrollregion=self.news_canvas.bbox("all"))
+
+        def _on_canvas_configure(e):
+            self.news_canvas.itemconfig(self._news_canvas_window, width=e.width)
+
+        self.news_cards_frame.bind("<Configure>", _on_frame_configure)
+        self.news_canvas.bind("<Configure>", _on_canvas_configure)
+
+        def _on_mousewheel(event):
+            if getattr(event, "num", None) == 4:
+                delta = -1
+            elif getattr(event, "num", None) == 5:
+                delta = 1
+            else:
+                delta = -1 if event.delta > 0 else 1
+            self.news_canvas.yview_scroll(delta, "units")
+
+        def _bind_wheel(_e):
+            self.news_canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            self.news_canvas.bind_all("<Button-4>", _on_mousewheel)
+            self.news_canvas.bind_all("<Button-5>", _on_mousewheel)
+
+        def _unbind_wheel(_e):
+            self.news_canvas.unbind_all("<MouseWheel>")
+            self.news_canvas.unbind_all("<Button-4>")
+            self.news_canvas.unbind_all("<Button-5>")
+
+        self.news_canvas.bind("<Enter>", _bind_wheel)
+        self.news_canvas.bind("<Leave>", _unbind_wheel)
+
         self._news_card_pool: list = []
         self._news_empty_lbl = tk.Label(
             self.news_cards_frame,
@@ -534,7 +582,7 @@ class LiveMonitorApp:
         if self._news_empty_lbl.winfo_ismapped():
             self._news_empty_lbl.pack_forget()
 
-        visible = upcoming[:5]
+        visible = upcoming
         for i, e in enumerate(visible):
             if i >= len(self._news_card_pool):
                 self._news_card_pool.append(self._make_news_card())
@@ -587,34 +635,31 @@ class LiveMonitorApp:
             if self._news_card_pool[j]["outer"].winfo_ismapped():
                 self._news_card_pool[j]["outer"].pack_forget()
 
-    # --- performance metrics body ---
+    # --- performance metrics body (single compact row) ---
     def _build_performance_body(self, panel) -> None:
-        body = tk.Frame(panel, bg=BG_PANEL, padx=10, pady=6)
+        body = tk.Frame(panel, bg=BG_PANEL, padx=10, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
         def kv(parent, label, init="—", color=TEXT) -> tk.Label:
             col = tk.Frame(parent, bg=BG_PANEL)
-            col.pack(side=tk.LEFT, padx=(0, 14))
+            col.pack(side=tk.LEFT, padx=(0, 8))
             tk.Label(col, text=label, bg=BG_PANEL, fg=TEXT_DIM,
-                     font=("Menlo", 9, "bold")).pack(anchor="w")
+                     font=("Menlo", 8, "bold")).pack(anchor="w")
             lbl = tk.Label(col, text=init, bg=BG_PANEL, fg=color,
-                           font=("Menlo", 12, "bold"))
+                           font=("Menlo", 11, "bold"))
             lbl.pack(anchor="w")
             return lbl
 
         row1 = tk.Frame(body, bg=BG_PANEL)
-        row1.pack(fill=tk.X, pady=(0, 4))
+        row1.pack(fill=tk.X)
         self.val_perf_trades = kv(row1, "TRADES")
-        self.val_perf_winrate = kv(row1, "WIN RATE")
-        self.val_perf_pf = kv(row1, "PROFIT FACTOR")
-        self.val_perf_exp = kv(row1, "EXPECTANCY")
-
-        row2 = tk.Frame(body, bg=BG_PANEL)
-        row2.pack(fill=tk.X)
-        self.val_perf_avgwin = kv(row2, "AVG WIN")
-        self.val_perf_avgloss = kv(row2, "AVG LOSS")
-        self.val_perf_streak = kv(row2, "STREAK")
-        self.val_perf_totalpnl = kv(row2, "TOTAL P&L")
+        self.val_perf_winrate = kv(row1, "WR")
+        self.val_perf_pf = kv(row1, "PF")
+        self.val_perf_exp = kv(row1, "EXP")
+        self.val_perf_avgwin = kv(row1, "AVG W")
+        self.val_perf_avgloss = kv(row1, "AVG L")
+        self.val_perf_streak = kv(row1, "STREAK")
+        self.val_perf_totalpnl = kv(row1, "TOTAL")
 
     # --- symbols body ---
     def _build_symbols_body(self, panel) -> None:
@@ -647,17 +692,21 @@ class LiveMonitorApp:
         self.tree_signals.tag_configure("received", foreground=TEXT)
         self.tree_signals.tag_configure("error", foreground=RED)
 
-    # --- positions body (compact) ---
+    # --- positions body (compact, 2 visible + scroll for the rest) ---
     def _build_positions_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
-        body.pack(fill=tk.BOTH, expand=True)
+        body.pack(fill=tk.X, expand=False)
 
         cols = ("sym", "side", "qty", "entry", "now", "sl", "tp", "pnl", "dur")
         headings = ("Symbol", "Side", "Qty", "Entry",
                     "Current", "S/L", "T/P", "P&L ($)", "Duration")
         widths = (70, 50, 50, 70, 70, 70, 70, 80, 80)
-        self.tree_positions = self._make_tree(body, cols, headings, widths, height=4)
-        self.tree_positions.pack(fill=tk.BOTH, expand=True)
+        self.tree_positions = self._make_tree(body, cols, headings, widths, height=2)
+        pos_scroll = ttk.Scrollbar(body, orient="vertical",
+                                   command=self.tree_positions.yview)
+        self.tree_positions.configure(yscrollcommand=pos_scroll.set)
+        pos_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree_positions.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.tree_positions.tag_configure("win", foreground=GREEN)
         self.tree_positions.tag_configure("loss", foreground=RED)
         self.tree_positions.tag_configure("flat", foreground=TEXT)

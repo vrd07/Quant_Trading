@@ -1,9 +1,9 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-05-01T12:37:26.631563+00:00",
-  "valid_until": "2026-05-02T12:37:26.631563+00:00",
+  "generated_at": "2026-05-04T06:23:02.877418+00:00",
+  "valid_until": "2026-05-05T06:23:02.877418+00:00",
   "regime": "TREND",
-  "confidence": 0.9,
+  "confidence": 0.55,
   "classifier": "rule-based",
   "strategy_overrides": {
     "breakout": true,
@@ -17,18 +17,19 @@
     "asia_range_fade": false,
     "descending_channel_breakout": true,
     "smc_ob": true,
-    "fibonacci_retracement": true
+    "fibonacci_retracement": true,
+    "continuation_breakout": true
   },
   "diagnostics": {
-    "adx_14": 40.244444,
-    "atr_pct": 0.005731,
-    "bb_width_ratio": 1.100327,
-    "close_ema20_pct": 0.002122,
-    "momentum_1d": 0.003401,
-    "momentum_5d": -0.001407,
-    "range_atr_ratio": 0.754008,
-    "vol_ratio": 1.0,
-    "park_vol_zscore": -1.038677
+    "adx_14": 38.971096,
+    "atr_pct": 0.005495,
+    "bb_width_ratio": 0.863561,
+    "close_ema20_pct": 0.001677,
+    "momentum_1d": 0.001508,
+    "momentum_5d": -0.002017,
+    "range_atr_ratio": 0.766885,
+    "vol_ratio": 6.069549,
+    "park_vol_zscore": -1.204494
   },
   "strategy_weights": {
     "breakout": 0.85,
@@ -42,7 +43,8 @@
     "asia_range_fade": 0.15,
     "descending_channel_breakout": 0.7,
     "smc_ob": 0.7,
-    "fibonacci_retracement": 0.7
+    "fibonacci_retracement": 0.7,
+    "continuation_breakout": 0.75
   },
   "performance_scores": {},
   "regime_probabilities": {},
@@ -53,9 +55,9 @@
       "VOLATILE": 0.25
     },
     "RANGE": {
-      "TREND": 0.0909,
-      "RANGE": 0.8636,
-      "VOLATILE": 0.0455
+      "TREND": 0.0833,
+      "RANGE": 0.875,
+      "VOLATILE": 0.0417
     },
     "VOLATILE": {
       "TREND": 0.3333,

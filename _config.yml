@@ -1,0 +1,4 @@
+theme: jekyll-theme-cayman
+title: Quant Trading System
+description: A production-grade multi-strategy algorithmic trading system for prop-firm challenges on MetaTrader 5.
+show_downloads: false

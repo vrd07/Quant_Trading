@@ -134,7 +134,7 @@ risk:
   # 14h-16h UTC lost $196 of $400 total bleed. Block those hours.
   trading_windows:
     enabled: true
-    blocked_hours_utc: [14, 15, 16]    # London close + US news overlap
+    blocked_hours_utc: []    # London close + US news overlap
 
   # 'manual'-tagged orders accounted for -$358 of -$400 net. Cap the daily
   # bleed from manual, and halve position size while discipline is proven.
@@ -569,7 +569,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-01_news.csv
+    csv_path: news/2026-05-04_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
@@ -604,7 +604,7 @@ portfolio:
 
 file_bridge:
   enabled: true
- # data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100
 
 shutdown:
