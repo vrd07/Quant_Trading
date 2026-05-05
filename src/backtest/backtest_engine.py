@@ -32,6 +32,7 @@ from ..risk.risk_engine import RiskEngine
 from ..risk.risk_processor import RiskProcessor
 from .simulation import SimulatedBroker
 from .metrics import PerformanceMetrics
+from .news_replay import NewsBlackoutReplay
 
 
 @dataclass
@@ -77,32 +78,45 @@ class BacktestEngine:
         risk_config: Dict,
         commission_per_trade: Decimal = Decimal("0"),
         slippage_model: str = "realistic",
-        bypass_risk_limits: bool = True
+        bypass_risk_limits: bool = True,
+        news_replay: Optional[NewsBlackoutReplay] = None,
     ):
         """
         Initialize backtest engine.
-        
+
         Args:
             strategy: Strategy to test (same code as live)
             initial_capital: Starting capital
             risk_config: Risk engine configuration
             commission_per_trade: Commission per trade
-            slippage_model: 'fixed', 'realistic', or 'aggressive'
+            slippage_model: 'fixed', 'realistic', 'aggressive', or 'strict'
+                ('strict' = backtest.md §3 — spread + 1.5× slippage + queue
+                penalty for stops; the production gate.)
+            news_replay: Optional NewsBlackoutReplay. When supplied, signals
+                emitted inside a high-impact news window are dropped (matches
+                live news_filter behavior) and the strict fill model widens
+                the spread by 3× during the window. Open positions stay open.
         """
         self.strategy = strategy
         self.initial_capital = initial_capital
         self.commission_per_trade = commission_per_trade
         self.risk_config = risk_config
+        self.news_replay = news_replay
 
         # Trailing stop config from risk section
         trailing_stop_config = risk_config.get('risk', {}).get('trailing_stop', {})
 
         # Simulated broker handles order execution
+        # Wire the news_replay into the broker so the strict fill model gets
+        # the 3× spread multiplier during high-impact windows. Closure pulls
+        # the bar timestamp out of either a Series or a Bar dataclass.
+        news_active_at = news_replay.is_active_at_bar if news_replay is not None else None
         self.broker = SimulatedBroker(
             initial_capital=initial_capital,
             commission_per_trade=commission_per_trade,
             slippage_model=slippage_model,
-            trailing_stop_config=trailing_stop_config
+            trailing_stop_config=trailing_stop_config,
+            news_active_at=news_active_at,
         )
         
         # Risk engine (same as live trading)
@@ -297,9 +311,20 @@ class BacktestEngine:
             
             # 3. Generate signal from strategy
             signal = self.strategy.on_bar(available_bars)
-            
+
             if signal is None:
                 # No signal, just track equity
+                self.metrics.update_equity(
+                    timestamp=current_bar.name,
+                    equity=float(self.broker.get_equity())
+                )
+                return
+
+            # 3b. News-blackout replay (backtest.md §3.4): drop new signals
+            # inside high-impact news windows. Open positions stay open —
+            # this mirrors live news_filter behavior exactly. The bar's
+            # spread is already widened 3× by the strict fill model.
+            if self.news_replay is not None and self.news_replay.is_active_at_bar(current_bar):
                 self.metrics.update_equity(
                     timestamp=current_bar.name,
                     equity=float(self.broker.get_equity())
@@ -383,7 +408,12 @@ class BacktestEngine:
             )
             
             if fill_price:
-                # Track trade entry
+                # Track trade entry. r_dollars is the per-trade R per
+                # backtest.md §1: |entry - stop| × volume × value_per_lot.
+                # Stamping it here lets G2 use real per-trade R instead of
+                # the account-relative approximation.
+                vpl = signal.symbol.value_per_lot if signal.symbol else Decimal("1")
+                r_dollars = float(abs(fill_price - signal.stop_loss) * position_size * vpl)
                 trade_idx = len(self.metrics.trades)
                 self.metrics.add_trade({
                     'trade_idx': trade_idx,
@@ -396,6 +426,7 @@ class BacktestEngine:
                     'take_profit': float(signal.take_profit) if signal.take_profit else None,
                     'strategy': signal.strategy_name,
                     'strength': signal.strength,
+                    'r_dollars': r_dollars,
                     'pnl': 0  # Will be updated when closed
                 })
                 

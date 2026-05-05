@@ -170,14 +170,53 @@ class PerformanceMetrics:
         """
         G2: worst single trading day's net P&L expressed as an R-multiple.
 
-        R = `risk_per_trade_dollars` (account-relative; pass
-        `risk_per_trade_pct * initial_capital`). Returns a NEGATIVE float for
-        losing days, 0.0 if no trades. Spec floor is -2R.
+        Per backtest.md §1 the spec definition is:
+          "1R = the dollar amount risked on the trade as priced by the
+           production PositionSizer at entry. Worst-day floor of -2R = total
+           realized + open-risk loss for the day cannot be worse than 2× the
+           risk-unit at the start of that day's first losing trade."
+
+        Implementation:
+          • Trades that carry an explicit `r_dollars` field (set at entry from
+            |entry-stop| × volume × value_per_lot) are used directly.
+          • For each trading day, the day's R is the FIRST LOSING TRADE's R
+            on that day; if no losing trade, the first trade's R.
+          • Trades without `r_dollars` fall back to `risk_per_trade_dollars`
+            (the old account-relative approximation, kept for back-compat).
+
+        Returns a NEGATIVE float for losing days, 0.0 if no trades / no R.
         """
-        daily = PerformanceMetrics.daily_pnl_from_trades(trades)
-        if daily.empty or risk_per_trade_dollars <= 0:
+        if not trades:
             return 0.0
-        return float(daily.min() / risk_per_trade_dollars)
+
+        from collections import defaultdict
+        by_day = defaultdict(list)
+        for t in trades:
+            ts = t.get("timestamp") or t.get("entry_time")
+            if ts is None:
+                continue
+            ts_p = pd.to_datetime(ts)
+            day = ts_p.normalize()
+            r = t.get("r_dollars")
+            if r is None or r <= 0:
+                r = risk_per_trade_dollars
+            by_day[day].append((ts_p, float(t.get("pnl", 0.0)), float(r)))
+        if not by_day:
+            return 0.0
+
+        worst = 0.0
+        for day_trades in by_day.values():
+            day_trades.sort(key=lambda x: x[0])  # chronological
+            day_pnl = sum(p for _, p, _ in day_trades)
+            # Spec: "risk-unit at the start of that day's first losing trade."
+            first_losing_r = next((r for _, p, r in day_trades if p < 0), None)
+            day_r = first_losing_r if first_losing_r is not None else day_trades[0][2]
+            if day_r <= 0:
+                continue
+            ratio = day_pnl / day_r
+            if ratio < worst:
+                worst = ratio
+        return float(worst)
 
     @staticmethod
     def calculate_trading_days(trades: List[Dict]) -> int:

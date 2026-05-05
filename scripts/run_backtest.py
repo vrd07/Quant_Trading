@@ -12,6 +12,7 @@ import logging
 from pathlib import Path
 import argparse
 from decimal import Decimal
+from typing import Dict, Tuple
 import pandas as pd
 
 # Suppress verbose per-bar strategy logging during backtest runs
@@ -25,6 +26,10 @@ sys.path.insert(0, str(project_root))
 from src.backtest.backtest_engine import BacktestEngine
 from src.backtest.grid_loader import load_grid_for
 from src.backtest.tiered_retune import TieredRetune, Gates
+from src.backtest.news_replay import NewsBlackoutReplay
+from src.backtest.walk_forward_driver import WalkForwardDriver
+from src.backtest.ensemble_engine import EnsembleBacktestEngine, print_ensemble_report
+from src.backtest import report as bt_report
 from src.strategies.breakout_strategy import BreakoutStrategy
 from src.strategies.mean_reversion_strategy import MeanReversionStrategy
 from src.strategies.momentum_strategy import MomentumStrategy
@@ -225,6 +230,17 @@ def save_results(result, output_prefix: str, strategy_name: str):
     print(f"  Results saved to: data/backtests/{stem}*")
 
 
+def _build_news_replay(args) -> 'Optional[NewsBlackoutReplay]':
+    """Build a NewsBlackoutReplay from --news-blackout if provided."""
+    paths = getattr(args, 'news_blackout', None)
+    if not paths:
+        return None
+    csv_paths = [p.strip() for p in paths.split(',') if p.strip()]
+    replay = NewsBlackoutReplay.from_csv(csv_paths)
+    print(f"  News blackout: loaded {len(replay)} high-impact events from {len(csv_paths)} CSV(s)")
+    return replay
+
+
 def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: dict,
                initial_capital: Decimal, args) -> object:
     print(f"\n>>> Running {strategy_name} ...")
@@ -236,7 +252,8 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
         risk_config=config,
         commission_per_trade=Decimal(str(args.commission)),
         slippage_model=args.slippage,
-        bypass_risk_limits=not args.enforce_risk
+        bypass_risk_limits=not args.enforce_risk,
+        news_replay=_build_news_replay(args),
     )
 
     result = engine.run(
@@ -333,11 +350,97 @@ def run_grid_search(strategy_name: str, symbol: Symbol, bars: pd.DataFrame,
     print("=" * 70)
 
 
+def run_walk_forward(strategy_name: str, symbol: Symbol, bars: pd.DataFrame,
+                     config: dict, initial_capital: Decimal, args) -> None:
+    """Backtest.md §5.1 walk-forward driver: rolling 70/30 monthly windows with
+    TieredRetune per window. The OOS union is graded against G1..G7."""
+    if strategy_name not in STRATEGY_CLASS_MAP:
+        print(f"[ERROR] Walk-forward not supported for strategy '{strategy_name}'")
+        sys.exit(1)
+    strategy_class = STRATEGY_CLASS_MAP[strategy_name]
+
+    grids_dir = Path(args.grids_dir) if args.grids_dir else Path("config/backtest_grids")
+    grid_path = grids_dir / f"{strategy_name}.yaml"
+    if not grid_path.exists():
+        print(f"[ERROR] No grid file at {grid_path}")
+        sys.exit(1)
+    grid = load_grid_for(strategy_name, grids_dir=grids_dir)
+
+    if args.smoke:
+        grid.max_combos['tier1'] = 3
+        grid.max_combos['tier2'] = 3
+        grid.max_combos['tier3'] = 3
+        print("  [SMOKE] grid caps overridden: tier1/2/3 = 3 combos each")
+
+    # Date filter mirrors run_grid_search so --start/--end act consistently.
+    idx_tz = bars.index.tz
+    def _ts(s: str) -> pd.Timestamp:
+        t = pd.Timestamp(s)
+        if idx_tz is not None and t.tz is None:
+            t = t.tz_localize(idx_tz)
+        return t
+    if args.start:
+        bars = bars[bars.index >= _ts(args.start)]
+    if args.end:
+        bars = bars[bars.index <= _ts(args.end)]
+
+    print("\n" + "=" * 72)
+    print(f"WALK-FORWARD — {strategy_name.upper()} × {symbol.ticker}")
+    print("=" * 72)
+    print(f"  Grid:        {grid_path}")
+    print(f"  Span:        {bars.index.min()} → {bars.index.max()}  ({len(bars):,} bars)")
+    print(f"  Window:      IS={args.wf_is_months}mo  OOS={args.wf_oos_months}mo  "
+          f"roll={args.wf_roll_months}mo")
+    print(f"  Slippage:    {args.slippage}")
+    print("=" * 72)
+
+    driver = WalkForwardDriver(
+        strategy_class=strategy_class,
+        symbol=symbol,
+        bars=bars,
+        grid=grid,
+        full_config=config,
+        initial_capital=initial_capital,
+        commission_per_trade=Decimal(str(args.commission)),
+        slippage_model=args.slippage,
+        news_replay=_build_news_replay(args),
+        is_months=args.wf_is_months,
+        oos_months=args.wf_oos_months,
+        roll_months=args.wf_roll_months,
+    )
+    result = driver.run(max_windows=args.wf_max_windows)
+    WalkForwardDriver.print_report(result)
+
+
+def run_ensemble(symbol: Symbol, bars: pd.DataFrame, config: dict,
+                 initial_capital: Decimal, args) -> None:
+    """Phase 2 ensemble: full pipeline, all enabled strategies, one symbol."""
+    engine = EnsembleBacktestEngine(
+        symbol=symbol,
+        full_config=config,
+        initial_capital=initial_capital,
+        commission_per_trade=Decimal(str(args.commission)),
+        slippage_model=args.slippage,
+        news_replay=_build_news_replay(args),
+        bypass_risk_limits=not args.enforce_risk,
+    )
+    result = engine.run(
+        bars=bars,
+        start_date=args.start,
+        end_date=args.end,
+    )
+    print_ensemble_report(result)
+
+
 def main():
     parser = argparse.ArgumentParser(description="Run strategy backtest")
     parser.add_argument('--strategy', default='all', choices=STRATEGY_CHOICES,
                         help='Strategy to test (default: all)')
     parser.add_argument('--symbol', default='XAUUSD', help='Symbol to test (default: XAUUSD)')
+    parser.add_argument('--symbols', default=None,
+                        help='Comma-separated list of symbols, e.g. "XAUUSD,BTCUSD,EURUSD". '
+                             'Use "all" to mean the three spec-required symbols (XAU+BTC+EUR). '
+                             'Overrides --symbol when set.')
     parser.add_argument('--timeframe', default='5m', help='Timeframe (default: 5m)')
     parser.add_argument('--config', default='config/config_live_50000.yaml',
                         help='Config file (default: config/config_live_50000.yaml)')
@@ -347,7 +450,9 @@ def main():
                         help='Initial capital (default: from config)')
     parser.add_argument('--commission', type=float, default=0, help='Commission per trade')
     parser.add_argument('--slippage', default='realistic',
-                        choices=['fixed', 'realistic', 'aggressive'], help='Slippage model')
+                        choices=['fixed', 'realistic', 'aggressive', 'strict'],
+                        help="Slippage model. 'strict' = backtest.md §3 (spread + "
+                             "1.5x slippage + queue penalty for stops). The production gate.")
     parser.add_argument('--output', default='data/backtests/backtest_result',
                         help='Output file prefix')
     parser.add_argument('--enforce-risk', action='store_true', default=False,
@@ -360,6 +465,29 @@ def main():
                         help='Out-of-sample fraction for grid-search IS/OOS split (default: 0.30)')
     parser.add_argument('--smoke', action='store_true', default=False,
                         help='Smoke-test mode: cap tier1/tier2/tier3 grid sizes to 3 combos')
+    parser.add_argument('--news-blackout', default=None,
+                        help='Comma-separated path(s) to ForexFactory CSV(s) for news '
+                             'blackout replay (backtest.md §3.4). Signals during high-impact '
+                             'windows are dropped; open positions stay open; spread widens 3×.')
+    parser.add_argument('--walk-forward', action='store_true', default=False,
+                        help='Run the §5.1 walk-forward driver (rolling 70/30, monthly roll, '
+                             'TieredRetune per window). Requires --strategy and --symbols.')
+    parser.add_argument('--ensemble', action='store_true', default=False,
+                        help='Phase 2 ensemble: drive full StrategyManager + RiskEngine + '
+                             'SimulatedBroker pipeline. The production gate (§6 Phase 2). '
+                             'Ignores --strategy; runs whatever is enabled in the config.')
+    parser.add_argument('--report', action='store_true', default=False,
+                        help='Emit the full §9 report tree under reports/backtest_<date>_<sha>/. '
+                             'Includes summary.md (the merge gate), per_strategy/*.md, '
+                             'ensemble.md when --ensemble used, equity_curves.png, and failures.log.')
+    parser.add_argument('--wf-max-windows', type=int, default=None,
+                        help='Cap window count for smoke-testing the walk-forward driver.')
+    parser.add_argument('--wf-is-months', type=float, default=8.4,
+                        help='In-sample window length in months (default: 8.4 = 70%% of 12mo).')
+    parser.add_argument('--wf-oos-months', type=float, default=4.1,
+                        help='Out-of-sample window length in months (default: 4.1 = 30%%).')
+    parser.add_argument('--wf-roll-months', type=float, default=1.0,
+                        help='Months to advance between windows (default: 1.0 per spec).')
 
     args = parser.parse_args()
 
@@ -377,12 +505,22 @@ def main():
     else:
         initial_capital = Decimal(str(config.get('account', {}).get('initial_balance', 10000)))
 
+    # Resolve the list of symbols. --symbols overrides --symbol; "all" expands
+    # to backtest.md §2's three required symbols (XAU + BTC + EUR).
+    if args.symbols:
+        if args.symbols.strip().lower() == 'all':
+            symbol_names = ['XAUUSD', 'BTCUSD', 'EURUSD']
+        else:
+            symbol_names = [s.strip() for s in args.symbols.split(',') if s.strip()]
+    else:
+        symbol_names = [args.symbol]
+
     print("=" * 60)
     print("BACKTEST CONFIGURATION")
     print("=" * 60)
     print(f"  Config:           {args.config}")
     print(f"  Strategy:         {args.strategy}")
-    print(f"  Symbol:           {args.symbol}")
+    print(f"  Symbols:          {', '.join(symbol_names)}")
     print(f"  Timeframe:        {args.timeframe}")
     print(f"  Initial Capital:  ${initial_capital:,.2f}")
     print(f"  Commission:       ${args.commission:.2f}")
@@ -393,17 +531,41 @@ def main():
         print(f"  End Date:         {args.end}")
     print("=" * 60)
 
-    symbol = create_symbol(args.symbol, config)
+    if args.ensemble:
+        for sym_name in symbol_names:
+            symbol = create_symbol(sym_name, config)
+            print(f"\nLoading {sym_name} {args.timeframe} bars...")
+            bars = load_historical_data(sym_name, args.timeframe)
+            print(f"  Loaded {len(bars)} bars  ({bars.index.min()} → {bars.index.max()})")
+            run_ensemble(symbol, bars, config, initial_capital, args)
+        print("\nEnsemble backtest complete!")
+        return
 
-    print("\nLoading historical data...")
-    bars = load_historical_data(args.symbol, args.timeframe)
-    print(f"  Loaded {len(bars)} bars")
-    print(f"  Date range: {bars.index.min()} to {bars.index.max()}")
+    if args.walk_forward:
+        if args.strategy == 'all':
+            print("[ERROR] --walk-forward requires a specific --strategy (not 'all')")
+            sys.exit(1)
+        for sym_name in symbol_names:
+            symbol = create_symbol(sym_name, config)
+            print(f"\nLoading {sym_name} {args.timeframe} bars...")
+            bars = load_historical_data(sym_name, args.timeframe)
+            print(f"  Loaded {len(bars)} bars  ({bars.index.min()} → {bars.index.max()})")
+            run_walk_forward(args.strategy, symbol, bars, config, initial_capital, args)
+        print("\nWalk-forward complete!")
+        return
 
     if args.grid_search:
         if args.strategy == 'all':
             print("[ERROR] --grid-search requires a specific --strategy (not 'all')")
             sys.exit(1)
+        if len(symbol_names) > 1:
+            print("[ERROR] --grid-search runs one symbol at a time. Use --walk-forward "
+                  "for multi-symbol rolling validation.")
+            sys.exit(1)
+        symbol = create_symbol(symbol_names[0], config)
+        print("\nLoading historical data...")
+        bars = load_historical_data(symbol_names[0], args.timeframe)
+        print(f"  Loaded {len(bars)} bars  ({bars.index.min()} → {bars.index.max()})")
         run_grid_search(args.strategy, symbol, bars, config, initial_capital, args)
         print("\nGrid search complete!")
         return
@@ -414,29 +576,89 @@ def main():
         else [args.strategy]
     )
 
-    results = {}
-    for strat in strategies_to_run:
+    # Per-symbol per-strategy result table. The keys are kept tuple-shaped so
+    # downstream code (#4 walk-forward, #6 report generator) can pivot freely.
+    results: Dict[Tuple[str, str], object] = {}
+    for sym_name in symbol_names:
+        symbol = create_symbol(sym_name, config)
+        print(f"\nLoading {sym_name} {args.timeframe} bars...")
         try:
-            results[strat] = run_single(strat, symbol, bars, config, initial_capital, args)
-        except Exception as e:
-            print(f"  [ERROR] {strat} failed: {e}")
-            import traceback
-            traceback.print_exc()
+            bars = load_historical_data(sym_name, args.timeframe)
+        except SystemExit:
+            print(f"  [SKIP] No data for {sym_name}")
+            continue
+        print(f"  Loaded {len(bars)} bars  ({bars.index.min()} → {bars.index.max()})")
+        for strat in strategies_to_run:
+            try:
+                results[(sym_name, strat)] = run_single(
+                    strat, symbol, bars, config, initial_capital, args,
+                )
+            except Exception as e:
+                print(f"  [ERROR] {strat} on {sym_name} failed: {e}")
+                import traceback
+                traceback.print_exc()
 
-    # Summary table when running all
+    # Per-symbol summary + cross-symbol grade per strategy. The cross-symbol
+    # block implements backtest.md §2's "weakest-symbol" grading.
     if len(results) > 1:
-        print("\n" + "=" * 60)
-        print("SUMMARY TABLE")
-        print("=" * 60)
-        print(f"{'Strategy':<20} {'Trades':>7} {'WinRate':>8} {'PF':>6} {'Return':>10} {'Sharpe':>7} {'MaxDD':>8}")
-        print("-" * 60)
-        for name, r in results.items():
+        print("\n" + "=" * 78)
+        print("SUMMARY TABLE — per (symbol, strategy)")
+        print("=" * 78)
+        print(f"{'Symbol':<8} {'Strategy':<22} {'Trades':>7} {'WinRate':>8} {'PF':>6} "
+              f"{'Return':>10} {'Sharpe':>7} {'MaxDD':>8}")
+        print("-" * 78)
+        for (sym, strat), r in results.items():
             print(
-                f"{name:<20} {r.total_trades:>7} {r.win_rate:>7.1f}%"
+                f"{sym:<8} {strat:<22} {r.total_trades:>7} {r.win_rate:>7.1f}%"
                 f" {r.profit_factor:>6.2f} {r.total_return_pct:>+9.2f}%"
                 f" {r.sharpe_ratio:>7.2f} {r.max_drawdown_pct:>7.2f}%"
             )
-        print("=" * 60)
+        print("=" * 78)
+
+        # Weakest-symbol grade per strategy (§2): a strategy is only as good
+        # as its worst symbol — that's the column the live config gates on.
+        if len(symbol_names) > 1 and len(strategies_to_run) >= 1:
+            print("\nWEAKEST-SYMBOL GRADE (backtest.md §2)")
+            print("-" * 78)
+            print(f"{'Strategy':<22} {'Worst Symbol':<14} {'PF':>6} {'Sharpe':>7} {'WinRate':>8}")
+            print("-" * 78)
+            for strat in strategies_to_run:
+                rows = [(sym, results[(sym, strat)]) for sym in symbol_names
+                        if (sym, strat) in results]
+                if not rows:
+                    continue
+                # Weakest = lowest profit factor (matches G3).
+                worst_sym, worst_r = min(rows, key=lambda kv: kv[1].profit_factor)
+                print(f"{strat:<22} {worst_sym:<14} {worst_r.profit_factor:>6.2f} "
+                      f"{worst_r.sharpe_ratio:>7.2f} {worst_r.win_rate:>7.1f}%")
+            print("=" * 78)
+
+    # §9 report emission. Aggregates results across (symbol, strategy) tuples
+    # into one summary.md per strategy — when multiple symbols ran the
+    # weakest-symbol result is the one that gates §2 grading.
+    if args.report and results:
+        ctx = bt_report.ReportContext.create()
+        # Pick the worst-PF result per strategy (matches §2 weakest-symbol grading).
+        per_strategy: Dict[str, object] = {}
+        for strat in strategies_to_run:
+            rows = [results[(sym, strat)] for sym in symbol_names if (sym, strat) in results]
+            if rows:
+                per_strategy[strat] = min(rows, key=lambda r: r.profit_factor)
+        bt_report.write_summary_md(ctx, per_strategy, config_path=args.config)
+        for name, r in per_strategy.items():
+            bt_report.write_per_strategy_md(ctx, name, r)
+        bt_report.write_failures_log(ctx, per_strategy)
+        bt_report.write_equity_curves_png(ctx, per_strategy)
+        # Trade log spans every (symbol, strategy) combo.
+        all_trades = []
+        for (sym, strat), r in results.items():
+            for t in (r.trades or []):
+                row = dict(t)
+                row.setdefault('symbol', sym)
+                row.setdefault('strategy', strat)
+                all_trades.append(row)
+        bt_report.write_trade_log(ctx, all_trades)
+        print(f"\nReport written to: {ctx.out_dir}")
 
     print("\nBacktest complete!")
 

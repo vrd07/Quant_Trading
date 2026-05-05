@@ -166,26 +166,52 @@ class TieredRetune:
         outcomes_1 = self._evaluate_combos(tier1_combos)
         total_combos += len(outcomes_1)
         winner_1 = self._pick_winner(outcomes_1)
+
+        # When every tier-1 combo is vetoed: the original code aborted here.
+        # That's wrong if the vetoes are dominated by G2 (worst-day-floor
+        # breach) — tier 2 sweeps the risk knobs (SL/TP multipliers, trail)
+        # which is *exactly* what fixes G2. Escalate using the best-IS-Sharpe
+        # combo as the anchor and let tier 2 try to repair it.
+        # We only abort early when the dominant failure is zero-trades
+        # (entry logic is broken; no risk knob will save it).
+        tier1_g2_dominated = False
         if winner_1 is None:
             n_zero = sum(1 for o in outcomes_1 if "zero_trades_IS" in o.veto_reasons)
             n_g2 = sum(1 for o in outcomes_1 if "G2_worst_day_IS" in o.veto_reasons)
-            best_oos = None
             best = max(outcomes_1, key=lambda o: o.is_result.sharpe_ratio, default=None)
-            if best is not None:
-                best.oos_result = self._run_one_safe(best.combo, self.oos_bars)
-                best_oos = best.oos_result
-            gate_status = self.gates.evaluate(best_oos, self._oos_days) if best_oos else {}
-            return RetuneResult(
-                passed=False, tier=0,
-                winning_params=self.grid.build_config(best.combo) if best else {},
-                oos_result=best_oos, gate_status=gate_status,
-                n_combos_evaluated=total_combos,
-                reason=(
-                    f"All {len(outcomes_1)} tier1 combos vetoed on IS "
-                    f"(zero-trades: {n_zero}, G2 worst-day-floor breached: {n_g2})"
-                ),
-            )
-        if self._evaluate_oos_and_check(winner_1):
+            if n_g2 > n_zero and best is not None:
+                # G2-dominated failure → anchor tier 2 on the best-IS-Sharpe
+                # combo even though it was IS-vetoed. Tier 2 may widen the
+                # stop enough to clear G2.
+                tier1_g2_dominated = True
+                winner_1 = best
+                log.info(
+                    f"Tier 1: all combos vetoed but G2-dominated "
+                    f"({n_g2} G2 vs {n_zero} zero-trades); escalating to tier 2 "
+                    "with best-IS-Sharpe combo as anchor."
+                )
+            else:
+                # Zero-trades or tied — entry logic is broken, no point
+                # widening stops. Return the abort.
+                best_oos = None
+                if best is not None:
+                    best.oos_result = self._run_one_safe(best.combo, self.oos_bars)
+                    best_oos = best.oos_result
+                gate_status = self.gates.evaluate(best_oos, self._oos_days) if best_oos else {}
+                return RetuneResult(
+                    passed=False, tier=0,
+                    winning_params=self.grid.build_config(best.combo) if best else {},
+                    oos_result=best_oos, gate_status=gate_status,
+                    n_combos_evaluated=total_combos,
+                    reason=(
+                        f"All {len(outcomes_1)} tier1 combos vetoed on IS "
+                        f"(zero-trades: {n_zero}, G2 worst-day-floor breached: {n_g2})"
+                    ),
+                )
+
+        # Tier 1 winner found (or G2-escalated anchor). Only evaluate OOS for
+        # a real winner — a G2-vetoed anchor wouldn't pass anyway, skip the work.
+        if not tier1_g2_dominated and self._evaluate_oos_and_check(winner_1):
             return self._success(1, winner_1, total_combos)
 
         # ---- TIER 2 ------------------------------------------------------
