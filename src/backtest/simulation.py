@@ -10,13 +10,14 @@ Responsibilities:
 - Maintain account balance
 """
 
-from typing import Dict, List, Optional
+from typing import Callable, Dict, List, Optional
 from decimal import Decimal
 from uuid import uuid4
 import random
 
 from ..core.types import Order, Position, Bar, Symbol
 from ..core.constants import OrderSide, OrderStatus, PositionSide
+from .fill_model import StrictFillModel, FillContext
 
 
 class SimulatedBroker:
@@ -27,7 +28,8 @@ class SimulatedBroker:
         initial_capital: Decimal,
         commission_per_trade: Decimal = Decimal("0"),
         slippage_model: str = "realistic",
-        trailing_stop_config: Optional[Dict] = None
+        trailing_stop_config: Optional[Dict] = None,
+        news_active_at: Optional[Callable[[object], bool]] = None,
     ):
         """
         Initialize simulated broker.
@@ -35,12 +37,25 @@ class SimulatedBroker:
         Args:
             initial_capital: Starting capital
             commission_per_trade: Commission per trade
-            slippage_model: 'fixed', 'realistic', or 'aggressive'
+            slippage_model: 'fixed', 'realistic', 'aggressive', or 'strict'
+                (strict = backtest.md §3 fill model: spread + 1.5× slippage +
+                queue penalty for stops)
             trailing_stop_config: Trailing stop config from risk.trailing_stop section
+            news_active_at: Optional callable (bar) -> bool that returns True
+                if the bar timestamp falls inside a high-impact news blackout
+                window. Wired by #2 (news-blackout replay). When True, the
+                strict fill model widens the spread by 3×.
         """
         self.initial_capital = initial_capital
         self.commission_per_trade = commission_per_trade
         self.slippage_model = slippage_model
+
+        # Strict fill model — only constructed when requested so legacy
+        # backtests pay zero startup cost.
+        self._strict_fill: Optional[StrictFillModel] = (
+            StrictFillModel() if slippage_model == "strict" else None
+        )
+        self._news_active_at = news_active_at
 
         # Trailing stop config (mirrors TrailingStopManager stages)
         ts_cfg = trailing_stop_config or {}
@@ -155,6 +170,13 @@ class SimulatedBroker:
 
         positions_to_close = {}
 
+        # Build a single FillContext for this bar; reuse for every position.
+        if self._strict_fill is not None:
+            news_active = bool(self._news_active_at(current_bar)) if self._news_active_at else False
+            fill_ctx = self._build_fill_context(current_bar, news_active=news_active)
+        else:
+            fill_ctx = None
+
         for pos_id, position in self.positions.items():
             # Time stop: close if position has been open too long
             if self.trailing_stop_enabled and self.time_stop_minutes is not None:
@@ -168,16 +190,34 @@ class SimulatedBroker:
 
             # Check stop loss (SL assumed hit first if both SL and TP on same bar)
             if position.stop_loss:
+                hit = False
                 if position.side == PositionSide.LONG and bar_low <= position.stop_loss:
-                    positions_to_close[pos_id] = (position.stop_loss, 'stop_loss')
+                    hit = True
                 elif position.side == PositionSide.SHORT and bar_high >= position.stop_loss:
-                    positions_to_close[pos_id] = (position.stop_loss, 'stop_loss')
+                    hit = True
+                if hit:
+                    if fill_ctx is not None:
+                        # Strict: worse-of (stop ± slippage, bar extremum)
+                        sl_fill = self._strict_fill.stop_fill(
+                            symbol=position.symbol,
+                            position_side=position.side,
+                            stop_price=position.stop_loss,
+                            ctx=fill_ctx,
+                        )
+                    else:
+                        sl_fill = position.stop_loss
+                    positions_to_close[pos_id] = (sl_fill, 'stop_loss')
 
             # Check take profit (only if not already marked for SL/time_stop)
             if pos_id not in positions_to_close and position.take_profit:
+                tp_hit = False
                 if position.side == PositionSide.LONG and bar_high >= position.take_profit:
-                    positions_to_close[pos_id] = (position.take_profit, 'take_profit')
+                    tp_hit = True
                 elif position.side == PositionSide.SHORT and bar_low <= position.take_profit:
+                    tp_hit = True
+                if tp_hit:
+                    # TP fills exactly at limit in both legacy and strict models
+                    # (§3.3: "no positive slippage, no queue priority").
                     positions_to_close[pos_id] = (position.take_profit, 'take_profit')
 
         # Close positions
@@ -270,15 +310,31 @@ class SimulatedBroker:
         """Calculate fill price with slippage."""
         # current_bar may be a pandas Series or Bar dataclass
         try:
+            bar_open = Decimal(str(current_bar['open']))
             bar_close = Decimal(str(current_bar['close']))
             bar_high = Decimal(str(current_bar['high']))
             bar_low = Decimal(str(current_bar['low']))
         except (KeyError, TypeError):
+            bar_open = Decimal(str(current_bar.open))
             bar_close = Decimal(str(current_bar.close))
             bar_high = Decimal(str(current_bar.high))
             bar_low = Decimal(str(current_bar.low))
 
         base_price = order.price if order.price else bar_close
+
+        # Strict model: cross half spread + 1.5× empirical slippage. The
+        # base price is the next-bar open (matches §3.3 "fill at next-bar
+        # open + slippage" for market orders); we approximate that with
+        # the current bar's open since the engine already advances bars.
+        if self.slippage_model == 'strict' and self._strict_fill is not None:
+            news_active = bool(self._news_active_at(current_bar)) if self._news_active_at else False
+            ctx = self._build_fill_context(current_bar, news_active=news_active)
+            return self._strict_fill.market_fill(
+                symbol=order.symbol,
+                side=order.side,
+                signal_price=bar_open if order.price is None else base_price,
+                ctx=ctx,
+            )
 
         if self.slippage_model == 'fixed':
             # Fixed slippage of 1 pip
@@ -292,14 +348,42 @@ class SimulatedBroker:
             slippage = order.symbol.pip_value * Decimal(str(random.uniform(0, 5)))
         else:
             slippage = Decimal("0")
-        
+
         # Apply slippage (worse fill for trader)
         if order.side == OrderSide.BUY:
             fill_price = base_price + slippage
         else:
             fill_price = base_price - slippage
-        
+
         return fill_price
+
+    def _build_fill_context(self, current_bar, news_active: bool = False) -> FillContext:
+        """Translate a pandas Series / Bar into a FillContext for the strict model."""
+        try:
+            bar_open = Decimal(str(current_bar['open']))
+            bar_close = Decimal(str(current_bar['close']))
+            bar_high = Decimal(str(current_bar['high']))
+            bar_low = Decimal(str(current_bar['low']))
+            ts = current_bar.name  # pandas Series.name = index value
+        except (KeyError, TypeError):
+            bar_open = Decimal(str(current_bar.open))
+            bar_close = Decimal(str(current_bar.close))
+            bar_high = Decimal(str(current_bar.high))
+            bar_low = Decimal(str(current_bar.low))
+            ts = current_bar.timestamp
+
+        # Hour-of-day in UTC for the spread curve. If the bar timestamp is
+        # naive we assume it's already broker-local UTC (the historical CSVs
+        # don't carry tz). Cheap to re-derive each bar.
+        hour = getattr(ts, "hour", 0)
+        return FillContext(
+            bar_open=bar_open,
+            bar_high=bar_high,
+            bar_low=bar_low,
+            bar_close=bar_close,
+            hour_utc=int(hour),
+            news_active=news_active,
+        )
     
     def get_balance(self) -> Decimal:
         """Get current balance."""

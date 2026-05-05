@@ -1,9 +1,0 @@
-BACKTEST RESULTS — CONTINUATION_BREAKOUT
-============================================================
-
-Total Return: $160.28 (+1.60%)
-Sharpe Ratio: 0.04
-Max Drawdown: -2.08%
-Win Rate: 36.0%
-Total Trades: 50
-Profit Factor: 1.26

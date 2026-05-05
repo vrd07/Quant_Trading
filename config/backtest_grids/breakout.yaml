@@ -1,0 +1,55 @@
+strategy: breakout
+file: src/strategies/breakout_strategy.py
+description: Donchian channel breakout with multi-timeframe confirmation, ADX/volume gates.
+notes: |
+  v3 anchor (Apr 2026): donchian shortened from 20 to 12 for faster detection.
+  RR widened to 3.0 because gold trends well. Sessions hard-pinned to [4,4],[7,8],[22,22] —
+  these were the only profitable hours in journal. Tier 3 includes a session-preset sweep
+  to confirm the pinning isn't overfitting; if a wider session beats it OOS, accept it.
+
+anchor:
+  donchian_period: 12
+  rr_ratio: 3.0
+  atr_stop_multiplier: 2.0
+  adx_min_threshold: 20
+  min_body_atr_ratio: 0.30
+  atr_spike_mult: 1.8
+  cooldown_bars: 2
+  rsi_overbought: 78
+  rsi_oversold: 22
+  bb_squeeze_enabled: true
+  bb_squeeze_percentile: 70
+  htf_trend_enabled: true
+  session_filter_enabled: true
+  ema_confirm_enabled: true
+  macd_confirmation: true
+
+tier1_entry:
+  donchian_period: [10, 12, 20]              # 3
+  adx_min_threshold: [18, 22, 26]            # 3
+  min_body_atr_ratio: [0.25, 0.35, 0.45]     # 3
+  atr_spike_mult: [1.5, 1.8, 2.2, 2.8]       # 4
+  bb_squeeze_percentile: [55, 70, 85]        # 3
+  # combos = 3*3*3*4*3 = 108
+
+tier2_risk:
+  atr_stop_multiplier: [1.5, 2.0, 2.5, 3.0]
+  rr_ratio: [1.5, 2.0, 2.5, 3.0, 4.0]
+  cooldown_bars: [1, 2, 4, 6]
+  close_position_pct: [0.0, 0.25, 0.35, 0.50]
+  # one-dim total = 4 + 5 + 4 + 4 = 17
+
+tier3_filters:
+  regime_preset: [trend_only, trend_volatile, all]
+  htf_trend_enabled: [true, false]
+  bb_squeeze_enabled: [true, false]
+  ema_confirm_enabled: [true, false]
+  macd_confirmation: [true, false]
+  volume_confirmation: [true, false]
+  session_preset: [current, london_ny, all]
+  # combos = 3*2*2*2*2*2*3 = 288 -> sampled to 50
+
+max_combos:
+  tier1: 200
+  tier2: 20
+  tier3: 50
