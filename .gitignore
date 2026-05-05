@@ -42,6 +42,11 @@ syntax_result.txt
 test_output_tool.txt
 *.txt
 *.log
+*.csv
+
+# Exceptions for required text files
+!requirements.txt
+!requirements-test.txt
 
 # ============================================
 # OS Files
