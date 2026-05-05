@@ -267,7 +267,7 @@ strategies:
     high_confidence_threshold: 90.0
     # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
     session_filter_enabled: true
-    allowed_sessions: [[1,7],[15,17],[20,22]]   # 7 + 3 + 3 = 13 hours/day
+    allowed_sessions: [[0,23]]   # 2026-05-05: user directive — 24h play (Kalman has daily setup + accuracy)
     ema_confirm_enabled: false
     macd_confirmation: false
     kalman_accel_enabled: false
@@ -515,7 +515,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [asia_range_fade, vwap, fibonacci_retracement, mini_medallion]
+      strategies: [asia_range_fade, vwap, fibonacci_retracement, mini_medallion, kalman_regime]
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -545,9 +545,9 @@ trading_hours:
     - name: late_ny
       start: "22:00"
       end: "23:59"
-      enabled: false
+      enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [mini_medallion, fibonacci_retracement]
+      strategies: [mini_medallion, fibonacci_retracement, kalman_regime]
 
   news_filter:
     enabled: true
