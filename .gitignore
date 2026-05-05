@@ -94,3 +94,8 @@ config/runtime_overrides.yaml
 
 # Local backtest docs
 backtest.md
+
+# Strategy Specific Backtest Outputs
+*continuation_breakout*.csv
+*continuation_breakout*.txt
+
