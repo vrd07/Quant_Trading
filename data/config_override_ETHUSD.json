@@ -1,9 +1,9 @@
 {
   "symbol": "ETHUSD",
-  "generated_at": "2026-05-04T06:23:02.725583+00:00",
-  "valid_until": "2026-05-05T06:23:02.725583+00:00",
+  "generated_at": "2026-05-05T09:56:39.449371+00:00",
+  "valid_until": "2026-05-06T09:56:39.449371+00:00",
   "regime": "RANGE",
-  "confidence": 0.8413,
+  "confidence": 0.841,
   "classifier": "RandomForest+Markov (n=34 samples)",
   "strategy_overrides": {
     "breakout": true,
@@ -21,15 +21,15 @@
     "continuation_breakout": false
   },
   "diagnostics": {
-    "adx_14": 28.865768,
-    "atr_pct": 0.037805,
-    "bb_width_ratio": 0.637337,
-    "close_ema20_pct": 0.033829,
-    "momentum_1d": 0.0216,
-    "momentum_5d": 0.01767,
-    "range_atr_ratio": 0.812517,
-    "vol_ratio": 0.481137,
-    "park_vol_zscore": -1.633268
+    "adx_14": 28.846459,
+    "atr_pct": 0.037847,
+    "bb_width_ratio": 0.637122,
+    "close_ema20_pct": 0.033922,
+    "momentum_1d": 0.022402,
+    "momentum_5d": 0.018046,
+    "range_atr_ratio": 0.829235,
+    "vol_ratio": 0.265116,
+    "park_vol_zscore": -1.62184
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -48,9 +48,9 @@
   },
   "performance_scores": {},
   "regime_probabilities": {
-    "TREND": 0.1307,
-    "RANGE": 0.8413,
-    "VOLATILE": 0.028
+    "TREND": 0.1252,
+    "RANGE": 0.841,
+    "VOLATILE": 0.0338
   },
   "transition_matrix": {
     "TREND": {
