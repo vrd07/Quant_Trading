@@ -276,7 +276,7 @@ STRATEGY_WEIGHTS = {
         "sbr":            0.40,
         "supply_demand":  0.25,
         "asia_range_fade": 0.70, # PF 1.31, WR 45.3%, DD 1.6% — range-optimised
-        "descending_channel_breakout": 0.45,
+        "descending_channel_breakout": 0.30,  # 2026-05-05: dropped from 0.45 — smoke run March 2026 showed -$1950 drag in RANGE; below 0.40 disables it pending backtest
         "smc_ob":         0.50,
         "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
         "continuation_breakout": 0.30,  # range regime is mostly chop, not stair-step

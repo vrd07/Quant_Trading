@@ -107,7 +107,7 @@ risk:
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
                                       # would push daily loss past 85% of $145 = $123.25
 
-  max_positions: 2
+  max_positions: 3                # 2026-05-05: 2→3 — gives ensemble room beyond Kalman's serial concentration; 3×$15=$45 worst-case still inside $200 daily cap
   max_daily_trades: 12            # Conservative trade count
   max_exposure_per_symbol_pct: 5.0
   max_daily_wins: 8               # Stop trading once 8 wins hit

@@ -104,7 +104,7 @@ risk:
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
                                       # would push daily loss past 85% of $145 = $123.25
 
-  max_positions: 2
+  max_positions: 3                # 2026-05-05: 2→3 — ensemble diversification; 3×$15=$45 worst-case inside $145 daily cap
   max_daily_trades: 10            # Conservative — audit standard
   max_exposure_per_symbol_pct: 5.0
   max_daily_wins: 8               # Stop trading once 8 wins hit ($250+ target)
