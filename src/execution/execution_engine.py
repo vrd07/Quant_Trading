@@ -186,6 +186,7 @@ class ExecutionEngine:
                 current_positions=current_positions,
                 account_equity=account_equity,
                 signal_strength=float(signal.strength) if signal.strength is not None else None,
+                strategy_name=signal.strategy_name,
             )
             
             # Apply strategy-specific fixed lot override directly from the signal.
