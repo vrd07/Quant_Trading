@@ -99,6 +99,16 @@ risk:
   # Basis: 0.01 lot XAUUSD × 10 pip stop × $10/pip/lot = $1
   risk_per_trade_pct: 0.01        # 1.0% = $1 per trade
 
+  # Per-strategy risk override (added 2026-05-06).
+  # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
+  # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
+  # needs ~5% of balance per trade to express its edge; clipping it back to
+  # the operator cap silently rejects the high-vol kalman trades.
+  # Other strategies still follow the global cap.
+  strategy_risk_overrides:
+    kalman_regime:
+      risk_per_trade_usd: 5
+
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
   absolute_max_loss_usd: 5        # Daily loss limit ($100 × 5%)
   max_drawdown_usd: 7             # Overall drawdown limit ($100 × 7%)
@@ -261,8 +271,8 @@ strategies:
     min_signal_strength: 0.50
     cooldown_bars: 2                # v2: 30 min cooldown (was 30 bars = 7.5hr!)
     atr_period: 14
-    sl_atr_multiplier: 1.5
-    tp_atr_multiplier: 8.0          # v2: 8x ATR TP — let big trends run
+    sl_atr_multiplier: 3.0          # 2026-05-06: 1.5/2.5 → 3.0 — 2-D SL×TP sweep on $10k showed (3.0, 4.0) is winrate sweet spot (WR 47.6%, PF 1.32)
+    tp_atr_multiplier: 4.0          # 2026-05-06: 8.0 → 4.0 — XAU 15m trends rarely reach 8×ATR; tighter TP captures more wins without giving back via stops
     news_filter: true
     # Confidence gate: signals with conf >= threshold may stack up to risk.max_positions;
     # signals below threshold are limited to 1 open kalman_regime position at a time.
@@ -550,7 +560,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-05_news.csv
+    csv_path: news/2026-05-06_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
