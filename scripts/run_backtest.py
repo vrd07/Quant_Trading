@@ -254,6 +254,7 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
         slippage_model=args.slippage,
         bypass_risk_limits=not args.enforce_risk,
         news_replay=_build_news_replay(args),
+        disable_sl_exits=getattr(args, 'disable_sl', False),
     )
 
     result = engine.run(
@@ -457,6 +458,11 @@ def main():
                         help='Output file prefix')
     parser.add_argument('--enforce-risk', action='store_true', default=False,
                         help='Enforce kill-switch/circuit-breaker during backtest (default: bypassed)')
+    parser.add_argument('--disable-sl', action='store_true', default=False,
+                        help='Research: position sizing still uses SL distance, '
+                             'but the simulation never closes a trade on an SL touch. '
+                             'Only TP / time-stop / trailing-stop can exit. Use to '
+                             'measure "what if winners always ran" upside.')
     parser.add_argument('--grid-search', action='store_true', default=False,
                         help='Run backtest.md §7 tiered auto-retune instead of single backtest')
     parser.add_argument('--grids-dir', default=None,
