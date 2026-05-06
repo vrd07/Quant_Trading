@@ -116,6 +116,16 @@ class KalmanRegimeStrategy(BaseStrategy):
         # Sell-side: require higher signal strength for shorts (gold upward bias)
         self.min_signal_strength_sell = config.get('min_signal_strength_sell', None)
 
+        # HTF directional gate for SELL only.
+        # Gold has a structural bullish drift; even strong same-TF SELL signals get
+        # run over by the higher-TF trend. When enabled, SELL signals require the
+        # higher-TF (resample target) close to sit BELOW EMA(htf_sell_ema_period).
+        # BUY-side is unaffected — both directions stay live, but SELL must align
+        # with a confirmed bearish HTF trend.
+        self.htf_sell_filter_enabled = config.get('htf_sell_filter_enabled', False)
+        self.htf_sell_resample_to = str(config.get('htf_sell_resample_to', '1h'))
+        self.htf_sell_ema_period = int(config.get('htf_sell_ema_period', 50))
+
         # Confidence threshold (0-100). Signals with confidence >= threshold may stack
         # up to risk.max_positions; below the threshold the executor allows only one
         # concurrent kalman_regime position. Confidence is derived from signal strength.
@@ -123,6 +133,14 @@ class KalmanRegimeStrategy(BaseStrategy):
 
         # Minimum data required
         self.min_bars = max(self.rv_ma_window, 100) + self.rv_window + 10
+
+        # Bump min_bars when HTF SELL filter is on so the resample has enough history.
+        if self.htf_sell_filter_enabled:
+            bars_per_htf = {
+                '15min': 1, '15m': 1, '30min': 2, '30m': 2,
+                '1h': 4, '1H': 4, '2h': 8, '2H': 8, '4h': 16, '4H': 16,
+            }.get(self.htf_sell_resample_to, 4)
+            self.min_bars = max(self.min_bars, (self.htf_sell_ema_period + 10) * bars_per_htf)
 
     def get_name(self) -> str:
         return "kalman_regime"
@@ -360,6 +378,33 @@ class KalmanRegimeStrategy(BaseStrategy):
         if self.long_only and side == OrderSide.SELL:
             self._log_no_signal("Long-only mode: SELL signal suppressed")
             return None
+
+        # HTF directional gate for SELL only — only fire SELL when higher-TF
+        # close is below EMA(htf_sell_ema_period). Suppresses shorts that fight
+        # a bullish HTF trend (the dominant XAU loss pattern).
+        if self.htf_sell_filter_enabled and side == OrderSide.SELL:
+            try:
+                htf = bars[['open', 'high', 'low', 'close', 'volume']].resample(
+                    self.htf_sell_resample_to
+                ).agg({
+                    'open': 'first', 'high': 'max', 'low': 'min',
+                    'close': 'last', 'volume': 'sum',
+                }).dropna()
+            except Exception:
+                htf = None
+            if htf is None or len(htf) < self.htf_sell_ema_period + 1:
+                self._log_no_signal(
+                    f"HTF SELL filter: insufficient {self.htf_sell_resample_to} bars"
+                )
+                return None
+            htf_close = float(htf['close'].iloc[-1])
+            htf_ema = float(htf['close'].ewm(span=self.htf_sell_ema_period, adjust=False).mean().iloc[-1])
+            if htf_close >= htf_ema:
+                self._log_no_signal(
+                    f"HTF SELL filter: {self.htf_sell_resample_to} close {htf_close:.2f} "
+                    f">= EMA{self.htf_sell_ema_period} {htf_ema:.2f} — bullish HTF"
+                )
+                return None
 
         # Minimum signal strength gate (different threshold for SELL if configured)
         min_strength = self.min_signal_strength
