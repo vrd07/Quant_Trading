@@ -141,6 +141,7 @@ def main():
 
     print("Loading XAUUSD 5m data ...")
     bars = load_bars()
+    bars = bars.tail(30000)
     print(f"  {len(bars)} bars | {bars.index.min()} → {bars.index.max()}")
 
     # ── Parameter grid ────────────────────────────────────────────────────
@@ -148,11 +149,13 @@ def main():
     # breakout decisiveness (ATR buffer + body), trend strength (ADX),
     # and signal gate (min_strength). Grid kept small for tractable runtime.
     grid = {
-        "min_hl_count": [2, 3],
-        "breakout_atr_buffer": [0.30, 0.50],
-        "adx_min_threshold": [22, 28],
-        "min_strength": [0.60, 0.72],
-        "long_only": [False, True],
+        "channel_lookback": [60, 100],
+        "swing_period": [5, 10],
+        "min_hl_count": [1, 2],
+        "breakout_atr_buffer": [0.10, 0.20],
+        "require_correction_phase": [False],
+        "min_strength": [0.45],
+        "adx_min_threshold": [20]
     }
     keys = list(grid.keys())
     combos = list(product(*[grid[k] for k in keys]))
@@ -167,14 +170,14 @@ def main():
             print(f"  [{idx}/{len(combos)}] FAIL: {e}")
             continue
         r_summary = {k: v for k, v in r.items() if k != "trades_df"}
-        r_summary["score"] = score(r)
+        r_summary["score"] = score(r) + r["trades"] * 0.1  # boost score for more trades
         results.append((r_summary, r["trades_df"]))
-        if idx % 10 == 0 or idx == len(combos):
+        if True:
             print(
                 f"  [{idx}/{len(combos)}] trades={r['trades']:>3} "
                 f"wr={r['win_rate']:>5.1f}% pf={r['pf']:>4.2f} "
                 f"ret={r['return_pct']:>+6.2f}% dd={r['max_dd_pct']:>5.2f}% "
-                f"score={r_summary['score']:>7.2f}"
+                f"score={r_summary['score']:>7.2f} | {overrides}"
             )
 
     if not results:
