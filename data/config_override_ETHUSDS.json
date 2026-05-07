@@ -1,0 +1,42 @@
+{
+  "symbol": "ETHUSDS",
+  "generated_at": "2026-05-07T00:00:05.409815+00:00",
+  "valid_until": "2026-05-08T00:00:05.409815+00:00",
+  "regime": "RANGE",
+  "confidence": 0.52,
+  "classifier": "rule-based (no data)",
+  "strategy_overrides": {
+    "breakout": true,
+    "momentum": true,
+    "kalman_regime": true,
+    "mean_reversion": false,
+    "vwap": true,
+    "mini_medallion": true,
+    "sbr": true,
+    "supply_demand": false,
+    "asia_range_fade": true,
+    "descending_channel_breakout": true,
+    "smc_ob": true,
+    "fibonacci_retracement": true,
+    "continuation_breakout": true
+  },
+  "diagnostics": {},
+  "strategy_weights": {
+    "breakout": 0.6,
+    "momentum": 0.55,
+    "kalman_regime": 0.75,
+    "mean_reversion": 0.0,
+    "vwap": 0.45,
+    "mini_medallion": 0.6,
+    "sbr": 0.4,
+    "supply_demand": 0.25,
+    "asia_range_fade": 0.7,
+    "descending_channel_breakout": 0.3,
+    "smc_ob": 0.5,
+    "fibonacci_retracement": 0.5,
+    "continuation_breakout": 0.3
+  },
+  "performance_scores": {},
+  "regime_probabilities": {},
+  "transition_matrix": {}
+}

@@ -1,7 +1,7 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-05-06T19:31:34.324137+00:00",
-  "valid_until": "2026-05-07T19:31:34.324137+00:00",
+  "generated_at": "2026-05-07T00:00:05.410603+00:00",
+  "valid_until": "2026-05-08T00:00:05.410603+00:00",
   "regime": "TREND",
   "confidence": 0.55,
   "classifier": "rule-based",
@@ -21,15 +21,15 @@
     "continuation_breakout": true
   },
   "diagnostics": {
-    "adx_14": 38.971096,
-    "atr_pct": 0.005495,
-    "bb_width_ratio": 0.863561,
-    "close_ema20_pct": 0.001677,
-    "momentum_1d": 0.001508,
-    "momentum_5d": -0.002017,
-    "range_atr_ratio": 0.766885,
-    "vol_ratio": 6.069549,
-    "park_vol_zscore": -1.204494
+    "adx_14": 38.197706,
+    "atr_pct": 0.005485,
+    "bb_width_ratio": 0.487258,
+    "close_ema20_pct": 0.0033,
+    "momentum_1d": 0.002813,
+    "momentum_5d": 0.005525,
+    "range_atr_ratio": 1.325365,
+    "vol_ratio": 4.531871,
+    "park_vol_zscore": -0.612935
   },
   "strategy_weights": {
     "breakout": 0.85,
@@ -55,9 +55,9 @@
       "VOLATILE": 0.25
     },
     "RANGE": {
-      "TREND": 0.0833,
-      "RANGE": 0.875,
-      "VOLATILE": 0.0417
+      "TREND": 0.0769,
+      "RANGE": 0.8846,
+      "VOLATILE": 0.0385
     },
     "VOLATILE": {
       "TREND": 0.3333,
