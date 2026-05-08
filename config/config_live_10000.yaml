@@ -413,14 +413,14 @@ strategies:
   descending_channel_breakout:
     enabled: true
     timeframe: 5m
-    channel_lookback: 60             # Shortened — detect micro-channels (~5h on 5m)
-    swing_period: 5                  # Faster swing detection
-    min_hl_count: 1                  # Single HL sufficient for structure shift
+    channel_lookback: 100             # Shortened — detect micro-channels (~5h on 5m)
+    swing_period: 10                  # Faster swing detection
+    min_hl_count: 2                  # Single HL sufficient for structure shift
     channel_slope_max: -0.0003       # Accept gentler descending slopes
     breakout_atr_buffer: 0.20        # Lower breakout threshold
     demand_zone_atr_mult: 1.5
     rejection_min_ratio: 0.50
-    adx_min_threshold: 20
+    adx_min_threshold: 26
     adx_max_threshold: 55
     rsi_overbought: 75
     rsi_oversold: 25
@@ -455,7 +455,7 @@ strategies:
     ob_max_age_bars: 120
     ob_touch_tolerance_atr: 1.0
     cooldown_bars: 3
-    adx_min_threshold: 8          # Lower floor -> more trades
+    adx_min_threshold: 26          # Lower floor -> more trades
     use_ema_trend_filter: true
     ema_trend_period: 50
     liquidity_premium_mult: 15.0
@@ -500,7 +500,7 @@ strategies:
     golden_zone_upper: 0.618       # Upper boundary (closer to swing low)
     golden_zone_lower: 0.50        # Lower boundary (closer to swing high)
     min_rejection_ratio: 0.55      # was 0.50 — marginal tightening
-    adx_min_threshold: 25          # was 20 — skip weak trends
+    adx_min_threshold: 26          # was 20 — skip weak trends
     adx_max_threshold: 70          # was 55 — allow very strong trends
     rsi_overbought: 75
     rsi_oversold: 25
@@ -529,7 +529,7 @@ strategies:
     impulse_body_atr: 1.2          # impulse bar body >= 1.2 × ATR
     continuation_body_atr: 0.5     # entry bar body >= 0.5 × ATR
     consolidation_max_height_atr: 2.0  # re-accumulation height <= 2 × ATR
-    adx_min_threshold: 20
+    adx_min_threshold: 26
     rsi_overbought: 78
     rsi_oversold: 22
     ema_trend_period: 50
@@ -589,7 +589,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-07_news.csv
+    csv_path: news/2026-05-08_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
