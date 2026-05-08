@@ -1,41 +1,60 @@
 strategy: vwap
 file: src/strategies/vwap_strategy.py
-description: Deviation from rolling VWAP, RSI/CCI gated, RANGE-regime mean reversion.
+description: >
+  VWAP band touch + MACD crossover entry.
+  Stage 1: price touches session-anchored VWAP ±band_std_mult StdDev band (arms gate).
+  Stage 2: MACD line (blue) crosses Signal line (orange) while gate is armed and in the
+  coherent direction → BUY or SELL at the intersection bar, 1:2 RR.
 notes: |
-  v4 anchor: 1σ band (2σ rarely touched on 5m gold), allowed_hours data-driven [2,11,15,19].
-  TF was bumped 5m -> 15m on 2026-05-01 (NOT backtest-validated per memory) — backtest grid
-  must include both TFs to sanity-check that bump.
+  Strategy rewritten 2026-05-09 to replace RSI/CCI reversion with MACD crossover trigger.
+  The two-stage gate (VWAP touch → MACD cross) reduces noise trades substantially.
+  Grid focuses on: band width, arm window (how long to wait for crossover), MACD parameters,
+  and risk knobs. MACD 12/26/9 is the TradingView default and the empirical starting point.
 
+# ── Anchor config (baseline from config_live_10000.yaml vwap block) ──────────
 anchor:
-  band_std_mult: 1.0
-  partial_std_mult: 0.3
-  stop_atr_multiplier: 1.8
-  rsi_oversold_entry: 45
-  rsi_overbought_entry: 55
-  cci_oversold_entry: -60
-  cci_overbought_entry: 60
-  cci_period: 20
-  min_volume_ratio: 0.0
+  band_std_mult: 1.5
+  macd_fast: 12
+  macd_slow: 26
+  macd_signal: 9
+  macd_arm_window: 5
+  stop_atr_mult: 1.5
+  atr_period: 14
+  max_hold_minutes: 60
 
+# ── Tier 1: Entry logic ───────────────────────────────────────────────────────
+# Sweeps the two most important entry parameters: band width and arm window.
+# MACD 12/26/9 held fixed at anchor — cross-signal sweep in tier2.
+# Combos: 4 × 5 = 20 (well under 200 cap)
 tier1_entry:
-  band_std_mult: [0.5, 1.0, 1.5, 2.0]        # 4
-  rsi_oversold_entry: [35, 40, 45, 50]       # 4
-  rsi_overbought_entry: [50, 55, 60, 65]     # 4
-  cci_oversold_entry: [-80, -60, -40]        # 3
-  # combos = 4*4*4*3 = 192
+  band_std_mult: [1.0, 1.5, 2.0, 2.5]       # 4 — narrower bands fire more often
+  macd_arm_window: [3, 4, 5, 7, 10]          # 5 — bars to wait for MACD cross after touch
 
+# ── Tier 2: Risk knobs ────────────────────────────────────────────────────────
+# Hold tier1 winner fixed, sweep SL multiplier and time stop.
+# Combos: 5 × 4 = 20
 tier2_risk:
-  stop_atr_multiplier: [1.0, 1.5, 1.8, 2.5, 3.0]
-  partial_std_mult: [0.0, 0.3, 0.5]
-  # one-dim total = 5 + 3 = 8
+  stop_atr_mult: [1.0, 1.5, 2.0, 2.5, 3.0]   # 5
+  max_hold_minutes: [30, 45, 60, 90]           # 4
 
+# ── Tier 3: Structural filters ────────────────────────────────────────────────
+# Hold tier1+tier2 winner, sweep MACD period sensitivity and timeframe.
+# Combos: 2 × 3 × 3 = 18
 tier3_filters:
-  regime_preset: [range_only, trend_range, all]
-  session_preset: [current, asia, london_ny, all]
-  timeframe: [5m, 15m]
-  # combos = 3*4*2 = 24
+  macd_fast: [8, 12, 16]                       # 3 — shorter fast EMA = more sensitive
+  macd_slow: [21, 26, 34]                       # 3
+  timeframe: [5m, 15m]                          # 2 — 5m for frequency, 15m for quality
 
 max_combos:
   tier1: 200
   tier2: 20
-  tier3: 50
+  tier3: 20
+
+# ── Stress days (backtest.md §5.5) ───────────────────────────────────────────
+stress_days:
+  - "2022-02-24"   # Russia-Ukraine invasion shock (gold spike)
+  - "2022-03-08"   # Commodity short squeeze
+  - "2022-09-26"   # UK gilt blow-up
+  - "2023-03-10"   # SVB collapse → flight-to-gold
+  - "2024-08-05"   # Yen carry unwind
+  - "2024-11-05"   # US election
