@@ -29,6 +29,7 @@ class RiskProcessor:
         'momentum_scalp': 'momentum',
         'zscore_mean_reversion': 'mean_reversion',
         'vwap_deviation': 'vwap',
+        'vwap_macd_crossover': 'vwap',   # new VWAP+MACD strategy — config lives under strategies.vwap
         'kalman_regime': 'kalman_regime',
         'mini_medallion': 'mini_medallion',
         'structure_break_retest': 'sbr',
@@ -97,6 +98,24 @@ class RiskProcessor:
                 tp = entry + min_tp_dist
             elif side == OrderSide.SELL and (entry - tp) < min_tp_dist:
                 tp = entry - min_tp_dist
+
+        elif strategy_name == 'vwap_macd_crossover':
+            # The strategy pre-computes stop_price and take_profit_price at signal time
+            # (1.5×ATR SL, 2×SL TP = fixed 1:2 RR). Use them directly; fall back to
+            # ATR-based calculation only when metadata keys are absent.
+            precomputed_sl = signal.metadata.get('stop_price')
+            precomputed_tp = signal.metadata.get('take_profit_price')
+            if precomputed_sl is not None and precomputed_tp is not None:
+                sl = Decimal(str(precomputed_sl))
+                tp = Decimal(str(precomputed_tp))
+            else:
+                # Fallback: reconstruct from ATR and config
+                atr = Decimal(str(signal.metadata.get('atr', 0)))
+                stop_mult = Decimal(str(strat_cfg.get('stop_atr_mult', 1.5)))
+                rr = Decimal(str(signal.metadata.get('risk_reward', 2.0)))
+                sl_dist = stop_mult * atr
+                sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+                tp = entry + (sl_dist * rr) if side == OrderSide.BUY else entry - (sl_dist * rr)
 
         elif strategy_name == 'donchian_breakout':
             atr = Decimal(str(signal.metadata.get('atr', 0)))
