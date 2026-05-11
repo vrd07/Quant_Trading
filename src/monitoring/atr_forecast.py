@@ -1,26 +1,33 @@
 """
 ATR forecaster for the live monitor.
 
-Outputs a single AtrForecast per symbol, computed from the same bars the rest
-of the bot uses (DataEngine.get_bars). Five inputs are combined:
+Backtest finding (scripts/backtest_atr_forecast.py): one-bar-ahead ATR%
+*magnitude* prediction cannot beat naive persistence on this data — ATR is
+too autocorrelated and the EWMA/ARCH σ→ATR conversion is miscalibrated.
+However, the *direction* of vol change (rising / stable / falling) is
+predictable at ~60 % accuracy on XAUUSD vs a ~43 % rolling baseline.
 
-  1. Markov chain over discretized ATR%-quantile states (next-step expectation).
-  2. EWMA variance forecast (RiskMetrics λ=0.94) of log-returns.
-  3. ARCH(1) variance forecast via OLS on r²_t ~ r²_{t-1}.
-  4. Price-action sentiment proxy (RSI extremity + up-bar fraction + momentum z).
+So this module deliberately emits a categorical `vol_outlook` rather than a
+numeric forecast. Inputs:
+
+  1. Markov chain over discretized ATR%-quantile states — provides an
+     unbiased next-step ATR% expectation (mean ≈ realized mean in backtest).
+  2. Price-action sentiment proxy (RSI extremity + up-bar fraction + momentum z).
      NOTE: this is a proxy from price data — it is NOT external social/news
      sentiment. Field is named `sentiment_proxy` so callers cannot conflate.
-  5. News pressure from the ForexFactory events the emitter already loads —
+  3. News pressure from the ForexFactory events the emitter already loads —
      imminence of next high-impact event for the symbol's exposure currencies
      plus density of high-impact events in the next 24h.
 
-The base forecast is a weighted blend of (1)+(2)+(3). Sentiment and news only
-add a bounded upward tilt (capped at +40 %): they push vol forecasts UP when
-risk is imminent, never down. That asymmetry matches how vol actually reacts
-to news.
+Decision rule for vol_outlook:
+    delta_pct = (markov_pct - current_atr) / current_atr
+    risk_tilt = 0.25·|sentiment_proxy| + 0.4·news_pressure       (∈ [0, ~0.65])
+    adjusted  = delta_pct + risk_tilt                            (asymmetric: news/sentiment only push UP)
+    > +0.05 → RISING
+    < -0.05 → FALLING
+    else    → STABLE
 
-Direction is the same 20-bar deadband logic the emitter used before — kept
-unchanged so the existing UI semantics don't shift.
+`direction` (UP / FLAT / DOWN) is unchanged price-direction logic.
 
 This module is pure-Python/pandas/numpy. No new dependencies, no I/O, no state.
 """
@@ -49,8 +56,8 @@ _SYMBOL_CCY: Dict[str, Tuple[str, ...]] = {
 @dataclass
 class AtrForecast:
     atr_pct: float                # current Wilder ATR as % of price
-    forecast_pct: float           # next-bar ATR% forecast (blended)
-    direction: str                # 'UP' | 'DOWN' | 'FLAT'
+    direction: str                # price direction: 'UP' | 'DOWN' | 'FLAT'
+    vol_outlook: str              # vol direction: 'RISING' | 'STABLE' | 'FALLING'
     components: Dict[str, float] = field(default_factory=dict)
 
 
@@ -83,30 +90,78 @@ def direction_from_returns(
     return "FLAT"
 
 
-def _ewma_var_forecast(returns: pd.Series, lam: float = 0.94) -> float:
-    r2 = (returns.dropna() ** 2).values
-    if len(r2) < 5:
-        return float(r2.mean()) if len(r2) else 0.0
-    var = float(r2[0])
-    for x in r2[1:]:
-        var = lam * var + (1.0 - lam) * float(x)
-    return var
+def direction_mta(
+    close: pd.Series,
+    lookbacks: Tuple[int, ...] = (20, 80, 240),
+    deadband: float = 0.001,
+    weights: Optional[Tuple[float, ...]] = None,
+) -> Dict[str, Any]:
+    """Multi-timeframe direction on a single bar series via varying lookback.
 
+    The classical MTA rule of thumb (Murphy / Elder) is that the dominant trend
+    sits on the higher timeframe and lower TFs are for entry/timing. We emulate
+    that on a single bar series by looking at progressively longer windows:
+    a 20-bar window captures recent momentum, 240 bars captures the longer
+    drift. Longer windows get higher weight so the consensus tilts toward the
+    bigger trend, exactly as in classical MTA.
 
-def _arch1_var_forecast(returns: pd.Series) -> float:
-    """σ²_{t+1} = ω + α·r²_t. ω, α via OLS on r² vs lagged r², clamped for stationarity."""
-    r2 = (returns.dropna() ** 2).values
-    if len(r2) < 30:
-        return float(r2.mean()) if len(r2) else 0.0
-    y = r2[1:]
-    x = r2[:-1]
-    x_mean = x.mean()
-    y_mean = y.mean()
-    denom = float(((x - x_mean) ** 2).sum()) or 1e-12
-    alpha = float(((x - x_mean) * (y - y_mean)).sum() / denom)
-    alpha = max(0.0, min(0.9, alpha))
-    omega = max(0.0, float(y_mean - alpha * x_mean))
-    return omega + alpha * float(r2[-1])
+    Returns:
+        {
+          "consensus":  "UP" | "DOWN" | "FLAT",
+          "strength":   abs(score) ∈ [0, 1] — closer to 1 = more aligned,
+          "score":      signed score ∈ [-1, +1],
+          "votes":      {lookback: "UP"|"DOWN"|"FLAT"} actually evaluated,
+          "n_aligned":  int — how many windows match consensus,
+          "n_total":    int — windows actually evaluated (some skipped on short history)
+        }
+    """
+    if weights is None:
+        # Default: weight ∝ lookback. So longer lookback → more influence,
+        # matching MTA's "let the higher timeframe dominate" rule.
+        weights = tuple(float(lb) for lb in lookbacks)
+    if len(weights) != len(lookbacks):
+        raise ValueError("weights and lookbacks must have the same length")
+
+    sign_map = {"UP": 1, "DOWN": -1, "FLAT": 0}
+    votes: Dict[int, str] = {}
+    weighted_sum = 0.0
+    weight_total = 0.0
+
+    for lb, w in zip(lookbacks, weights):
+        if len(close) < lb + 1:
+            continue
+        d = direction_from_returns(close, lookback=lb, deadband=deadband)
+        votes[lb] = d
+        weighted_sum += w * sign_map[d]
+        weight_total += w
+
+    if weight_total <= 0:
+        return {
+            "consensus": "FLAT", "strength": 0.0, "score": 0.0,
+            "votes": votes, "n_aligned": 0, "n_total": 0,
+        }
+
+    score = weighted_sum / weight_total
+    # Consensus thresholds chosen so a unanimous longer-window vote wins even
+    # if the shortest disagrees. With weights = lookbacks (20, 80, 240) the
+    # short window can move score by at most 20/340 ≈ 0.06, so 0.15 puts the
+    # cut comfortably above noise from a single dissenter on the short window.
+    if score > 0.15:
+        consensus = "UP"
+    elif score < -0.15:
+        consensus = "DOWN"
+    else:
+        consensus = "FLAT"
+
+    n_aligned = sum(1 for v in votes.values() if v == consensus)
+    return {
+        "consensus": consensus,
+        "strength": float(abs(score)),
+        "score": float(score),
+        "votes": votes,
+        "n_aligned": n_aligned,
+        "n_total": len(votes),
+    }
 
 
 def _markov_atr_forecast(
@@ -195,6 +250,7 @@ def compute_forecast(
     atr_period: int = 14,
     n_markov_states: int = 5,
     markov_window: int = 500,
+    outlook_threshold: float = 0.05,
 ) -> Optional[AtrForecast]:
     """Compute one forecast row. Returns None if the bar history is too short."""
     if bars is None or len(bars) < max(atr_period * 4, 40):
@@ -211,45 +267,39 @@ def compute_forecast(
     atr_series = wilder_atr(bars["high"].astype(float), bars["low"].astype(float), close, atr_period)
     atr_pct_series = atr_series / close * 100.0
     cur_atr_pct = float(atr_pct_series.iloc[-1])
-    if not np.isfinite(cur_atr_pct):
+    if not np.isfinite(cur_atr_pct) or cur_atr_pct <= 0:
         return None
 
     markov_fc = _markov_atr_forecast(
         atr_pct_series, n_states=n_markov_states, window=markov_window
     )
 
-    log_ret = np.log(close / close.shift(1))
-    ewma_var = _ewma_var_forecast(log_ret)
-    arch_var = _arch1_var_forecast(log_ret)
-    # σ (per-bar log-return std) → ATR%-equivalent.
-    # For a Brownian step the expected absolute deviation is σ·√(2/π); ATR's true
-    # range is wider than |Δclose|, but on a per-bar basis this gives the right
-    # order of magnitude without fitting a separate constant per timeframe.
-    sigma_to_atr_pct = float(np.sqrt(2.0 / np.pi)) * 100.0
-    ewma_atr_pct = float(np.sqrt(max(ewma_var, 0.0))) * sigma_to_atr_pct
-    arch_atr_pct = float(np.sqrt(max(arch_var, 0.0))) * sigma_to_atr_pct
-    if ewma_atr_pct == 0.0:
-        ewma_atr_pct = cur_atr_pct
-    if arch_atr_pct == 0.0:
-        arch_atr_pct = cur_atr_pct
-
     sp = _sentiment_proxy(close, lookback=20)
     ccys = _SYMBOL_CCY.get(symbol.split(".")[0].upper(), ("USD",))
     npress = _news_pressure(upcoming_events or [], ccys)
 
-    base = 0.5 * markov_fc + 0.3 * ewma_atr_pct + 0.2 * arch_atr_pct
-    uplift = min(0.4, 0.25 * abs(sp) + 0.4 * npress)
-    forecast = float(base * (1.0 + uplift))
+    # delta = relative move Markov predicts; risk_tilt only pushes upward
+    # (vol spikes on news/extreme sentiment, doesn't compress).
+    delta_pct = (markov_fc - cur_atr_pct) / cur_atr_pct
+    risk_tilt = 0.25 * abs(sp) + 0.4 * npress
+    adjusted = delta_pct + risk_tilt
+
+    if adjusted > outlook_threshold:
+        outlook = "RISING"
+    elif adjusted < -outlook_threshold:
+        outlook = "FALLING"
+    else:
+        outlook = "STABLE"
 
     return AtrForecast(
         atr_pct=round(cur_atr_pct, 3),
-        forecast_pct=round(forecast, 3),
         direction=direction_from_returns(close, lookback=20, deadband=0.001),
+        vol_outlook=outlook,
         components={
             "markov_pct": round(markov_fc, 3),
-            "ewma_pct": round(ewma_atr_pct, 3),
-            "arch_pct": round(arch_atr_pct, 3),
+            "delta_pct": round(delta_pct, 3),
             "sentiment_proxy": round(sp, 3),
             "news_pressure": round(npress, 3),
+            "risk_tilt": round(risk_tilt, 3),
         },
     )
