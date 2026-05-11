@@ -326,17 +326,50 @@ class RiskProcessor:
                     )
                     tp = entry + buffered_min if side == OrderSide.BUY else entry - buffered_min
 
-                # Reject if R:R collapsed below 1.0 after expansion
-                final_risk = abs(entry - sl)
-                final_reward = abs(entry - tp)
-                if final_risk > 0 and (final_reward / final_risk) < Decimal('1.0'):
-                    self.logger.warning(
-                        f"RiskProcessor [Carmack]: R:R ratio {float(final_reward / final_risk):.2f} "
-                        f"< 1.0 after stop expansion — rejecting signal."
-                    )
-                    signal.stop_loss = None
-                    signal.take_profit = None
-                    return signal
+        # ── Carmack Rule: Tiered R:R floor ────────────────────────────────
+        # Replaces the previous hard 1.0 floor. Higher-confidence signals
+        # require a wider reward-to-risk; lower-confidence signals are
+        # allowed to take a 1:1. The tier is derived from `signal.strength`
+        # (the 0–1 confidence every strategy already sets) and is fully
+        # overridable in YAML via:
+        #
+        #   risk:
+        #     rr_floors:
+        #       confirmed:                       3.0   # strength >= confirmed_strength_threshold
+        #       default:                         2.0   # in between
+        #       unconfirmed:                     1.0   # strength < unconfirmed_strength_threshold
+        #       confirmed_strength_threshold:    0.7
+        #       unconfirmed_strength_threshold:  0.4
+        #
+        # Rejection (set SL/TP to None) is the explicit action when the
+        # floor is breached — matches the prior fail-closed pattern.
+        if sl is not None and tp is not None:
+            rr_cfg = (self.config.get('risk', {}) or {}).get('rr_floors', {}) or {}
+            floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   3.0)))
+            floor_default     = Decimal(str(rr_cfg.get('default',     2.0)))
+            floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 1.0)))
+            th_confirmed   = float(rr_cfg.get('confirmed_strength_threshold',   0.7))
+            th_unconfirmed = float(rr_cfg.get('unconfirmed_strength_threshold', 0.4))
+
+            strength = float(signal.strength) if signal.strength is not None else 0.5
+            if strength >= th_confirmed:
+                tier, rr_floor = "CONFIRMED", floor_confirmed
+            elif strength < th_unconfirmed:
+                tier, rr_floor = "UNCONFIRMED", floor_unconfirmed
+            else:
+                tier, rr_floor = "DEFAULT", floor_default
+
+            final_risk = abs(entry - sl)
+            final_reward = abs(entry - tp)
+            if final_risk > 0 and (final_reward / final_risk) < rr_floor:
+                self.logger.warning(
+                    f"RiskProcessor [Carmack/RR]: {strategy_name} strength={strength:.2f} "
+                    f"tier={tier}, R:R {float(final_reward/final_risk):.2f} < floor "
+                    f"{float(rr_floor):.1f} — rejecting signal."
+                )
+                signal.stop_loss = None
+                signal.take_profit = None
+                return signal
 
         # Standardize TP/SL types to float as Signal model uses Optional[float] / Optional[Decimal]
         # Types.py accepts Decimal
