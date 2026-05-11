@@ -261,52 +261,43 @@ def adjust_stops_for_liquidity(
     is_buy = (side == "BUY") or (side == "buy")
 
     if is_buy:
-        # ── TP tightening: lowest level strictly between entry and current TP
-        candidates_above = [
-            (name, lvl) for name, lvl in clean.items()
-            if lvl > entry and lvl < tp
-        ]
-        if candidates_above:
-            name, lvl = min(candidates_above, key=lambda kv: kv[1])
+        # ── TP tightening: anchor on LOWEST level above entry (closest target)
+        levels_above = [(n, v) for n, v in clean.items() if v > entry]
+        if levels_above:
+            name, lvl = min(levels_above, key=lambda kv: kv[1])
             new_tp = lvl - buffer
-            if new_tp > entry and new_tp < tp:           # invariant: never widen
+            # invariant: never widen TP, and must still be above entry
+            if new_tp > entry and new_tp < tp:
                 reasons.append(f"TP tightened to {name}-buffer ({tp} → {new_tp})")
                 tp = new_tp
 
-        # ── SL widening: highest level strictly between current SL and entry
-        candidates_below = [
-            (name, lvl) for name, lvl in clean.items()
-            if lvl > sl and lvl < entry
-        ]
-        if candidates_below:
-            name, lvl = max(candidates_below, key=lambda kv: kv[1])
+        # ── SL widening: anchor on HIGHEST level below entry (closest sweep target)
+        levels_below = [(n, v) for n, v in clean.items() if v < entry]
+        if levels_below:
+            name, lvl = max(levels_below, key=lambda kv: kv[1])
             new_sl = lvl - buffer
-            if new_sl < sl:                              # invariant: never tighten
+            # invariant: never tighten SL — only widen (move further below entry)
+            if new_sl < sl:
                 reasons.append(f"SL widened past {name} ({sl} → {new_sl})")
                 sl = new_sl
 
-    else:  # SELL
-        # ── TP tightening: highest level strictly between current TP and entry
-        candidates_below = [
-            (name, lvl) for name, lvl in clean.items()
-            if lvl < entry and lvl > tp
-        ]
-        if candidates_below:
-            name, lvl = max(candidates_below, key=lambda kv: kv[1])
+    else:  # SELL — mirror image
+        # ── TP tightening: anchor on HIGHEST level below entry (closest target)
+        levels_below = [(n, v) for n, v in clean.items() if v < entry]
+        if levels_below:
+            name, lvl = max(levels_below, key=lambda kv: kv[1])
             new_tp = lvl + buffer
-            if new_tp < entry and new_tp > tp:           # invariant: never widen
+            if new_tp < entry and new_tp > tp:
                 reasons.append(f"TP tightened to {name}+buffer ({tp} → {new_tp})")
                 tp = new_tp
 
-        # ── SL widening: lowest level strictly between entry and current SL
-        candidates_above = [
-            (name, lvl) for name, lvl in clean.items()
-            if lvl > entry and lvl < sl
-        ]
-        if candidates_above:
-            name, lvl = min(candidates_above, key=lambda kv: kv[1])
+        # ── SL widening: anchor on LOWEST level above entry (closest sweep target)
+        levels_above = [(n, v) for n, v in clean.items() if v > entry]
+        if levels_above:
+            name, lvl = min(levels_above, key=lambda kv: kv[1])
             new_sl = lvl + buffer
-            if new_sl > sl:                              # invariant: never tighten
+            # invariant: never tighten SL — only widen (move further above entry)
+            if new_sl > sl:
                 reasons.append(f"SL widened past {name} ({sl} → {new_sl})")
                 sl = new_sl
 
