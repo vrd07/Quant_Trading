@@ -979,13 +979,24 @@ class LiveMonitorApp:
                 direction = (s.get("direction") or "FLAT").upper()
                 tag = {"UP": "up", "DOWN": "down"}.get(direction, "flat")
             arrow = {"UP": "▲", "DOWN": "▼"}.get((s.get("direction") or "").upper(), "■")
+
+            # MTA alignment count: e.g. "3/3" means all timeframes agree.
+            # Per scripts/backtest_mta_direction.py, 3/3 alignment ≈ 2-3x
+            # the conditional forward return of single-TF on UP signals.
+            n_aligned = int(s.get("mta_n_aligned", 0) or 0)
+            n_total = int(s.get("mta_n_total", 0) or 0)
+            if n_total > 0:
+                align_str = f" {n_aligned}/{n_total}"
+            else:
+                align_str = ""
+
             self.tree_symbols.insert("", "end", values=(
                 s.get("ticker", "—"),
                 _fmt_money(s.get("bid", 0), dec=3),
                 _fmt_money(s.get("ask", 0), dec=3),
                 _fmt_money(s.get("spread", 0), dec=4),
                 (s.get("regime") or "UNKNOWN"),
-                f"{arrow}  {(s.get('direction') or 'FLAT')}",
+                f"{arrow}  {(s.get('direction') or 'FLAT')}{align_str}",
                 f"{float(s.get('atr_pct', 0) or 0):.2f}",
             ), tags=(tag,))
 
