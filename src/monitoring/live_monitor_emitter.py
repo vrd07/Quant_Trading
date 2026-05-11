@@ -314,11 +314,13 @@ class LiveMonitorEmitter:
     def _build_snapshot(self, ts) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         account = self._collect_account(ts)
-        symbols = self._collect_symbols(ts)
+        # News must be collected BEFORE symbols so the upcoming-events list can
+        # feed into the per-symbol ATR forecaster's news_pressure feature.
+        news = self._collect_news(ts)
+        symbols = self._collect_symbols(ts, upcoming_events=news.get("upcoming") or [])
         positions = self._collect_positions(ts)
         strategies = self._collect_strategies(ts)
         session = self._collect_session(ts)
-        news = self._collect_news(ts)
         performance = self._collect_performance_stats()
         journal = self._collect_journal_from_csv()
 
@@ -464,7 +466,9 @@ class LiveMonitorEmitter:
 
         return out
 
-    def _collect_symbols(self, ts) -> List[Dict[str, Any]]:
+    def _collect_symbols(
+        self, ts, upcoming_events: Optional[List[Dict[str, Any]]] = None
+    ) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         try:
             cfg_syms = (getattr(ts, "config", {}) or {}).get("symbols", {}) or {}
@@ -477,6 +481,8 @@ class LiveMonitorEmitter:
                 "enabled": bool(cfg.get("enabled", False)),
                 "bid": 0.0, "ask": 0.0, "spread": 0.0,
                 "regime": "UNKNOWN", "direction": "FLAT", "atr_pct": 0.0,
+                "atr_forecast_pct": 0.0,
+                "forecast_components": {},
             }
             # live tick — prefer the cached DataEngine tick, fall back to connector
             try:
@@ -510,26 +516,28 @@ class LiveMonitorEmitter:
             except Exception:
                 pass
 
-            # direction + ATR% from candles if available
+            # Real Wilder ATR + direction + forecast (Markov + EWMA + ARCH + sentiment + news).
+            # Defined in src/monitoring/atr_forecast.py — wrapped in try/except so a
+            # numerical failure here can never break the emitter.
             try:
+                from .atr_forecast import compute_forecast
+
                 eng = getattr(ts, "data_engine", None)
                 if eng is not None:
                     for tf in ("5m", "15m", "1h"):
                         bars = eng.get_bars(ticker, tf)
-                        if bars is not None and len(bars) >= 20:
-                            last_close = float(bars["close"].iloc[-1])
-                            prev_close = float(bars["close"].iloc[-20])
-                            if last_close > prev_close * 1.001:
-                                row["direction"] = "UP"
-                            elif last_close < prev_close * 0.999:
-                                row["direction"] = "DOWN"
-                            else:
-                                row["direction"] = "FLAT"
-                            # rough ATR% from high-low range
-                            hl = (bars["high"] - bars["low"]).tail(14).mean()
-                            if last_close > 0:
-                                row["atr_pct"] = round(float(hl / last_close * 100), 3)
-                            break
+                        if bars is None or len(bars) < 40:
+                            continue
+                        fc = compute_forecast(
+                            bars, ticker, upcoming_events=upcoming_events
+                        )
+                        if fc is None:
+                            continue
+                        row["direction"] = fc.direction
+                        row["atr_pct"] = fc.atr_pct
+                        row["atr_forecast_pct"] = fc.forecast_pct
+                        row["forecast_components"] = fc.components
+                        break
             except Exception:
                 pass
 
