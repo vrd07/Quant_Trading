@@ -314,13 +314,11 @@ class LiveMonitorEmitter:
     def _build_snapshot(self, ts) -> Dict[str, Any]:
         now = datetime.now(timezone.utc)
         account = self._collect_account(ts)
-        # News must be collected BEFORE symbols so the upcoming-events list can
-        # feed into the per-symbol ATR forecaster's news_pressure feature.
-        news = self._collect_news(ts)
-        symbols = self._collect_symbols(ts, upcoming_events=news.get("upcoming") or [])
+        symbols = self._collect_symbols(ts)
         positions = self._collect_positions(ts)
         strategies = self._collect_strategies(ts)
         session = self._collect_session(ts)
+        news = self._collect_news(ts)
         performance = self._collect_performance_stats()
         journal = self._collect_journal_from_csv()
 
@@ -466,9 +464,7 @@ class LiveMonitorEmitter:
 
         return out
 
-    def _collect_symbols(
-        self, ts, upcoming_events: Optional[List[Dict[str, Any]]] = None
-    ) -> List[Dict[str, Any]]:
+    def _collect_symbols(self, ts) -> List[Dict[str, Any]]:
         rows: List[Dict[str, Any]] = []
         try:
             cfg_syms = (getattr(ts, "config", {}) or {}).get("symbols", {}) or {}
@@ -481,8 +477,11 @@ class LiveMonitorEmitter:
                 "enabled": bool(cfg.get("enabled", False)),
                 "bid": 0.0, "ask": 0.0, "spread": 0.0,
                 "regime": "UNKNOWN", "direction": "FLAT", "atr_pct": 0.0,
-                "atr_forecast_pct": 0.0,
-                "forecast_components": {},
+                # MTA alignment — see scripts/backtest_mta_direction.py for the
+                # validation showing the alignment count is monotone with
+                # conditional forward return on XAU/BTC/ETH (UP signals).
+                "mta_n_aligned": 0,
+                "mta_n_total": 0,
             }
             # live tick — prefer the cached DataEngine tick, fall back to connector
             try:
@@ -516,27 +515,41 @@ class LiveMonitorEmitter:
             except Exception:
                 pass
 
-            # Real Wilder ATR + direction + forecast (Markov + EWMA + ARCH + sentiment + news).
-            # Defined in src/monitoring/atr_forecast.py — wrapped in try/except so a
-            # numerical failure here can never break the emitter.
+            # Real Wilder ATR + MTA direction.
+            # The full forecast (Markov + sentiment + news) was reverted on
+            # 2026-05-11 after backtest showed no lift over base rate. The
+            # Wilder ATR fix is kept (previous code emitted HL-mean mislabelled
+            # as ATR). Direction is now multi-timeframe — 20/80/240-bar
+            # lookbacks with longer windows weighted more, validated by
+            # scripts/backtest_mta_direction.py.
             try:
-                from .atr_forecast import compute_forecast
+                from .atr_forecast import wilder_atr, direction_mta
 
                 eng = getattr(ts, "data_engine", None)
                 if eng is not None:
                     for tf in ("5m", "15m", "1h"):
                         bars = eng.get_bars(ticker, tf)
-                        if bars is None or len(bars) < 40:
+                        # Need at least 241 bars so the longest MTA window has data;
+                        # otherwise we'd fall back to single-TF behaviour silently.
+                        if bars is None or len(bars) < 241:
                             continue
-                        fc = compute_forecast(
-                            bars, ticker, upcoming_events=upcoming_events
+                        close = bars["close"].astype(float)
+                        last_close = float(close.iloc[-1])
+                        if last_close <= 0:
+                            continue
+                        atr_series = wilder_atr(
+                            bars["high"].astype(float),
+                            bars["low"].astype(float),
+                            close,
+                            period=14,
                         )
-                        if fc is None:
-                            continue
-                        row["direction"] = fc.direction
-                        row["atr_pct"] = fc.atr_pct
-                        row["atr_forecast_pct"] = fc.forecast_pct
-                        row["forecast_components"] = fc.components
+                        row["atr_pct"] = round(
+                            float(atr_series.iloc[-1] / last_close * 100), 3
+                        )
+                        mta = direction_mta(close, lookbacks=(20, 80, 240), deadband=0.001)
+                        row["direction"] = mta["consensus"]
+                        row["mta_n_aligned"] = int(mta["n_aligned"])
+                        row["mta_n_total"] = int(mta["n_total"])
                         break
             except Exception:
                 pass
