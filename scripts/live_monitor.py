@@ -131,7 +131,7 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1320x1040")
+        self.root.geometry("1320x1120")
         self.root.minsize(1120, 880)
         self.root.configure(bg=BG)
         try:
@@ -207,8 +207,9 @@ class LiveMonitorApp:
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
         body.grid_rowconfigure(2, weight=2, minsize=180)  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=4, minsize=260)  # journal — guaranteed min height
-        body.grid_rowconfigure(5, weight=0, minsize=95)   # errors — guaranteed min height
+        body.grid_rowconfigure(4, weight=0, minsize=120)  # value area (full width, fixed)
+        body.grid_rowconfigure(5, weight=4, minsize=240)  # journal — guaranteed min height
+        body.grid_rowconfigure(6, weight=0, minsize=95)   # errors — guaranteed min height
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
@@ -242,14 +243,20 @@ class LiveMonitorApp:
         self.positions_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self._build_positions_body(self.positions_panel)
 
-        # Row 4: trade journal (spans both, huge)
+        # Row 4: prior-day Value Area (full width). Levels are factual; the
+        # 80 % rule did not validate on these assets so no signal is shown.
+        self.va_panel = self._make_panel(body, "VALUE AREA (PRIOR DAY · LEVELS ONLY)")
+        self.va_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self._build_va_body(self.va_panel)
+
+        # Row 5: trade journal (spans both, huge)
         self.journal_panel = self._make_panel(body, "TRADE JOURNAL & PSYCHOLOGY")
-        self.journal_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self.journal_panel.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self._build_journal_body(self.journal_panel)
 
-        # Row 5: errors (spans both, tiny)
+        # Row 6: errors (spans both, tiny)
         self.errors_panel = self._make_panel(body, "RECENT WARNINGS / ERRORS")
-        self.errors_panel.grid(row=5, column=0, columnspan=2, sticky="nsew")
+        self.errors_panel.grid(row=6, column=0, columnspan=2, sticky="nsew")
         self._build_errors_body(self.errors_panel)
 
         # Footer
@@ -726,6 +733,22 @@ class LiveMonitorApp:
         self.tree_journal.tag_configure("loss", foreground=RED)
         self.tree_journal.tag_configure("flat", foreground=TEXT)
 
+    # --- value area body (prior-day VAH/VAL/POC + state) ---
+    def _build_va_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
+        body.pack(fill=tk.BOTH, expand=True)
+
+        cols = ("sym", "val", "poc", "vah", "state", "reentries")
+        headings = ("Symbol", "VAL (prior)", "POC (prior)", "VAH (prior)",
+                    "Today vs VA", "Re-entries")
+        widths = (90, 110, 110, 110, 130, 90)
+        self.tree_va = self._make_tree(body, cols, headings, widths, height=5)
+        self.tree_va.pack(fill=tk.BOTH, expand=True)
+        self.tree_va.tag_configure("inside", foreground=TEXT)
+        self.tree_va.tag_configure("above",  foreground=GREEN)
+        self.tree_va.tag_configure("below",  foreground=RED)
+        self.tree_va.tag_configure("none",   foreground=TEXT_FAINT)
+
     # --- errors body (compact standalone strip) ---
     def _build_errors_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=2)
@@ -998,6 +1021,31 @@ class LiveMonitorApp:
                 (s.get("regime") or "UNKNOWN"),
                 f"{arrow}  {(s.get('direction') or 'FLAT')}{align_str}",
                 f"{float(s.get('atr_pct', 0) or 0):.2f}",
+            ), tags=(tag,))
+
+        # ---- value area (prior-day levels + today's state) ----
+        self._clear(self.tree_va)
+        for s in d.get("symbols", []) or []:
+            vah = float(s.get("va_vah", 0) or 0)
+            val = float(s.get("va_val", 0) or 0)
+            poc = float(s.get("va_poc", 0) or 0)
+            state = (s.get("va_state") or "—").upper()
+            reentries = int(s.get("va_reentries", 0) or 0)
+            if vah <= 0 or val <= 0 or vah <= val:
+                # No prior-day data yet — show a placeholder row so the user
+                # still sees the symbol listed.
+                self.tree_va.insert("", "end", values=(
+                    s.get("ticker", "—"), "—", "—", "—", "—", "—",
+                ), tags=("none",))
+                continue
+            tag = {"INSIDE": "inside", "ABOVE": "above", "BELOW": "below"}.get(state, "none")
+            self.tree_va.insert("", "end", values=(
+                s.get("ticker", "—"),
+                _fmt_money(val, dec=3),
+                _fmt_money(poc, dec=3),
+                _fmt_money(vah, dec=3),
+                state,
+                str(reentries),
             ), tags=(tag,))
 
         # ---- signals ----
