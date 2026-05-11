@@ -240,7 +240,8 @@ class TradingSystem:
             self.logger.info("5. Initializing execution engine...")
             self.execution_engine = ExecutionEngine(
                 connector=self.connector,
-                risk_engine=self.risk_engine
+                risk_engine=self.risk_engine,
+                data_engine=self.data_engine,
             )
             self.logger.info("✓ Execution engine ready")
             
