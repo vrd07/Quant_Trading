@@ -666,9 +666,12 @@ class LiveMonitorApp:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.BOTH, expand=True)
 
-        cols = ("sym", "bid", "ask", "spread", "regime", "dir", "atr")
-        headings = ("Symbol", "Bid", "Ask", "Spread", "Regime", "Direction", "ATR %")
-        widths = (90, 80, 80, 70, 90, 90, 70)
+        cols = ("sym", "bid", "ask", "spread", "regime", "dir", "atr", "atr_fc", "fc_mix")
+        headings = (
+            "Symbol", "Bid", "Ask", "Spread", "Regime", "Direction",
+            "ATR %", "Fcst ATR %", "Markov / EWMA / ARCH · sent · news",
+        )
+        widths = (80, 75, 75, 65, 80, 80, 60, 70, 270)
         self.tree_symbols = self._make_tree(body, cols, headings, widths, height=5)
         self.tree_symbols.pack(fill=tk.BOTH, expand=True)
 
@@ -979,6 +982,31 @@ class LiveMonitorApp:
                 direction = (s.get("direction") or "FLAT").upper()
                 tag = {"UP": "up", "DOWN": "down"}.get(direction, "flat")
             arrow = {"UP": "▲", "DOWN": "▼"}.get((s.get("direction") or "").upper(), "■")
+
+            atr_now = float(s.get("atr_pct", 0) or 0)
+            atr_fc = float(s.get("atr_forecast_pct", 0) or 0)
+            # Forecast cell: value + arrow showing direction vs current ATR.
+            if atr_fc <= 0:
+                atr_fc_txt = "—"
+            elif atr_fc > atr_now * 1.05:
+                atr_fc_txt = f"▲ {atr_fc:.2f}"
+            elif atr_fc < atr_now * 0.95:
+                atr_fc_txt = f"▼ {atr_fc:.2f}"
+            else:
+                atr_fc_txt = f"· {atr_fc:.2f}"
+
+            comp = s.get("forecast_components") or {}
+            if comp:
+                fc_mix = (
+                    f"{float(comp.get('markov_pct', 0)):.2f} / "
+                    f"{float(comp.get('ewma_pct', 0)):.2f} / "
+                    f"{float(comp.get('arch_pct', 0)):.2f}  "
+                    f"sp={float(comp.get('sentiment_proxy', 0)):+.2f}  "
+                    f"nw={float(comp.get('news_pressure', 0)):.2f}"
+                )
+            else:
+                fc_mix = "—"
+
             self.tree_symbols.insert("", "end", values=(
                 s.get("ticker", "—"),
                 _fmt_money(s.get("bid", 0), dec=3),
@@ -986,7 +1014,9 @@ class LiveMonitorApp:
                 _fmt_money(s.get("spread", 0), dec=4),
                 (s.get("regime") or "UNKNOWN"),
                 f"{arrow}  {(s.get('direction') or 'FLAT')}",
-                f"{float(s.get('atr_pct', 0) or 0):.2f}",
+                f"{atr_now:.2f}",
+                atr_fc_txt,
+                fc_mix,
             ), tags=(tag,))
 
         # ---- signals ----
