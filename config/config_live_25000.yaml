@@ -568,7 +568,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-10_news.csv
+    csv_path: news/2026-05-11_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
