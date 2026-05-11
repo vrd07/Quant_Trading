@@ -243,11 +243,14 @@ class LiveMonitorApp:
         self.positions_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self._build_positions_body(self.positions_panel)
 
-        # Row 4: prior-day Value Area (full width). Levels are factual; the
-        # 80 % rule did not validate on these assets so no signal is shown.
-        self.va_panel = self._make_panel(body, "VALUE AREA (PRIOR DAY · LEVELS ONLY)")
-        self.va_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
-        self._build_va_body(self.va_panel)
+        # Row 4: liquidity reference levels (PDH/PDL + Asia session H/L).
+        # Levels are factual; the ICT sweep→reversal rule did NOT validate
+        # consistently across symbols so no predictive signal is shown.
+        self.liq_panel = self._make_panel(
+            body, "LIQUIDITY LEVELS (PRIOR DAY + ASIA · LEVELS ONLY)"
+        )
+        self.liq_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self._build_liq_body(self.liq_panel)
 
         # Row 5: trade journal (spans both, huge)
         self.journal_panel = self._make_panel(body, "TRADE JOURNAL & PSYCHOLOGY")
@@ -733,27 +736,25 @@ class LiveMonitorApp:
         self.tree_journal.tag_configure("loss", foreground=RED)
         self.tree_journal.tag_configure("flat", foreground=TEXT)
 
-    # --- value area body (prior-day VAH/VAL/POC + state, scrollable strip) ---
-    def _build_va_body(self, panel) -> None:
+    # --- liquidity levels body (PDH/PDL + Asia H/L + sweeps, scrollable) ---
+    def _build_liq_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
         body.pack(fill=tk.X, expand=False)
 
-        cols = ("sym", "val", "poc", "vah", "state", "reentries")
-        headings = ("Symbol", "VAL (prior)", "POC (prior)", "VAH (prior)",
-                    "Today vs VA", "Re-entries")
-        widths = (90, 110, 110, 110, 130, 90)
-        # height=2 + scrollbar — mirrors the OPEN POSITIONS panel pattern, so
-        # the row stays short (preserves journal space) but extra symbols are
-        # still reachable via scroll.
-        self.tree_va = self._make_tree(body, cols, headings, widths, height=2)
-        va_scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree_va.yview)
-        self.tree_va.configure(yscrollcommand=va_scroll.set)
-        va_scroll.pack(side=tk.RIGHT, fill=tk.Y)
-        self.tree_va.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        self.tree_va.tag_configure("inside", foreground=TEXT)
-        self.tree_va.tag_configure("above",  foreground=GREEN)
-        self.tree_va.tag_configure("below",  foreground=RED)
-        self.tree_va.tag_configure("none",   foreground=TEXT_FAINT)
+        cols = ("sym", "pdh", "pdl", "asia_h", "asia_l", "swept")
+        headings = (
+            "Symbol", "PDH (buyside)", "PDL (sellside)",
+            "Asia H", "Asia L", "Swept today",
+        )
+        widths = (90, 110, 110, 100, 100, 200)
+        self.tree_liq = self._make_tree(body, cols, headings, widths, height=2)
+        liq_scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree_liq.yview)
+        self.tree_liq.configure(yscrollcommand=liq_scroll.set)
+        liq_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree_liq.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_liq.tag_configure("swept", foreground=GOLD)
+        self.tree_liq.tag_configure("clean", foreground=TEXT)
+        self.tree_liq.tag_configure("none",  foreground=TEXT_FAINT)
 
     # --- errors body (compact standalone strip) ---
     def _build_errors_body(self, panel) -> None:
@@ -1029,29 +1030,29 @@ class LiveMonitorApp:
                 f"{float(s.get('atr_pct', 0) or 0):.2f}",
             ), tags=(tag,))
 
-        # ---- value area (prior-day levels + today's state) ----
-        self._clear(self.tree_va)
+        # ---- liquidity levels (PDH/PDL + Asia H/L + sweep state) ----
+        self._clear(self.tree_liq)
         for s in d.get("symbols", []) or []:
-            vah = float(s.get("va_vah", 0) or 0)
-            val = float(s.get("va_val", 0) or 0)
-            poc = float(s.get("va_poc", 0) or 0)
-            state = (s.get("va_state") or "—").upper()
-            reentries = int(s.get("va_reentries", 0) or 0)
-            if vah <= 0 or val <= 0 or vah <= val:
-                # No prior-day data yet — show a placeholder row so the user
-                # still sees the symbol listed.
-                self.tree_va.insert("", "end", values=(
+            pdh = float(s.get("liq_pdh", 0) or 0)
+            pdl = float(s.get("liq_pdl", 0) or 0)
+            asia_h = float(s.get("liq_asia_h", 0) or 0)
+            asia_l = float(s.get("liq_asia_l", 0) or 0)
+            swept = str(s.get("liq_swept", "") or "")
+
+            if pdh <= 0 or pdl <= 0:
+                self.tree_liq.insert("", "end", values=(
                     s.get("ticker", "—"), "—", "—", "—", "—", "—",
                 ), tags=("none",))
                 continue
-            tag = {"INSIDE": "inside", "ABOVE": "above", "BELOW": "below"}.get(state, "none")
-            self.tree_va.insert("", "end", values=(
+
+            tag = "swept" if swept else "clean"
+            self.tree_liq.insert("", "end", values=(
                 s.get("ticker", "—"),
-                _fmt_money(val, dec=3),
-                _fmt_money(poc, dec=3),
-                _fmt_money(vah, dec=3),
-                state,
-                str(reentries),
+                _fmt_money(pdh, dec=3),
+                _fmt_money(pdl, dec=3),
+                _fmt_money(asia_h, dec=3) if asia_h > 0 else "—",
+                _fmt_money(asia_l, dec=3) if asia_l > 0 else "—",
+                swept or "none",
             ), tags=(tag,))
 
         # ---- signals ----

@@ -482,13 +482,14 @@ class LiveMonitorEmitter:
                 # conditional forward return on XAU/BTC/ETH (UP signals).
                 "mta_n_aligned": 0,
                 "mta_n_total": 0,
-                # Prior-day Value Area — levels only. The 80 % rule did NOT
-                # validate on these assets (scripts/backtest_value_area.py),
-                # so the emitter publishes facts (VAH/VAL/POC + observed state)
-                # and the UI labels them as informational, not predictive.
-                "va_vah": 0.0, "va_val": 0.0, "va_poc": 0.0,
-                "va_state": "—",
-                "va_reentries": 0,
+                # Liquidity reference levels (ICT / SMC convention).
+                # Levels are objective facts (prior-day H/L + Asia session H/L);
+                # the sweep→reversal *rule* did not validate consistently across
+                # symbols (scripts/backtest_liquidity_sweeps.py), so we publish
+                # observed sweeps but no prediction. The UI labels accordingly.
+                "liq_pdh": 0.0, "liq_pdl": 0.0,
+                "liq_asia_h": 0.0, "liq_asia_l": 0.0,
+                "liq_swept": "",   # comma-separated list of swept level names
             }
             # live tick — prefer the cached DataEngine tick, fall back to connector
             try:
@@ -557,32 +558,39 @@ class LiveMonitorEmitter:
                         row["direction"] = mta["consensus"]
                         row["mta_n_aligned"] = int(mta["n_aligned"])
                         row["mta_n_total"] = int(mta["n_total"])
-                        # Value Area on this same bar series — prior UTC day vs today.
-                        # CandleStore.get_bars() returns bars with a RangeIndex
-                        # (timestamp lives in a column, not the index), so we
-                        # must read the timestamp column rather than .index.
+                        # Liquidity reference levels — PDH/PDL + today's Asia
+                        # session H/L (UTC 00-07). CandleStore.get_bars()
+                        # returns bars with a RangeIndex + 'timestamp' column,
+                        # so the liquidity module reads the column directly.
                         try:
-                            from .value_area import compute_value_area, value_area_state
+                            from .liquidity_levels import compute_liquidity_levels, detect_sweeps
 
-                            if "timestamp" in bars.columns:
-                                ts = bars["timestamp"]
-                            else:
-                                ts = bars.index.to_series()
-                            dates = ts.dt.normalize()
-                            unique_dates = sorted(set(dates))
-                            if len(unique_dates) >= 2:
-                                today = unique_dates[-1]
-                                prior = unique_dates[-2]
-                                prior_bars = bars[dates == prior]
-                                today_bars = bars[dates == today]
-                                va = compute_value_area(prior_bars)
-                                if va is not None and va["vah"] > va["val"]:
-                                    row["va_vah"] = round(va["vah"], 5)
-                                    row["va_val"] = round(va["val"], 5)
-                                    row["va_poc"] = round(va["poc"], 5)
-                                    st = value_area_state(today_bars, va["vah"], va["val"])
-                                    row["va_state"] = st["state"]
-                                    row["va_reentries"] = int(st["reentries"])
+                            lvls = compute_liquidity_levels(bars)
+                            if lvls is not None:
+                                row["liq_pdh"] = round(float(lvls["pdh"]), 5)
+                                row["liq_pdl"] = round(float(lvls["pdl"]), 5)
+                                if lvls["asia_h"] is not None:
+                                    row["liq_asia_h"] = round(float(lvls["asia_h"]), 5)
+                                if lvls["asia_l"] is not None:
+                                    row["liq_asia_l"] = round(float(lvls["asia_l"]), 5)
+
+                                # Mark which levels have been swept TODAY.
+                                if "timestamp" in bars.columns:
+                                    ts_series = bars["timestamp"]
+                                else:
+                                    ts_series = bars.index.to_series()
+                                dates_for_today = ts_series.dt.normalize()
+                                today_only = bars[dates_for_today == dates_for_today.iloc[-1]]
+                                check = {
+                                    "pdh": lvls["pdh"], "pdl": lvls["pdl"],
+                                    "asia_h": lvls["asia_h"], "asia_l": lvls["asia_l"],
+                                }
+                                sweeps = detect_sweeps(today_only, check)
+                                swept_names = [
+                                    name.upper() for name, info in sweeps.items()
+                                    if info["swept"]
+                                ]
+                                row["liq_swept"] = ",".join(swept_names)
                         except Exception:
                             pass
                         break
