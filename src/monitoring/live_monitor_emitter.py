@@ -482,6 +482,13 @@ class LiveMonitorEmitter:
                 # conditional forward return on XAU/BTC/ETH (UP signals).
                 "mta_n_aligned": 0,
                 "mta_n_total": 0,
+                # Prior-day Value Area — levels only. The 80 % rule did NOT
+                # validate on these assets (scripts/backtest_value_area.py),
+                # so the emitter publishes facts (VAH/VAL/POC + observed state)
+                # and the UI labels them as informational, not predictive.
+                "va_vah": 0.0, "va_val": 0.0, "va_poc": 0.0,
+                "va_state": "—",
+                "va_reentries": 0,
             }
             # live tick — prefer the cached DataEngine tick, fall back to connector
             try:
@@ -550,6 +557,27 @@ class LiveMonitorEmitter:
                         row["direction"] = mta["consensus"]
                         row["mta_n_aligned"] = int(mta["n_aligned"])
                         row["mta_n_total"] = int(mta["n_total"])
+                        # Value Area on this same bar series — prior UTC day vs today.
+                        try:
+                            from .value_area import compute_value_area, value_area_state
+
+                            dates = bars.index.normalize()
+                            unique_dates = sorted(set(dates))
+                            if len(unique_dates) >= 2:
+                                today = unique_dates[-1]
+                                prior = unique_dates[-2]
+                                prior_bars = bars[dates == prior]
+                                today_bars = bars[dates == today]
+                                va = compute_value_area(prior_bars)
+                                if va is not None and va["vah"] > va["val"]:
+                                    row["va_vah"] = round(va["vah"], 5)
+                                    row["va_val"] = round(va["val"], 5)
+                                    row["va_poc"] = round(va["poc"], 5)
+                                    st = value_area_state(today_bars, va["vah"], va["val"])
+                                    row["va_state"] = st["state"]
+                                    row["va_reentries"] = int(st["reentries"])
+                        except Exception:
+                            pass
                         break
             except Exception:
                 pass
