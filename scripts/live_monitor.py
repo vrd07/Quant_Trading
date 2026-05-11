@@ -131,7 +131,7 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1320x1120")
+        self.root.geometry("1320x1100")
         self.root.minsize(1120, 880)
         self.root.configure(bg=BG)
         try:
@@ -207,8 +207,8 @@ class LiveMonitorApp:
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
         body.grid_rowconfigure(2, weight=2, minsize=180)  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=0, minsize=120)  # value area (full width, fixed)
-        body.grid_rowconfigure(5, weight=4, minsize=240)  # journal — guaranteed min height
+        body.grid_rowconfigure(4, weight=0, minsize=75)   # value area (compact strip, scrollable)
+        body.grid_rowconfigure(5, weight=4, minsize=260)  # journal — guaranteed min height
         body.grid_rowconfigure(6, weight=0, minsize=95)   # errors — guaranteed min height
 
         # Row 0: account snapshot (spans both cols)
@@ -444,11 +444,11 @@ class LiveMonitorApp:
         tk.Label(hdr, text="UTC NOW:", bg=BG_PANEL, fg=TEXT_DIM,
                  font=("Menlo", 9, "bold")).pack(side=tk.RIGHT, padx=(0, 6))
 
-        # Table of all configured sessions (compact: narrower cols, height=4)
+        # Table of all configured sessions (compact: narrower cols, height=3)
         cols = ("active", "name", "window", "lot", "strats")
         headings = ("", "Session", "UTC Window", "Lot ×", "Strategies")
         widths = (24, 100, 110, 55, 240)
-        self.tree_sessions = self._make_tree(body, cols, headings, widths, height=4)
+        self.tree_sessions = self._make_tree(body, cols, headings, widths, height=3)
         self.tree_sessions.pack(fill=tk.BOTH, expand=True)
         self.tree_sessions.tag_configure("active", foreground=GREEN,
                                          background=BG_PANEL_2)
@@ -484,7 +484,7 @@ class LiveMonitorApp:
 
         self.news_canvas = tk.Canvas(
             canvas_wrap, bg=BG_PANEL,
-            highlightthickness=0, bd=0, height=150,
+            highlightthickness=0, bd=0, height=100,
         )
         news_scroll = ttk.Scrollbar(
             canvas_wrap, orient="vertical", command=self.news_canvas.yview,
@@ -675,7 +675,7 @@ class LiveMonitorApp:
 
         cols = ("sym", "bid", "ask", "spread", "regime", "dir", "atr")
         headings = ("Symbol", "Bid", "Ask", "Spread", "Regime", "Direction", "ATR %")
-        widths = (90, 80, 80, 70, 90, 90, 70)
+        widths = (90, 80, 80, 70, 90, 115, 50)
         self.tree_symbols = self._make_tree(body, cols, headings, widths, height=5)
         self.tree_symbols.pack(fill=tk.BOTH, expand=True)
 
@@ -733,17 +733,23 @@ class LiveMonitorApp:
         self.tree_journal.tag_configure("loss", foreground=RED)
         self.tree_journal.tag_configure("flat", foreground=TEXT)
 
-    # --- value area body (prior-day VAH/VAL/POC + state) ---
+    # --- value area body (prior-day VAH/VAL/POC + state, scrollable strip) ---
     def _build_va_body(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
-        body.pack(fill=tk.BOTH, expand=True)
+        body.pack(fill=tk.X, expand=False)
 
         cols = ("sym", "val", "poc", "vah", "state", "reentries")
         headings = ("Symbol", "VAL (prior)", "POC (prior)", "VAH (prior)",
                     "Today vs VA", "Re-entries")
         widths = (90, 110, 110, 110, 130, 90)
-        self.tree_va = self._make_tree(body, cols, headings, widths, height=5)
-        self.tree_va.pack(fill=tk.BOTH, expand=True)
+        # height=2 + scrollbar — mirrors the OPEN POSITIONS panel pattern, so
+        # the row stays short (preserves journal space) but extra symbols are
+        # still reachable via scroll.
+        self.tree_va = self._make_tree(body, cols, headings, widths, height=2)
+        va_scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree_va.yview)
+        self.tree_va.configure(yscrollcommand=va_scroll.set)
+        va_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree_va.pack(side=tk.LEFT, fill=tk.X, expand=True)
         self.tree_va.tag_configure("inside", foreground=TEXT)
         self.tree_va.tag_configure("above",  foreground=GREEN)
         self.tree_va.tag_configure("below",  foreground=RED)

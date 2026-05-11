@@ -558,10 +558,17 @@ class LiveMonitorEmitter:
                         row["mta_n_aligned"] = int(mta["n_aligned"])
                         row["mta_n_total"] = int(mta["n_total"])
                         # Value Area on this same bar series — prior UTC day vs today.
+                        # CandleStore.get_bars() returns bars with a RangeIndex
+                        # (timestamp lives in a column, not the index), so we
+                        # must read the timestamp column rather than .index.
                         try:
                             from .value_area import compute_value_area, value_area_state
 
-                            dates = bars.index.normalize()
+                            if "timestamp" in bars.columns:
+                                ts = bars["timestamp"]
+                            else:
+                                ts = bars.index.to_series()
+                            dates = ts.dt.normalize()
                             unique_dates = sorted(set(dates))
                             if len(unique_dates) >= 2:
                                 today = unique_dates[-1]
