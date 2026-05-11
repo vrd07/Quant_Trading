@@ -23,7 +23,7 @@ Critical Design:
 - Fail safely (reject if uncertain)
 """
 
-from typing import Dict, Optional, List
+from typing import Any, Dict, Optional, List
 from uuid import UUID
 from decimal import Decimal
 from datetime import datetime, timezone, timedelta
@@ -55,19 +55,25 @@ class ExecutionEngine:
         self,
         connector: MT5Connector,
         risk_engine: RiskEngine,
-        order_timeout_seconds: int = 30
+        order_timeout_seconds: int = 30,
+        data_engine: Any = None,
     ):
         """
         Initialize execution engine.
-        
+
         Args:
             connector: MT5 connector
             risk_engine: Risk engine for validation
             order_timeout_seconds: Max seconds to wait for order response
+            data_engine: Optional DataEngine. When provided, liquidity levels
+                are computed per-signal and attached to signal.metadata so
+                RiskProcessor can anchor SL/TP to PDH/PDL/Asia H/L. When None,
+                the bot behaves exactly as before — no liquidity adjustment.
         """
         self.connector = connector
         self.risk_engine = risk_engine
         self.order_timeout_seconds = order_timeout_seconds
+        self.data_engine = data_engine
         
         # Sub-components
         self.order_manager = OrderManager()
@@ -165,6 +171,32 @@ class ExecutionEngine:
                 )
                 return None
             
+            # 0.7 Attach liquidity reference levels (Carmack lens — pure
+            # derivation from bars; mutation visible right here at the call
+            # site). RiskProcessor reads signal.metadata['liquidity_levels']
+            # to anchor SL just past PDH/PDL/Asia H/L and TP just before them.
+            # No-op if data_engine wasn't injected.
+            if self.data_engine is not None:
+                try:
+                    from ..monitoring.liquidity_levels import compute_liquidity_levels
+
+                    for tf in ("5m", "15m", "1h"):
+                        bars = self.data_engine.get_bars(signal.symbol.ticker, tf)
+                        if bars is None or len(bars) < 50:
+                            continue
+                        lvls = compute_liquidity_levels(bars)
+                        if lvls is None:
+                            continue
+                        signal.metadata['liquidity_levels'] = {
+                            'pdh':    lvls.get('pdh'),
+                            'pdl':    lvls.get('pdl'),
+                            'asia_h': lvls.get('asia_h'),
+                            'asia_l': lvls.get('asia_l'),
+                        }
+                        break
+                except Exception as e:
+                    self.logger.debug(f"liquidity attach failed (non-fatal): {e}")
+
             # 0.75 Calculate Stops via Ritchie RiskProcessor
             signal = self.risk_processor.calculate_stops(signal)
             

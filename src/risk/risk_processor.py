@@ -277,6 +277,28 @@ class RiskProcessor:
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
             tp = entry + (sl_dist * Decimal('2.0')) if side == OrderSide.BUY else entry - (sl_dist * Decimal('2.0'))
 
+        # ── Carmack Rule: Liquidity-anchored SL/TP adjustment ─────────────
+        # Inline here (NOT extracted into a method) so the mutation is visible
+        # right next to the other SL/TP assignments below. The actual logic
+        # lives in a PURE function (adjust_stops_for_liquidity) that enforces
+        # two invariants: never widens TP, never tightens SL. Worst case the
+        # trade behaves like the original strategy plan.
+        if sl is not None and tp is not None:
+            liq_levels = signal.metadata.get('liquidity_levels') or {}
+            if liq_levels:
+                from ..monitoring.liquidity_levels import adjust_stops_for_liquidity
+                atr = Decimal(str(signal.metadata.get('atr', 0)))
+                # Buffer = 0.1 × ATR. Small enough that we sit just past the
+                # stop-run wick but not so wide that R:R collapses.
+                liq_buffer = atr * Decimal('0.1') if atr > 0 else Decimal('0')
+                side_str = "BUY" if side == OrderSide.BUY else "SELL"
+                sl, tp, reasons = adjust_stops_for_liquidity(
+                    entry=entry, sl=sl, tp=tp, side=side_str,
+                    levels=liq_levels, buffer=liq_buffer,
+                )
+                for r in reasons:
+                    self.logger.info(f"RiskProcessor [Carmack/liquidity]: {r}")
+
         # Carmack Rule: Broker StopsValidator
         # Validate BOTH SL and TP against broker minimum stops distance.
         # Add a 5% buffer to avoid edge-case rejections where MT5 requires
