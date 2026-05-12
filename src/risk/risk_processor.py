@@ -335,9 +335,9 @@ class RiskProcessor:
         #
         #   risk:
         #     rr_floors:
-        #       confirmed:                       3.0   # strength >= confirmed_strength_threshold
-        #       default:                         2.0   # in between
-        #       unconfirmed:                     1.0   # strength < unconfirmed_strength_threshold
+        #       confirmed:                       1.0   # strength >= confirmed_strength_threshold
+        #       default:                         0.75  # in between
+        #       unconfirmed:                     0.5   # strength < unconfirmed_strength_threshold
         #       confirmed_strength_threshold:    0.7
         #       unconfirmed_strength_threshold:  0.4
         #
@@ -345,9 +345,9 @@ class RiskProcessor:
         # floor is breached — matches the prior fail-closed pattern.
         if sl is not None and tp is not None:
             rr_cfg = (self.config.get('risk', {}) or {}).get('rr_floors', {}) or {}
-            floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   3.0)))
-            floor_default     = Decimal(str(rr_cfg.get('default',     2.0)))
-            floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 1.0)))
+            floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   1.0)))
+            floor_default     = Decimal(str(rr_cfg.get('default',     0.75)))
+            floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 0.5)))
             th_confirmed   = float(rr_cfg.get('confirmed_strength_threshold',   0.7))
             th_unconfirmed = float(rr_cfg.get('unconfirmed_strength_threshold', 0.4))
 
