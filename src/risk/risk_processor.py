@@ -283,7 +283,11 @@ class RiskProcessor:
         # lives in a PURE function (adjust_stops_for_liquidity) that enforces
         # two invariants: never widens TP, never tightens SL. Worst case the
         # trade behaves like the original strategy plan.
-        if sl is not None and tp is not None:
+        # kalman_regime is excluded: its raw RR (4/3≈1.33) is tight enough
+        # that any SL widening past PDL/PDH collapses RR below the floor and
+        # causes the signal to be rejected. Keeping kalman on its raw stops
+        # preserves the geometry the backtest validated.
+        if sl is not None and tp is not None and strategy_name != 'kalman_regime':
             liq_levels = signal.metadata.get('liquidity_levels') or {}
             if liq_levels:
                 from ..monitoring.liquidity_levels import adjust_stops_for_liquidity

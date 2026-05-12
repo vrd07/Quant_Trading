@@ -10,23 +10,27 @@
 ::   scripts\start_live.bat --force      (skip confirmations, for scheduled tasks)
 :: ============================================================
 
+setlocal EnableDelayedExpansion
+
 title Quant Trading Bot - LIVE
 
 :: Change to the project root directory (parent of this script)
 cd /d "%~dp0.."
 
 :: Single source of truth for the active live config.
-set ACTIVE_CONFIG=config\config_live_10000.yaml
+set "ACTIVE_CONFIG=config\config_live_10000.yaml"
 if exist "config\ACTIVE_CONFIG" (
-    set /p ACTIVE_CONFIG=<config\ACTIVE_CONFIG
+    set /p "ACTIVE_CONFIG="<"config\ACTIVE_CONFIG"
+    :: Strip any trailing CR / whitespace that crept in from the file.
+    for /f "tokens=* delims= " %%i in ("!ACTIVE_CONFIG!") do set "ACTIVE_CONFIG=%%i"
 )
 
-set CONFIG=
-set FORCE=false
+set "CONFIG="
+set "FORCE=false"
 
 :: Parse args
 for %%a in (%*) do (
-    if /i "%%a"=="--force" set FORCE=true
+    if /i "%%a"=="--force" set "FORCE=true"
 )
 
 :: Activate venv (auto-run setup if missing)
@@ -41,17 +45,17 @@ if not exist "venv\Scripts\activate.bat" (
         exit /b 1
     )
 )
-call venv\Scripts\activate.bat
+call "venv\Scripts\activate.bat"
 
 :: ── Account Selection ───────────────────────────────────────
-if "%FORCE%"=="true" (
-    set CONFIG=%ACTIVE_CONFIG%
+if /i "!FORCE!"=="true" (
+    set "CONFIG=!ACTIVE_CONFIG!"
     goto :account_selected
 )
 
 echo.
 echo ============================================================
-echo   Select Account Size  (ACTIVE_CONFIG: %ACTIVE_CONFIG%)
+echo   Select Account Size  ^(ACTIVE_CONFIG: !ACTIVE_CONFIG!^)
 echo ============================================================
 echo.
 echo   0) Use ACTIVE_CONFIG  ^<-- default
@@ -62,35 +66,45 @@ echo   4) $10,000
 echo   5) $25,000
 echo   6) $50,000
 echo.
-set /p ACCOUNT_CHOICE="  Enter choice [0-6] (default: 0): "
+set "ACCOUNT_CHOICE="
+set /p "ACCOUNT_CHOICE=  Enter choice [0-6] (default: 0): "
 
-if "%ACCOUNT_CHOICE%"=="" set ACCOUNT_CHOICE=0
-if "%ACCOUNT_CHOICE%"=="0" set CONFIG=%ACTIVE_CONFIG%
-if "%ACCOUNT_CHOICE%"=="1" set CONFIG=config\config_live_100.yaml
-if "%ACCOUNT_CHOICE%"=="2" set CONFIG=config\config_live_1000.yaml
-if "%ACCOUNT_CHOICE%"=="3" set CONFIG=config\config_live_5000.yaml
-if "%ACCOUNT_CHOICE%"=="4" set CONFIG=config\config_live_10000.yaml
-if "%ACCOUNT_CHOICE%"=="5" set CONFIG=config\config_live_25000.yaml
-if "%ACCOUNT_CHOICE%"=="6" set CONFIG=config\config_live_50000.yaml
+if "!ACCOUNT_CHOICE!"=="" set "ACCOUNT_CHOICE=0"
+if "!ACCOUNT_CHOICE!"=="0" set "CONFIG=!ACTIVE_CONFIG!"
+if "!ACCOUNT_CHOICE!"=="1" set "CONFIG=config\config_live_100.yaml"
+if "!ACCOUNT_CHOICE!"=="2" set "CONFIG=config\config_live_1000.yaml"
+if "!ACCOUNT_CHOICE!"=="3" set "CONFIG=config\config_live_5000.yaml"
+if "!ACCOUNT_CHOICE!"=="4" set "CONFIG=config\config_live_10000.yaml"
+if "!ACCOUNT_CHOICE!"=="5" set "CONFIG=config\config_live_25000.yaml"
+if "!ACCOUNT_CHOICE!"=="6" set "CONFIG=config\config_live_50000.yaml"
 
-if "%CONFIG%"=="" (
-    echo   Invalid choice. Using ACTIVE_CONFIG (%ACTIVE_CONFIG%).
-    set CONFIG=%ACTIVE_CONFIG%
+if "!CONFIG!"=="" (
+    echo   Invalid choice. Using ACTIVE_CONFIG ^(!ACTIVE_CONFIG!^).
+    set "CONFIG=!ACTIVE_CONFIG!"
 )
 
 :account_selected
 
+if not exist "!CONFIG!" (
+    echo.
+    echo ERROR: Config file not found: !CONFIG!
+    echo        Check config\ACTIVE_CONFIG or pick a valid account size.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
 echo ============================================================
 echo   Quant Trading Bot — GFT Account
-echo   Config: %CONFIG%
-echo   Time:   %date% %time:~0,5% UTC
+echo   Config: !CONFIG!
+echo   Time:   %date% %time:~0,5%
 echo ============================================================
 echo.
 
 :: ── Runtime Risk Setup (lot size / max loss per trade / daily loss) ─
-if "%FORCE%"=="false" (
-    python scripts\runtime_setup.py --config %CONFIG%
+if /i "!FORCE!"=="false" (
+    python scripts\runtime_setup.py --config "!CONFIG!"
     if errorlevel 1 (
         echo   [WARN] Runtime setup failed or cancelled — using config defaults.
         echo.
@@ -101,8 +115,9 @@ if "%FORCE%"=="false" (
 echo --- [1/4] Pre-flight Health Check ---
 echo.
 
-python scripts\health_check.py --config %CONFIG%
-if %errorlevel%==0 (
+python scripts\health_check.py --config "!CONFIG!"
+set "HEALTH_RC=!errorlevel!"
+if "!HEALTH_RC!"=="0" (
     echo.
     echo   [OK] Health check PASSED
     echo.
@@ -110,7 +125,7 @@ if %errorlevel%==0 (
     echo.
     echo   [FAIL] Health check FAILED — fix issues above before trading
     echo.
-    if "%FORCE%"=="false" (
+    if /i "!FORCE!"=="false" (
         pause
         exit /b 1
     ) else (
@@ -124,7 +139,7 @@ echo --- [2/4] Fetching Today's News Events ---
 echo.
 
 python scripts\fetch_daily_news.py
-if %errorlevel%==0 (
+if !errorlevel! equ 0 (
     echo   [OK] News events fetched and configs updated
     echo.
 ) else (
@@ -137,7 +152,7 @@ echo --- [3/4] Nightly Regime Classifier ---
 echo.
 
 python scripts\regime_classifier.py
-if %errorlevel%==0 (
+if !errorlevel! equ 0 (
     echo   [OK] Regime classifier completed
     echo.
 ) else (
@@ -152,14 +167,14 @@ echo.
 :: Spawn the interactive live-monitor pop-up in a separate window so
 :: the user can snap it next to MT5 while the bot streams state to it.
 :: Uses pythonw.exe (from venv) for a clean GUI-only window — no console.
-if not exist "logs" mkdir logs
+if not exist "logs" mkdir "logs"
 python -c "import tkinter" >nul 2>&1
-if %errorlevel%==0 (
+if !errorlevel! equ 0 (
     echo   [INFO] Launching live monitor pop-up...
     if exist "venv\Scripts\pythonw.exe" (
-        start "" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000
     ) else (
-        start "Live Monitor" python scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" python scripts\live_monitor.py --refresh 1000
     )
 ) else (
     echo   [WARN] Tkinter not available — skipping live monitor pop-up.
@@ -168,30 +183,29 @@ if %errorlevel%==0 (
 :: ── Telegram bot scheduler (optional — needs trading_bot\.env) ──
 if exist "trading_bot\.env" (
     echo   [INFO] Launching Telegram bot scheduler...
-    start "Telegram Bot" /min cmd /c "python -m trading_bot.scheduler >> logs\telegram_bot.log 2>&1"
+    start "QuantTelegramBot" /min cmd /c "python -m trading_bot.scheduler >> logs\telegram_bot.log 2>&1"
 ) else (
     echo   [WARN] trading_bot\.env not found — Telegram bot scheduler not started.
     echo          See trading_bot\README.md section 1 to enable it.
 )
 
-if "%FORCE%"=="true" (
-    python src\main.py --env live --config %CONFIG% --force-live
+if /i "!FORCE!"=="true" (
+    python src\main.py --env live --config "!CONFIG!" --force-live
 ) else (
-    python src\main.py --env live --config %CONFIG%
+    python src\main.py --env live --config "!CONFIG!"
 )
 
-:: Bot has exited — close any live-monitor windows that are still open.
-:: (Safe: only targets pythonw processes that loaded live_monitor.py.)
-for /f "tokens=2" %%p in ('wmic process where "CommandLine like '%%live_monitor.py%%'" get ProcessId ^| findstr /r "[0-9]"') do (
-    taskkill /PID %%p /F >nul 2>&1
-)
-
-:: Also stop the Telegram bot scheduler if it's still running.
-for /f "tokens=2" %%p in ('wmic process where "CommandLine like '%%trading_bot.scheduler%%'" get ProcessId ^| findstr /r "[0-9]"') do (
-    taskkill /PID %%p /F >nul 2>&1
-)
+:: ── Cleanup: stop spawned helpers when the bot exits ─────────
+:: wmic is deprecated/removed on modern Windows (11 24H2+), so use
+:: PowerShell + CIM to match by command line. Errors silenced — these
+:: are best-effort cleanups, not gates on the script returning.
+echo.
+echo   [INFO] Cleaning up live monitor and Telegram scheduler processes...
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*live_monitor.py*' -or $_.CommandLine -like '*trading_bot.scheduler*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 :: If the bot exits, pause so you can read any error messages
 echo.
 echo Bot stopped. Press any key to close...
 pause > nul
+
+endlocal
