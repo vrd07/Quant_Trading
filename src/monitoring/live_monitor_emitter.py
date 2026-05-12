@@ -217,14 +217,33 @@ class LiveMonitorEmitter:
         except Exception:
             pass
 
-    def mark_last_signal(self, status: str, reason: str = "") -> None:
-        """Update the outcome of the most recently-received signal."""
+    def mark_last_signal(
+        self,
+        status: str,
+        reason: str = "",
+        *,
+        price: Optional[float] = None,
+        sl: Optional[float] = None,
+        tp: Optional[float] = None,
+    ) -> None:
+        """Update the outcome of the most recently-received signal.
+
+        Risk processor fills SL/TP at order-submit time, so the values from the
+        original record_signal() call are usually 0. Callers can backfill them
+        here once the order exists.
+        """
         try:
             with self._lock:
                 if self._signals:
                     self._signals[0]["status"] = status
                     if reason:
                         self._signals[0]["reason"] = reason[:200]
+                    if price is not None and float(price) > 0:
+                        self._signals[0]["price"] = round(float(price), 5)
+                    if sl is not None and float(sl) > 0:
+                        self._signals[0]["sl"] = round(float(sl), 5)
+                    if tp is not None and float(tp) > 0:
+                        self._signals[0]["tp"] = round(float(tp), 5)
         except Exception:
             pass
 
