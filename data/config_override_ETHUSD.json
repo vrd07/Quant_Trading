@@ -1,7 +1,7 @@
 {
   "symbol": "ETHUSD",
-  "generated_at": "2026-05-12T07:07:38.687142+00:00",
-  "valid_until": "2026-05-13T07:07:38.687142+00:00",
+  "generated_at": "2026-05-12T07:44:26.325668+00:00",
+  "valid_until": "2026-05-13T07:44:26.325668+00:00",
   "regime": "RANGE",
   "confidence": 0.8628,
   "classifier": "RandomForest+Markov (n=36 samples)",
