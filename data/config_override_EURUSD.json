@@ -1,7 +1,7 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-05-11T09:38:51.124421+00:00",
-  "valid_until": "2026-05-12T09:38:51.124421+00:00",
+  "generated_at": "2026-05-12T00:00:04.094255+00:00",
+  "valid_until": "2026-05-13T00:00:04.094255+00:00",
   "regime": "TREND",
   "confidence": 0.55,
   "classifier": "rule-based",
