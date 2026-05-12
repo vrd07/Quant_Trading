@@ -23,6 +23,17 @@ logging.disable(logging.INFO)
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
+
+def _active_config() -> str:
+    marker = project_root / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
 from src.backtest.backtest_engine import BacktestEngine
 from src.backtest.grid_loader import load_grid_for
 from src.backtest.tiered_retune import TieredRetune, Gates
@@ -443,8 +454,8 @@ def main():
                              'Use "all" to mean the three spec-required symbols (XAU+BTC+EUR). '
                              'Overrides --symbol when set.')
     parser.add_argument('--timeframe', default='5m', help='Timeframe (default: 5m)')
-    parser.add_argument('--config', default='config/config_live_50000.yaml',
-                        help='Config file (default: config/config_live_50000.yaml)')
+    parser.add_argument('--config', default=_active_config(),
+                        help='Config file (default: resolved from config/ACTIVE_CONFIG)')
     parser.add_argument('--start', help='Start date (YYYY-MM-DD)')
     parser.add_argument('--end', help='End date (YYYY-MM-DD)')
     parser.add_argument('--capital', type=float, default=None,
