@@ -425,11 +425,17 @@ class LiveMonitorEmitter:
             risk_cfg = cfg.get("risk", {}) or {}
             max_daily_pct = float(risk_cfg.get("max_daily_loss_pct", 0.025) or 0.025)
             max_dd_pct = float(risk_cfg.get("max_drawdown_pct", 0.07) or 0.07)
+            # Prefer the absolute USD the operator typed in runtime_setup.py over
+            # a pct*balance reconstruction — the latter drifts as balance moves
+            # and ends up disagreeing with the value the risk engine actually
+            # enforces (risk_engine reads absolute_max_loss_usd directly).
+            abs_daily = float(risk_cfg.get("absolute_max_loss_usd", 0) or 0)
+            abs_dd = float(risk_cfg.get("absolute_max_drawdown_usd", 0) or 0)
 
             base = out["balance"] or out["initial_capital"] or 0.0
             if base > 0:
                 daily_loss_abs = -out["daily_pnl"] if out["daily_pnl"] < 0 else 0.0
-                daily_limit = max_daily_pct * base
+                daily_limit = abs_daily if abs_daily > 0 else max_daily_pct * base
                 out["daily_loss_limit_usd"] = round(daily_limit, 2)
                 out["daily_loss_limit_used_usd"] = round(daily_loss_abs, 2)
                 if daily_limit > 0:
@@ -447,7 +453,7 @@ class LiveMonitorEmitter:
                     if not hwm or hwm <= 0:
                         hwm = max(out["equity"], base)
                     dd_abs = max(0.0, hwm - out["equity"])
-                    dd_limit = max_dd_pct * hwm
+                    dd_limit = abs_dd if abs_dd > 0 else max_dd_pct * hwm
                     out["drawdown_limit_usd"] = round(dd_limit, 2)
                     out["drawdown_used_usd"] = round(dd_abs, 2)
                     if dd_limit > 0:

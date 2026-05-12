@@ -4,6 +4,8 @@ Interactive runtime setup. Prompts the user for:
   2. Lot size per selected symbol
   3. Max loss per trade (USD) — shows the implied stop-loss in pips per symbol
   4. Max daily loss (USD)
+  5. Max total drawdown (USD)
+  6. Max daily profit (USD)
 
 Writes the chosen values to config/runtime_overrides.yaml, which is merged
 on top of the selected config by src/main.py at startup.
@@ -187,8 +189,23 @@ def main() -> int:
     print(f"  => {max_daily_loss:.2f} / {balance:,.2f} = {daily_pct:.2%} of balance")
     print()
 
+    # ── Max total drawdown ──
+    print("--- Step 4: Max total drawdown ---")
+    default_dd_pct = float(config["risk"].get("max_drawdown_pct", 0.07) or 0.07)
+    default_dd_usd = round(balance * default_dd_pct, 2)
+    max_drawdown_usd = _prompt_float(
+        "  Max total drawdown (USD)",
+        default=default_dd_usd,
+        minimum=max_daily_loss,
+    )
+    dd_pct = max_drawdown_usd / balance if balance else default_dd_pct
+    print(f"  => {max_drawdown_usd:.2f} / {balance:,.2f} = {dd_pct:.2%} of balance")
+    print("     (risk engine enforces this as a % of the equity high-water-mark;")
+    print("      the dashboard displays the USD value you entered.)")
+    print()
+
     # ── Max daily profit ──
-    print("--- Step 4: Max daily profit (stop trading once hit) ---")
+    print("--- Step 5: Max daily profit (stop trading once hit) ---")
     default_profit_usd = round(
         float(config["risk"].get("max_daily_profit_usd", balance * 0.01)), 2
     )
@@ -221,6 +238,8 @@ def main() -> int:
             "risk_per_trade_usd": max_loss_trade,
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
+            "max_drawdown_pct": dd_pct,
+            "absolute_max_drawdown_usd": max_drawdown_usd,
             "max_daily_profit_usd": max_daily_profit,
         },
     }
@@ -234,6 +253,7 @@ def main() -> int:
     print(f"   Symbols         : {', '.join(selected.keys())}")
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
+    print(f"   Max drawdown    : ${max_drawdown_usd:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))
     print("=" * 60)
     print()
