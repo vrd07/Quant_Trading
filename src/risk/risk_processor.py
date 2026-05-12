@@ -29,6 +29,7 @@ class RiskProcessor:
         'momentum_scalp': 'momentum',
         'zscore_mean_reversion': 'mean_reversion',
         'vwap_deviation': 'vwap',
+        'vwap_macd_crossover': 'vwap',   # new VWAP+MACD strategy — config lives under strategies.vwap
         'kalman_regime': 'kalman_regime',
         'mini_medallion': 'mini_medallion',
         'structure_break_retest': 'sbr',
@@ -97,6 +98,24 @@ class RiskProcessor:
                 tp = entry + min_tp_dist
             elif side == OrderSide.SELL and (entry - tp) < min_tp_dist:
                 tp = entry - min_tp_dist
+
+        elif strategy_name == 'vwap_macd_crossover':
+            # The strategy pre-computes stop_price and take_profit_price at signal time
+            # (1.5×ATR SL, 2×SL TP = fixed 1:2 RR). Use them directly; fall back to
+            # ATR-based calculation only when metadata keys are absent.
+            precomputed_sl = signal.metadata.get('stop_price')
+            precomputed_tp = signal.metadata.get('take_profit_price')
+            if precomputed_sl is not None and precomputed_tp is not None:
+                sl = Decimal(str(precomputed_sl))
+                tp = Decimal(str(precomputed_tp))
+            else:
+                # Fallback: reconstruct from ATR and config
+                atr = Decimal(str(signal.metadata.get('atr', 0)))
+                stop_mult = Decimal(str(strat_cfg.get('stop_atr_mult', 1.5)))
+                rr = Decimal(str(signal.metadata.get('risk_reward', 2.0)))
+                sl_dist = stop_mult * atr
+                sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+                tp = entry + (sl_dist * rr) if side == OrderSide.BUY else entry - (sl_dist * rr)
 
         elif strategy_name == 'donchian_breakout':
             atr = Decimal(str(signal.metadata.get('atr', 0)))
@@ -258,6 +277,28 @@ class RiskProcessor:
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
             tp = entry + (sl_dist * Decimal('2.0')) if side == OrderSide.BUY else entry - (sl_dist * Decimal('2.0'))
 
+        # ── Carmack Rule: Liquidity-anchored SL/TP adjustment ─────────────
+        # Inline here (NOT extracted into a method) so the mutation is visible
+        # right next to the other SL/TP assignments below. The actual logic
+        # lives in a PURE function (adjust_stops_for_liquidity) that enforces
+        # two invariants: never widens TP, never tightens SL. Worst case the
+        # trade behaves like the original strategy plan.
+        if sl is not None and tp is not None:
+            liq_levels = signal.metadata.get('liquidity_levels') or {}
+            if liq_levels:
+                from ..monitoring.liquidity_levels import adjust_stops_for_liquidity
+                atr = Decimal(str(signal.metadata.get('atr', 0)))
+                # Buffer = 0.1 × ATR. Small enough that we sit just past the
+                # stop-run wick but not so wide that R:R collapses.
+                liq_buffer = atr * Decimal('0.1') if atr > 0 else Decimal('0')
+                side_str = "BUY" if side == OrderSide.BUY else "SELL"
+                sl, tp, reasons = adjust_stops_for_liquidity(
+                    entry=entry, sl=sl, tp=tp, side=side_str,
+                    levels=liq_levels, buffer=liq_buffer,
+                )
+                for r in reasons:
+                    self.logger.info(f"RiskProcessor [Carmack/liquidity]: {r}")
+
         # Carmack Rule: Broker StopsValidator
         # Validate BOTH SL and TP against broker minimum stops distance.
         # Add a 5% buffer to avoid edge-case rejections where MT5 requires
@@ -285,17 +326,50 @@ class RiskProcessor:
                     )
                     tp = entry + buffered_min if side == OrderSide.BUY else entry - buffered_min
 
-                # Reject if R:R collapsed below 1.0 after expansion
-                final_risk = abs(entry - sl)
-                final_reward = abs(entry - tp)
-                if final_risk > 0 and (final_reward / final_risk) < Decimal('1.0'):
-                    self.logger.warning(
-                        f"RiskProcessor [Carmack]: R:R ratio {float(final_reward / final_risk):.2f} "
-                        f"< 1.0 after stop expansion — rejecting signal."
-                    )
-                    signal.stop_loss = None
-                    signal.take_profit = None
-                    return signal
+        # ── Carmack Rule: Tiered R:R floor ────────────────────────────────
+        # Replaces the previous hard 1.0 floor. Higher-confidence signals
+        # require a wider reward-to-risk; lower-confidence signals are
+        # allowed to take a 1:1. The tier is derived from `signal.strength`
+        # (the 0–1 confidence every strategy already sets) and is fully
+        # overridable in YAML via:
+        #
+        #   risk:
+        #     rr_floors:
+        #       confirmed:                       1.0   # strength >= confirmed_strength_threshold
+        #       default:                         0.75  # in between
+        #       unconfirmed:                     0.5   # strength < unconfirmed_strength_threshold
+        #       confirmed_strength_threshold:    0.7
+        #       unconfirmed_strength_threshold:  0.4
+        #
+        # Rejection (set SL/TP to None) is the explicit action when the
+        # floor is breached — matches the prior fail-closed pattern.
+        if sl is not None and tp is not None:
+            rr_cfg = (self.config.get('risk', {}) or {}).get('rr_floors', {}) or {}
+            floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   1.0)))
+            floor_default     = Decimal(str(rr_cfg.get('default',     0.75)))
+            floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 0.5)))
+            th_confirmed   = float(rr_cfg.get('confirmed_strength_threshold',   0.7))
+            th_unconfirmed = float(rr_cfg.get('unconfirmed_strength_threshold', 0.4))
+
+            strength = float(signal.strength) if signal.strength is not None else 0.5
+            if strength >= th_confirmed:
+                tier, rr_floor = "CONFIRMED", floor_confirmed
+            elif strength < th_unconfirmed:
+                tier, rr_floor = "UNCONFIRMED", floor_unconfirmed
+            else:
+                tier, rr_floor = "DEFAULT", floor_default
+
+            final_risk = abs(entry - sl)
+            final_reward = abs(entry - tp)
+            if final_risk > 0 and (final_reward / final_risk) < rr_floor:
+                self.logger.warning(
+                    f"RiskProcessor [Carmack/RR]: {strategy_name} strength={strength:.2f} "
+                    f"tier={tier}, R:R {float(final_reward/final_risk):.2f} < floor "
+                    f"{float(rr_floor):.1f} — rejecting signal."
+                )
+                signal.stop_loss = None
+                signal.take_profit = None
+                return signal
 
         # Standardize TP/SL types to float as Signal model uses Optional[float] / Optional[Decimal]
         # Types.py accepts Decimal

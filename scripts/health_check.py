@@ -29,6 +29,17 @@ PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 
+def _active_config() -> str:
+    marker = PROJECT_ROOT / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
+
 def check(name: str, ok: bool, detail: str = "") -> bool:
     status = "✅ PASS" if ok else "❌ FAIL"
     msg = f"  {status}  {name}"
@@ -40,7 +51,7 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
 
 def main():
     parser = argparse.ArgumentParser(description="Trading System Health Check")
-    parser.add_argument("--config", default="config/config_live_5000.yaml")
+    parser.add_argument("--config", default=_active_config())
     args = parser.parse_args()
 
     print("=" * 60)

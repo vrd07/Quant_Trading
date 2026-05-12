@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Live Trading Script — GFT $50,000 Account
+Live Trading Script — account size resolved from config/ACTIVE_CONFIG.
 
 Runs health check → regime classifier → live trading in sequence.
 Python alternative to start_live.sh for Windows or direct invocation.
@@ -17,7 +17,19 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-CONFIG = "config/config_live_50000.yaml"
+
+def _active_config() -> str:
+    marker = PROJECT_ROOT / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
+
+CONFIG = _active_config()
 
 
 def run_step(description: str, cmd: list, allow_failure: bool = False) -> bool:
@@ -44,7 +56,7 @@ def main():
     force = "--force" in sys.argv
 
     print("\n" + "=" * 60)
-    print("  Quant Trading Bot — GFT $50,000 Account")
+    print("  Quant Trading Bot — Live Trading")
     print(f"  Config: {CONFIG}")
     print("=" * 60)
 

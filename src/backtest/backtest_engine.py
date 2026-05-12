@@ -80,6 +80,7 @@ class BacktestEngine:
         slippage_model: str = "realistic",
         bypass_risk_limits: bool = True,
         news_replay: Optional[NewsBlackoutReplay] = None,
+        disable_sl_exits: bool = False,
     ):
         """
         Initialize backtest engine.
@@ -117,6 +118,7 @@ class BacktestEngine:
             slippage_model=slippage_model,
             trailing_stop_config=trailing_stop_config,
             news_active_at=news_active_at,
+            disable_sl_exits=disable_sl_exits,
         )
         
         # Risk engine (same as live trading)
@@ -355,7 +357,8 @@ class BacktestEngine:
                 account_balance=self.broker.get_balance(),
                 entry_price=signal.entry_price,
                 stop_loss=signal.stop_loss,
-                side=signal.side
+                side=signal.side,
+                strategy_name=signal.strategy_name,
             )
             
             if position_size <= 0:

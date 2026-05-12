@@ -82,6 +82,18 @@ class RiskEngine:
         self.max_exposure_per_symbol_pct = Decimal(str(risk_config.get('max_exposure_per_symbol_pct', 0.30)))
         self.max_daily_trades = risk_config.get('max_daily_trades', 50)
         
+        # Per-strategy risk overrides. A strategy listed here uses its own
+        # per-trade $ cap (and risk %) instead of the operator's global one.
+        # Schema:
+        #   risk.strategy_risk_overrides:
+        #     <strategy_name>:
+        #       risk_per_trade_usd: <num>      # absolute $ cap per trade
+        #       risk_per_trade_pct: <num>      # OR fraction of balance (used by sizer)
+        # Used by _check_16_risk_per_trade and calculate_position_size below.
+        self._strategy_risk_overrides: Dict[str, Dict] = (
+            risk_config.get('strategy_risk_overrides', {}) or {}
+        )
+
         # Initialize sub-components
         self.position_sizer = PositionSizer(config)
         self.kill_switch = KillSwitch()
@@ -569,14 +581,28 @@ class RiskEngine:
             sl_distance = abs(order.price - order.stop_loss)
             value_per_lot = order.symbol.value_per_lot if order.symbol else Decimal("1")
             risk_amount = sl_distance * order.quantity * value_per_lot
-            # Prefer the user's absolute USD cap (runtime_setup) over the
-            # percentage — that value is the explicit "max loss per trade"
-            # the operator entered at startup and is enforced exactly.
-            risk_usd_cap = Decimal(str(self.config.get('risk', {}).get('risk_per_trade_usd', 0) or 0))
-            if risk_usd_cap > 0:
-                max_risk = risk_usd_cap
+
+            # Per-strategy override: strategies in risk.strategy_risk_overrides
+            # use their own cap so a wider-SL strategy (e.g. kalman_regime)
+            # isn't clipped by the operator's global runtime_setup cap.
+            strat = (order.metadata or {}).get('strategy') if order.metadata else None
+            override = self._strategy_risk_overrides.get(strat) if strat else None
+            if override:
+                ov_usd = Decimal(str(override.get('risk_per_trade_usd', 0) or 0))
+                if ov_usd > 0:
+                    max_risk = ov_usd
+                else:
+                    ov_pct = Decimal(str(override.get('risk_per_trade_pct', 0) or 0))
+                    max_risk = account_balance * ov_pct if ov_pct > 0 else account_balance * self.risk_per_trade_pct
             else:
-                max_risk = account_balance * self.risk_per_trade_pct
+                # Prefer the user's absolute USD cap (runtime_setup) over the
+                # percentage — that value is the explicit "max loss per trade"
+                # the operator entered at startup and is enforced exactly.
+                risk_usd_cap = Decimal(str(self.config.get('risk', {}).get('risk_per_trade_usd', 0) or 0))
+                if risk_usd_cap > 0:
+                    max_risk = risk_usd_cap
+                else:
+                    max_risk = account_balance * self.risk_per_trade_pct
 
             if risk_amount > max_risk:
                 # Allow min_lot orders through — the minimum possible trade shouldn't be blocked
@@ -655,13 +681,27 @@ class RiskEngine:
             return fixed  # FIXED LOT: Bypass exposure cap completely
 
         # ── Fixed fractional (default): size by % risk ────────────────────
+        # Per-strategy risk override: strategies in risk.strategy_risk_overrides
+        # size off their own risk budget. Resolution order: explicit USD cap
+        # (turned into pct of balance), then explicit pct, else global pct.
+        effective_risk_pct = self.risk_per_trade_pct
+        if strategy_name and strategy_name in self._strategy_risk_overrides:
+            ov = self._strategy_risk_overrides[strategy_name]
+            ov_usd = Decimal(str(ov.get('risk_per_trade_usd', 0) or 0))
+            if ov_usd > 0 and account_balance > 0:
+                effective_risk_pct = ov_usd / account_balance
+            else:
+                ov_pct = Decimal(str(ov.get('risk_per_trade_pct', 0) or 0))
+                if ov_pct > 0:
+                    effective_risk_pct = ov_pct
+
         # 1. Calculate risk-based size (Stop Loss distance)
         risk_size = self.position_sizer.calculate_position_size(
             symbol=symbol,
             account_balance=account_balance,
             entry_price=entry_price,
             stop_loss=stop_loss,
-            risk_pct=self.risk_per_trade_pct,
+            risk_pct=effective_risk_pct,
             signal_strength=signal_strength,
         )
 

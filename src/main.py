@@ -240,7 +240,8 @@ class TradingSystem:
             self.logger.info("5. Initializing execution engine...")
             self.execution_engine = ExecutionEngine(
                 connector=self.connector,
-                risk_engine=self.risk_engine
+                risk_engine=self.risk_engine,
+                data_engine=self.data_engine,
             )
             self.logger.info("✓ Execution engine ready")
             
@@ -284,11 +285,30 @@ class TradingSystem:
             )
             self.logger.info("✓ Portfolio engine ready")
             
-            # 8. Initialize state manager
+            # 8. Initialize state manager.
+            # State is namespaced by MT5 account login so switching to a
+            # different broker account never inherits the previous account's
+            # equity_high_water_mark, daily_start_equity, daily_pnl, or open
+            # positions. Two same-size accounts that share an env path would
+            # otherwise silently bleed state into each other and could open at
+            # 100% daily-loss or 70% drawdown before the first tick.
             self.logger.info("8. Initializing state manager...")
-            state_dir = f"data/state/{self.env}"
+            login = 0
+            try:
+                login = int(self.connector.get_account_info().get('login', 0) or 0)
+            except Exception as e:
+                self.logger.warning(f"Could not read MT5 login for state namespacing: {e}")
+            if login > 0:
+                state_dir = f"data/state/{self.env}/{login}"
+            else:
+                state_dir = f"data/state/{self.env}"
+                self.logger.warning(
+                    "MT5 login unavailable — falling back to shared state dir. "
+                    "Update EA_FileBridge.mq5 (HandleGetAccountInfo emits 'login') "
+                    "to enable per-account state isolation."
+                )
             self.state_manager = StateManager(state_dir=state_dir)
-            self.logger.info(f"✓ State manager ready (env: {self.env})")
+            self.logger.info(f"✓ State manager ready (env: {self.env}, login: {login or 'shared'})")
             
             # 7b. Initialize dashboard
             initial_capital = Decimal(str(self.config.get('account', {}).get('initial_balance', 10000)))
@@ -1775,6 +1795,22 @@ def _pick_daily_quote() -> tuple:
     return _MOTIVATIONAL_QUOTES[_dt.date.today().toordinal() % len(_MOTIVATIONAL_QUOTES)]
 
 
+def _active_config() -> str:
+    """Resolve the active live config path from config/ACTIVE_CONFIG.
+
+    Single source of truth so every launcher agrees on which account-size
+    config is in use. Falls back to the $10k config if the marker is missing.
+    """
+    marker = PROJECT_ROOT / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
+
 def main():
     """Main entry point."""
     log_trace("Entering main()")
@@ -1815,7 +1851,7 @@ def main():
     config_files = {
         'dev': 'config/config_dev.yaml',
         'paper': 'config/config_paper.yaml',
-        'live': 'config/config_live_5000.yaml'
+        'live': _active_config()
     }
     
     config_file = args.config
@@ -1846,7 +1882,7 @@ def main():
             "5": "config/config_live_25000.yaml",
             "6": "config/config_live_50000.yaml"
         }
-        config_file = choice_map.get(choice, "config/config_live_5000.yaml")
+        config_file = choice_map.get(choice, _active_config())
         
     if not config_file:
         config_file = config_files.get(args.env, 'config/config_dev.yaml')

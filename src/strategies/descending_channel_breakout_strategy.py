@@ -284,7 +284,17 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
 
         # ── Phase 2: Structure Shift Detection ───────────────────────────
         swing_lows = _find_swing_lows(lows, self.swing_period)
+        
+        # ENHANCEMENT: Account for the most recent unconfirmed swing low if breaking out
         hl_count = _count_higher_lows(swing_lows)
+        unconfirmed_low = None
+        if len(swing_lows) > 0:
+            last_swing_idx = swing_lows[-1][0]
+            if last_swing_idx < len(lows) - 1:
+                recent_min = lows[last_swing_idx + 1:].min()
+                if recent_min > swing_lows[-1][1]:
+                    hl_count += 1
+                    unconfirmed_low = float(recent_min)
 
         has_structure_shift = hl_count >= self.min_hl_count
 
@@ -299,9 +309,17 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         bar_body = abs(current_close - current_open)
         min_body = current_atr * self.min_body_atr_ratio
 
+        # ENHANCEMENT: Fresh breakout check to prevent late entries
+        previous_close = float(bars["close"].iloc[-2])
+        previous_channel_upper = _linear_regression_value(highs, len(highs) - 2)
+        previous_atr = float(atr.iloc[-2])
+        previous_breakout_threshold = previous_channel_upper + self.breakout_atr_buffer * previous_atr
+        is_fresh_breakout = previous_close <= previous_breakout_threshold
+
         # Bullish breakout: price closes above descending trendline
         is_bullish_breakout = (
-            current_close > breakout_threshold
+            is_fresh_breakout
+            and current_close > breakout_threshold
             and current_close > current_open  # Bullish candle
             and bar_body >= min_body           # Quality bar
         )
@@ -411,6 +429,16 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
         self._bars_since_signal = 0
 
         entry_type = "bullish_breakout" if is_bullish_breakout else "bearish_rejection"
+        
+        # ENHANCEMENT: Calculate Structural Stop Loss and Take Profit for precise 1R sizing
+        if is_bullish_breakout:
+            recent_hl = unconfirmed_low if unconfirmed_low is not None else (swing_lows[-1][1] if swing_lows else channel_lower)
+            structural_sl = recent_hl - current_atr * 0.5
+            structural_tp = current_close + (channel_upper - channel_lower) * 1.5
+        else:
+            structural_sl = current_high + current_atr * 0.5
+            structural_tp = channel_lower + current_atr * 0.5
+
         self.logger.info(
             f"DCB signal: {entry_type}",
             side=side.value,
@@ -426,6 +454,8 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
             strength=strength,
             regime=regime,
             entry_price=current_close,
+            stop_loss=structural_sl,
+            take_profit=structural_tp,
             metadata={
                 "atr": current_atr,
                 "channel_upper": round(channel_upper, 2),
@@ -437,5 +467,7 @@ class DescendingChannelBreakoutStrategy(BaseStrategy):
                 "adx": current_adx,
                 "rsi": current_rsi,
                 "rejection_ratio": round(rejection_ratio, 3),
+                "structural_sl": round(structural_sl, 5),
+                "structural_tp": round(structural_tp, 5),
             },
         )

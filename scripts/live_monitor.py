@@ -131,7 +131,7 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1320x1040")
+        self.root.geometry("1320x1100")
         self.root.minsize(1120, 880)
         self.root.configure(bg=BG)
         try:
@@ -207,8 +207,9 @@ class LiveMonitorApp:
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
         body.grid_rowconfigure(2, weight=2, minsize=180)  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=4, minsize=260)  # journal — guaranteed min height
-        body.grid_rowconfigure(5, weight=0, minsize=95)   # errors — guaranteed min height
+        body.grid_rowconfigure(4, weight=0, minsize=75)   # value area (compact strip, scrollable)
+        body.grid_rowconfigure(5, weight=4, minsize=260)  # journal — guaranteed min height
+        body.grid_rowconfigure(6, weight=0, minsize=95)   # errors — guaranteed min height
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
@@ -242,14 +243,23 @@ class LiveMonitorApp:
         self.positions_panel.grid(row=3, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self._build_positions_body(self.positions_panel)
 
-        # Row 4: trade journal (spans both, huge)
+        # Row 4: liquidity reference levels (PDH/PDL + Asia session H/L).
+        # Levels are factual; the ICT sweep→reversal rule did NOT validate
+        # consistently across symbols so no predictive signal is shown.
+        self.liq_panel = self._make_panel(
+            body, "LIQUIDITY LEVELS (PRIOR DAY + ASIA · LEVELS ONLY)"
+        )
+        self.liq_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self._build_liq_body(self.liq_panel)
+
+        # Row 5: trade journal (spans both, huge)
         self.journal_panel = self._make_panel(body, "TRADE JOURNAL & PSYCHOLOGY")
-        self.journal_panel.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self.journal_panel.grid(row=5, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self._build_journal_body(self.journal_panel)
 
-        # Row 5: errors (spans both, tiny)
+        # Row 6: errors (spans both, tiny)
         self.errors_panel = self._make_panel(body, "RECENT WARNINGS / ERRORS")
-        self.errors_panel.grid(row=5, column=0, columnspan=2, sticky="nsew")
+        self.errors_panel.grid(row=6, column=0, columnspan=2, sticky="nsew")
         self._build_errors_body(self.errors_panel)
 
         # Footer
@@ -437,11 +447,11 @@ class LiveMonitorApp:
         tk.Label(hdr, text="UTC NOW:", bg=BG_PANEL, fg=TEXT_DIM,
                  font=("Menlo", 9, "bold")).pack(side=tk.RIGHT, padx=(0, 6))
 
-        # Table of all configured sessions (compact: narrower cols, height=4)
+        # Table of all configured sessions (compact: narrower cols, height=3)
         cols = ("active", "name", "window", "lot", "strats")
         headings = ("", "Session", "UTC Window", "Lot ×", "Strategies")
         widths = (24, 100, 110, 55, 240)
-        self.tree_sessions = self._make_tree(body, cols, headings, widths, height=4)
+        self.tree_sessions = self._make_tree(body, cols, headings, widths, height=3)
         self.tree_sessions.pack(fill=tk.BOTH, expand=True)
         self.tree_sessions.tag_configure("active", foreground=GREEN,
                                          background=BG_PANEL_2)
@@ -477,7 +487,7 @@ class LiveMonitorApp:
 
         self.news_canvas = tk.Canvas(
             canvas_wrap, bg=BG_PANEL,
-            highlightthickness=0, bd=0, height=150,
+            highlightthickness=0, bd=0, height=100,
         )
         news_scroll = ttk.Scrollbar(
             canvas_wrap, orient="vertical", command=self.news_canvas.yview,
@@ -668,7 +678,7 @@ class LiveMonitorApp:
 
         cols = ("sym", "bid", "ask", "spread", "regime", "dir", "atr")
         headings = ("Symbol", "Bid", "Ask", "Spread", "Regime", "Direction", "ATR %")
-        widths = (90, 80, 80, 70, 90, 90, 70)
+        widths = (90, 80, 80, 70, 90, 115, 50)
         self.tree_symbols = self._make_tree(body, cols, headings, widths, height=5)
         self.tree_symbols.pack(fill=tk.BOTH, expand=True)
 
@@ -725,6 +735,26 @@ class LiveMonitorApp:
         self.tree_journal.tag_configure("win", foreground=GREEN)
         self.tree_journal.tag_configure("loss", foreground=RED)
         self.tree_journal.tag_configure("flat", foreground=TEXT)
+
+    # --- liquidity levels body (PDH/PDL + Asia H/L + sweeps, scrollable) ---
+    def _build_liq_body(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
+        body.pack(fill=tk.X, expand=False)
+
+        cols = ("sym", "pdh", "pdl", "asia_h", "asia_l", "swept")
+        headings = (
+            "Symbol", "PDH (buyside)", "PDL (sellside)",
+            "Asia H", "Asia L", "Swept today",
+        )
+        widths = (90, 110, 110, 100, 100, 200)
+        self.tree_liq = self._make_tree(body, cols, headings, widths, height=2)
+        liq_scroll = ttk.Scrollbar(body, orient="vertical", command=self.tree_liq.yview)
+        self.tree_liq.configure(yscrollcommand=liq_scroll.set)
+        liq_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree_liq.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        self.tree_liq.tag_configure("swept", foreground=GOLD)
+        self.tree_liq.tag_configure("clean", foreground=TEXT)
+        self.tree_liq.tag_configure("none",  foreground=TEXT_FAINT)
 
     # --- errors body (compact standalone strip) ---
     def _build_errors_body(self, panel) -> None:
@@ -979,14 +1009,50 @@ class LiveMonitorApp:
                 direction = (s.get("direction") or "FLAT").upper()
                 tag = {"UP": "up", "DOWN": "down"}.get(direction, "flat")
             arrow = {"UP": "▲", "DOWN": "▼"}.get((s.get("direction") or "").upper(), "■")
+
+            # MTA alignment count: e.g. "3/3" means all timeframes agree.
+            # Per scripts/backtest_mta_direction.py, 3/3 alignment ≈ 2-3x
+            # the conditional forward return of single-TF on UP signals.
+            n_aligned = int(s.get("mta_n_aligned", 0) or 0)
+            n_total = int(s.get("mta_n_total", 0) or 0)
+            if n_total > 0:
+                align_str = f" {n_aligned}/{n_total}"
+            else:
+                align_str = ""
+
             self.tree_symbols.insert("", "end", values=(
                 s.get("ticker", "—"),
                 _fmt_money(s.get("bid", 0), dec=3),
                 _fmt_money(s.get("ask", 0), dec=3),
                 _fmt_money(s.get("spread", 0), dec=4),
                 (s.get("regime") or "UNKNOWN"),
-                f"{arrow}  {(s.get('direction') or 'FLAT')}",
+                f"{arrow}  {(s.get('direction') or 'FLAT')}{align_str}",
                 f"{float(s.get('atr_pct', 0) or 0):.2f}",
+            ), tags=(tag,))
+
+        # ---- liquidity levels (PDH/PDL + Asia H/L + sweep state) ----
+        self._clear(self.tree_liq)
+        for s in d.get("symbols", []) or []:
+            pdh = float(s.get("liq_pdh", 0) or 0)
+            pdl = float(s.get("liq_pdl", 0) or 0)
+            asia_h = float(s.get("liq_asia_h", 0) or 0)
+            asia_l = float(s.get("liq_asia_l", 0) or 0)
+            swept = str(s.get("liq_swept", "") or "")
+
+            if pdh <= 0 or pdl <= 0:
+                self.tree_liq.insert("", "end", values=(
+                    s.get("ticker", "—"), "—", "—", "—", "—", "—",
+                ), tags=("none",))
+                continue
+
+            tag = "swept" if swept else "clean"
+            self.tree_liq.insert("", "end", values=(
+                s.get("ticker", "—"),
+                _fmt_money(pdh, dec=3),
+                _fmt_money(pdl, dec=3),
+                _fmt_money(asia_h, dec=3) if asia_h > 0 else "—",
+                _fmt_money(asia_l, dec=3) if asia_l > 0 else "—",
+                swept or "none",
             ), tags=(tag,))
 
         # ---- signals ----

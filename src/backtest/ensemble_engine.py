@@ -243,6 +243,7 @@ class EnsembleBacktestEngine:
             entry_price=signal.entry_price,
             stop_loss=signal.stop_loss,
             side=signal.side,
+            strategy_name=signal.strategy_name,
         )
         if position_size <= 0:
             return

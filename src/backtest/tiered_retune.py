@@ -225,7 +225,13 @@ class TieredRetune:
         # Winner candidate set = tier1 winner + any tier2 sweep that improved IS score
         candidates = [winner_1] + outcomes_2
         winner_2 = self._pick_winner(candidates)
-        if winner_2 is winner_1:
+        if winner_2 is None:
+            # Tier1 anchor was G2-vetoed and no tier2 sweep produced a non-vetoed
+            # combo either. Fall through to tier 3 with the G2 anchor — the
+            # filter sweep may rescue (entry-quality gates can shrink trade set
+            # below the worst-day floor).
+            log.info("Tier 2: all combos still vetoed; escalating to tier 3 with tier1 anchor.")
+        elif winner_2 is winner_1:
             log.info("Tier 2 produced no improvement on IS; reusing tier1 winner OOS evaluation.")
         else:
             if self._evaluate_oos_and_check(winner_2):

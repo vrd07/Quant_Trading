@@ -1,10 +1,10 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-05-05T13:30:22.291051+00:00",
-  "valid_until": "2026-05-06T13:30:22.291051+00:00",
+  "generated_at": "2026-05-12T12:59:05.085181+00:00",
+  "valid_until": "2026-05-13T12:59:05.085181+00:00",
   "regime": "RANGE",
-  "confidence": 0.7929,
-  "classifier": "RandomForest+Markov (n=307 samples)",
+  "confidence": 0.856,
+  "classifier": "RandomForest+Markov (n=311 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -21,15 +21,15 @@
     "continuation_breakout": false
   },
   "diagnostics": {
-    "adx_14": 14.462018,
-    "atr_pct": 0.025805,
-    "bb_width_ratio": 0.665339,
-    "close_ema20_pct": -0.020279,
-    "momentum_1d": 0.014029,
-    "momentum_5d": -0.014816,
-    "range_atr_ratio": 0.887673,
-    "vol_ratio": 2.498337,
-    "park_vol_zscore": -0.875338
+    "adx_14": 11.810645,
+    "atr_pct": 0.0225,
+    "bb_width_ratio": 0.768758,
+    "close_ema20_pct": 0.001728,
+    "momentum_1d": 0.007245,
+    "momentum_5d": 0.035969,
+    "range_atr_ratio": 0.94629,
+    "vol_ratio": 0.741589,
+    "park_vol_zscore": -1.073374
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -48,14 +48,14 @@
   },
   "performance_scores": {
     "descending_channel_breakout": 0.0386,
-    "kalman_regime": -0.039,
-    "structure_break_retest": -0.1685,
+    "kalman_regime": 0.0121,
+    "structure_break_retest": -0.1639,
     "supply_demand": -0.0128
   },
   "regime_probabilities": {
-    "TREND": 0.1853,
-    "RANGE": 0.7929,
-    "VOLATILE": 0.0218
+    "TREND": 0.1419,
+    "RANGE": 0.856,
+    "VOLATILE": 0.0022
   },
   "transition_matrix": {
     "TREND": {
@@ -64,9 +64,9 @@
       "VOLATILE": 0.1351
     },
     "RANGE": {
-      "TREND": 0.0996,
-      "RANGE": 0.893,
-      "VOLATILE": 0.0074
+      "TREND": 0.0982,
+      "RANGE": 0.8945,
+      "VOLATILE": 0.0073
     },
     "VOLATILE": {
       "TREND": 0.25,

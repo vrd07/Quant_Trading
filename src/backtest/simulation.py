@@ -30,6 +30,7 @@ class SimulatedBroker:
         slippage_model: str = "realistic",
         trailing_stop_config: Optional[Dict] = None,
         news_active_at: Optional[Callable[[object], bool]] = None,
+        disable_sl_exits: bool = False,
     ):
         """
         Initialize simulated broker.
@@ -56,6 +57,11 @@ class SimulatedBroker:
             StrictFillModel() if slippage_model == "strict" else None
         )
         self._news_active_at = news_active_at
+        # Research mode: position sizing still uses the SL distance (1R math),
+        # but the simulation never closes a position on an SL touch — only TP,
+        # time-stop, or trailing-stop can exit. Use to test "let winners run /
+        # never get stopped out" scenarios.
+        self.disable_sl_exits = disable_sl_exits
 
         # Trailing stop config (mirrors TrailingStopManager stages)
         ts_cfg = trailing_stop_config or {}
@@ -188,8 +194,9 @@ class SimulatedBroker:
                         positions_to_close[pos_id] = (bar_close, 'time_stop')
                         continue
 
-            # Check stop loss (SL assumed hit first if both SL and TP on same bar)
-            if position.stop_loss:
+            # Check stop loss (SL assumed hit first if both SL and TP on same bar).
+            # disable_sl_exits skips SL-hit closes entirely (research: TP/time-stop only).
+            if position.stop_loss and not self.disable_sl_exits:
                 hit = False
                 if position.side == PositionSide.LONG and bar_low <= position.stop_loss:
                     hit = True

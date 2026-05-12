@@ -425,11 +425,17 @@ class LiveMonitorEmitter:
             risk_cfg = cfg.get("risk", {}) or {}
             max_daily_pct = float(risk_cfg.get("max_daily_loss_pct", 0.025) or 0.025)
             max_dd_pct = float(risk_cfg.get("max_drawdown_pct", 0.07) or 0.07)
+            # Prefer the absolute USD the operator typed in runtime_setup.py over
+            # a pct*balance reconstruction — the latter drifts as balance moves
+            # and ends up disagreeing with the value the risk engine actually
+            # enforces (risk_engine reads absolute_max_loss_usd directly).
+            abs_daily = float(risk_cfg.get("absolute_max_loss_usd", 0) or 0)
+            abs_dd = float(risk_cfg.get("absolute_max_drawdown_usd", 0) or 0)
 
             base = out["balance"] or out["initial_capital"] or 0.0
             if base > 0:
                 daily_loss_abs = -out["daily_pnl"] if out["daily_pnl"] < 0 else 0.0
-                daily_limit = max_daily_pct * base
+                daily_limit = abs_daily if abs_daily > 0 else max_daily_pct * base
                 out["daily_loss_limit_usd"] = round(daily_limit, 2)
                 out["daily_loss_limit_used_usd"] = round(daily_loss_abs, 2)
                 if daily_limit > 0:
@@ -447,7 +453,7 @@ class LiveMonitorEmitter:
                     if not hwm or hwm <= 0:
                         hwm = max(out["equity"], base)
                     dd_abs = max(0.0, hwm - out["equity"])
-                    dd_limit = max_dd_pct * hwm
+                    dd_limit = abs_dd if abs_dd > 0 else max_dd_pct * hwm
                     out["drawdown_limit_usd"] = round(dd_limit, 2)
                     out["drawdown_used_usd"] = round(dd_abs, 2)
                     if dd_limit > 0:
@@ -477,6 +483,19 @@ class LiveMonitorEmitter:
                 "enabled": bool(cfg.get("enabled", False)),
                 "bid": 0.0, "ask": 0.0, "spread": 0.0,
                 "regime": "UNKNOWN", "direction": "FLAT", "atr_pct": 0.0,
+                # MTA alignment — see scripts/backtest_mta_direction.py for the
+                # validation showing the alignment count is monotone with
+                # conditional forward return on XAU/BTC/ETH (UP signals).
+                "mta_n_aligned": 0,
+                "mta_n_total": 0,
+                # Liquidity reference levels (ICT / SMC convention).
+                # Levels are objective facts (prior-day H/L + Asia session H/L);
+                # the sweep→reversal *rule* did not validate consistently across
+                # symbols (scripts/backtest_liquidity_sweeps.py), so we publish
+                # observed sweeps but no prediction. The UI labels accordingly.
+                "liq_pdh": 0.0, "liq_pdl": 0.0,
+                "liq_asia_h": 0.0, "liq_asia_l": 0.0,
+                "liq_swept": "",   # comma-separated list of swept level names
             }
             # live tick — prefer the cached DataEngine tick, fall back to connector
             try:
@@ -510,26 +529,77 @@ class LiveMonitorEmitter:
             except Exception:
                 pass
 
-            # direction + ATR% from candles if available
+            # Real Wilder ATR + MTA direction.
+            # The full forecast (Markov + sentiment + news) was reverted on
+            # 2026-05-11 after backtest showed no lift over base rate. The
+            # Wilder ATR fix is kept (previous code emitted HL-mean mislabelled
+            # as ATR). Direction is now multi-timeframe — 20/80/240-bar
+            # lookbacks with longer windows weighted more, validated by
+            # scripts/backtest_mta_direction.py.
             try:
+                from .atr_forecast import wilder_atr, direction_mta
+
                 eng = getattr(ts, "data_engine", None)
                 if eng is not None:
                     for tf in ("5m", "15m", "1h"):
                         bars = eng.get_bars(ticker, tf)
-                        if bars is not None and len(bars) >= 20:
-                            last_close = float(bars["close"].iloc[-1])
-                            prev_close = float(bars["close"].iloc[-20])
-                            if last_close > prev_close * 1.001:
-                                row["direction"] = "UP"
-                            elif last_close < prev_close * 0.999:
-                                row["direction"] = "DOWN"
-                            else:
-                                row["direction"] = "FLAT"
-                            # rough ATR% from high-low range
-                            hl = (bars["high"] - bars["low"]).tail(14).mean()
-                            if last_close > 0:
-                                row["atr_pct"] = round(float(hl / last_close * 100), 3)
-                            break
+                        # Need at least 241 bars so the longest MTA window has data;
+                        # otherwise we'd fall back to single-TF behaviour silently.
+                        if bars is None or len(bars) < 241:
+                            continue
+                        close = bars["close"].astype(float)
+                        last_close = float(close.iloc[-1])
+                        if last_close <= 0:
+                            continue
+                        atr_series = wilder_atr(
+                            bars["high"].astype(float),
+                            bars["low"].astype(float),
+                            close,
+                            period=14,
+                        )
+                        row["atr_pct"] = round(
+                            float(atr_series.iloc[-1] / last_close * 100), 3
+                        )
+                        mta = direction_mta(close, lookbacks=(20, 80, 240), deadband=0.001)
+                        row["direction"] = mta["consensus"]
+                        row["mta_n_aligned"] = int(mta["n_aligned"])
+                        row["mta_n_total"] = int(mta["n_total"])
+                        # Liquidity reference levels — PDH/PDL + today's Asia
+                        # session H/L (UTC 00-07). CandleStore.get_bars()
+                        # returns bars with a RangeIndex + 'timestamp' column,
+                        # so the liquidity module reads the column directly.
+                        try:
+                            from .liquidity_levels import compute_liquidity_levels, detect_sweeps
+
+                            lvls = compute_liquidity_levels(bars)
+                            if lvls is not None:
+                                row["liq_pdh"] = round(float(lvls["pdh"]), 5)
+                                row["liq_pdl"] = round(float(lvls["pdl"]), 5)
+                                if lvls["asia_h"] is not None:
+                                    row["liq_asia_h"] = round(float(lvls["asia_h"]), 5)
+                                if lvls["asia_l"] is not None:
+                                    row["liq_asia_l"] = round(float(lvls["asia_l"]), 5)
+
+                                # Mark which levels have been swept TODAY.
+                                if "timestamp" in bars.columns:
+                                    ts_series = bars["timestamp"]
+                                else:
+                                    ts_series = bars.index.to_series()
+                                dates_for_today = ts_series.dt.normalize()
+                                today_only = bars[dates_for_today == dates_for_today.iloc[-1]]
+                                check = {
+                                    "pdh": lvls["pdh"], "pdl": lvls["pdl"],
+                                    "asia_h": lvls["asia_h"], "asia_l": lvls["asia_l"],
+                                }
+                                sweeps = detect_sweeps(today_only, check)
+                                swept_names = [
+                                    name.upper() for name, info in sweeps.items()
+                                    if info["swept"]
+                                ]
+                                row["liq_swept"] = ",".join(swept_names)
+                        except Exception:
+                            pass
+                        break
             except Exception:
                 pass
 

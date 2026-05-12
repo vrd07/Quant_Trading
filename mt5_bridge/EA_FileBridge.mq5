@@ -553,6 +553,9 @@ void HandleHeartbeat()
 void HandleGetAccountInfo()
 {
    string json = "{";
+   json += "\"login\":" + IntegerToString(AccountInfoInteger(ACCOUNT_LOGIN)) + ",";
+   json += "\"server\":\"" + AccountInfoString(ACCOUNT_SERVER) + "\",";
+   json += "\"company\":\"" + AccountInfoString(ACCOUNT_COMPANY) + "\",";
    json += "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ",";
    json += "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ",";
    json += "\"margin\":" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN), 2) + ",";
