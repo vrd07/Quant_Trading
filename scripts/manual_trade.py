@@ -28,6 +28,18 @@ from datetime import datetime, timezone
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+
+def _active_config() -> str:
+    marker = PROJECT_ROOT / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
+
 import yaml
 
 from src.core.types import Order, Symbol
@@ -100,7 +112,7 @@ def resolve_price_and_stops(
 
 def main() -> int:
     p = argparse.ArgumentParser(description="Manual trade via RiskEngine guards")
-    p.add_argument("--config", default="config/config_live_10000.yaml")
+    p.add_argument("--config", default=_active_config())
     p.add_argument("--symbol", required=True)
     p.add_argument("--side", required=True, choices=["buy", "sell"])
     # Two ways to size: by $risk or by explicit lots
