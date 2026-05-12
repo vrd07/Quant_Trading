@@ -1,6 +1,7 @@
 @echo off
 :: ============================================================
-:: Quant Trading Bot — $50K GFT Account Launcher
+:: Quant Trading Bot — Live Account Launcher
+:: Active account size is resolved from config\ACTIVE_CONFIG.
 :: Runs: health check → news fetch → regime classifier → live trading
 ::
 :: Usage:
@@ -13,6 +14,12 @@ title Quant Trading Bot - LIVE
 
 :: Change to the project root directory (parent of this script)
 cd /d "%~dp0.."
+
+:: Single source of truth for the active live config.
+set ACTIVE_CONFIG=config\config_live_10000.yaml
+if exist "config\ACTIVE_CONFIG" (
+    set /p ACTIVE_CONFIG=<config\ACTIVE_CONFIG
+)
 
 set CONFIG=
 set FORCE=false
@@ -38,15 +45,16 @@ call venv\Scripts\activate.bat
 
 :: ── Account Selection ───────────────────────────────────────
 if "%FORCE%"=="true" (
-    set CONFIG=config\config_live_50000.yaml
+    set CONFIG=%ACTIVE_CONFIG%
     goto :account_selected
 )
 
 echo.
 echo ============================================================
-echo   Select Account Size
+echo   Select Account Size  (ACTIVE_CONFIG: %ACTIVE_CONFIG%)
 echo ============================================================
 echo.
+echo   0) Use ACTIVE_CONFIG  ^<-- default
 echo   1) $100
 echo   2) $1,000
 echo   3) $5,000
@@ -54,9 +62,10 @@ echo   4) $10,000
 echo   5) $25,000
 echo   6) $50,000
 echo.
-set /p ACCOUNT_CHOICE="  Enter choice [1-6] (default: 6): "
+set /p ACCOUNT_CHOICE="  Enter choice [0-6] (default: 0): "
 
-if "%ACCOUNT_CHOICE%"=="" set ACCOUNT_CHOICE=6
+if "%ACCOUNT_CHOICE%"=="" set ACCOUNT_CHOICE=0
+if "%ACCOUNT_CHOICE%"=="0" set CONFIG=%ACTIVE_CONFIG%
 if "%ACCOUNT_CHOICE%"=="1" set CONFIG=config\config_live_100.yaml
 if "%ACCOUNT_CHOICE%"=="2" set CONFIG=config\config_live_1000.yaml
 if "%ACCOUNT_CHOICE%"=="3" set CONFIG=config\config_live_5000.yaml
@@ -65,8 +74,8 @@ if "%ACCOUNT_CHOICE%"=="5" set CONFIG=config\config_live_25000.yaml
 if "%ACCOUNT_CHOICE%"=="6" set CONFIG=config\config_live_50000.yaml
 
 if "%CONFIG%"=="" (
-    echo   Invalid choice. Using default $50,000 account.
-    set CONFIG=config\config_live_50000.yaml
+    echo   Invalid choice. Using ACTIVE_CONFIG (%ACTIVE_CONFIG%).
+    set CONFIG=%ACTIVE_CONFIG%
 )
 
 :account_selected

@@ -1,6 +1,7 @@
 #!/bin/bash
 # ============================================================
-# Quant Trading Bot — $50K GFT Account Launcher
+# Quant Trading Bot — Live Account Launcher
+# Active account size is resolved from config/ACTIVE_CONFIG.
 # Runs: health check → news fetch → regime classifier → live trading
 #
 # Usage:
@@ -14,6 +15,10 @@ set -euo pipefail
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$PROJECT_ROOT"
+
+# Single source of truth for the active live config.
+ACTIVE_CONFIG="$(head -n 1 config/ACTIVE_CONFIG 2>/dev/null | tr -d '[:space:]')"
+ACTIVE_CONFIG="${ACTIVE_CONFIG:-config/config_live_10000.yaml}"
 
 CONFIG=""
 FORCE=false
@@ -35,13 +40,14 @@ fi
 
 # ── Account Selection ───────────────────────────────────────
 if [ "$FORCE" = true ]; then
-    CONFIG="config/config_live_50000.yaml"
+    CONFIG="$ACTIVE_CONFIG"
 else
     echo ""
     echo "============================================================"
-    echo "  Select Account Size"
+    echo "  Select Account Size  (ACTIVE_CONFIG → $ACTIVE_CONFIG)"
     echo "============================================================"
     echo ""
+    echo "  0) Use ACTIVE_CONFIG  ← default"
     echo "  1) \$100"
     echo "  2) \$1,000"
     echo "  3) \$5,000"
@@ -49,10 +55,11 @@ else
     echo "  5) \$25,000"
     echo "  6) \$50,000"
     echo ""
-    printf "  Enter choice [1-6] (default: 6): "
+    printf "  Enter choice [0-6] (default: 0): "
     read -r ACCOUNT_CHOICE
 
-    case "${ACCOUNT_CHOICE:-6}" in
+    case "${ACCOUNT_CHOICE:-0}" in
+        0) CONFIG="$ACTIVE_CONFIG" ;;
         1) CONFIG="config/config_live_100.yaml" ;;
         2) CONFIG="config/config_live_1000.yaml" ;;
         3) CONFIG="config/config_live_5000.yaml" ;;
@@ -60,8 +67,8 @@ else
         5) CONFIG="config/config_live_25000.yaml" ;;
         6) CONFIG="config/config_live_50000.yaml" ;;
         *)
-            echo "  Invalid choice. Using default \$50,000 account."
-            CONFIG="config/config_live_50000.yaml"
+            echo "  Invalid choice. Using ACTIVE_CONFIG ($ACTIVE_CONFIG)."
+            CONFIG="$ACTIVE_CONFIG"
             ;;
     esac
 fi
