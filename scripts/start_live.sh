@@ -139,11 +139,24 @@ if python3 -c "import tkinter" >/dev/null 2>&1; then
         >"$MONITOR_LOG" 2>&1 &
     MONITOR_PID=$!
     echo "    Monitor PID: $MONITOR_PID   (log: $MONITOR_LOG)"
-    # Ensure the monitor window closes when the bot does.
-    trap 'kill $MONITOR_PID 2>/dev/null || true' EXIT INT TERM
 else
     echo "  ⚠ Tkinter not available — skipping live monitor pop-up."
 fi
+
+# ── Telegram bot scheduler (optional — needs trading_bot/.env) ──
+TG_LOG="logs/telegram_bot.log"
+if [ -f "trading_bot/.env" ]; then
+    echo "  ➜ Launching Telegram bot scheduler..."
+    nohup python3 -m trading_bot.scheduler >"$TG_LOG" 2>&1 &
+    TG_PID=$!
+    echo "    Telegram bot PID: $TG_PID   (log: $TG_LOG)"
+else
+    echo "  ⚠ trading_bot/.env not found — Telegram bot scheduler not started."
+    echo "    See trading_bot/README.md §1 to enable it."
+fi
+
+# Make sure background helpers die when the main bot exits.
+trap 'kill ${MONITOR_PID:-} ${TG_PID:-} 2>/dev/null || true' EXIT INT TERM
 
 if [ "$FORCE" = true ]; then
     exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG" --force-live

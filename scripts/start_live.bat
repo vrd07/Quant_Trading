@@ -156,6 +156,15 @@ if %errorlevel%==0 (
     echo   [WARN] Tkinter not available — skipping live monitor pop-up.
 )
 
+:: ── Telegram bot scheduler (optional — needs trading_bot\.env) ──
+if exist "trading_bot\.env" (
+    echo   [INFO] Launching Telegram bot scheduler...
+    start "Telegram Bot" /min cmd /c "python -m trading_bot.scheduler >> logs\telegram_bot.log 2>&1"
+) else (
+    echo   [WARN] trading_bot\.env not found — Telegram bot scheduler not started.
+    echo          See trading_bot\README.md section 1 to enable it.
+)
+
 if "%FORCE%"=="true" (
     python src\main.py --env live --config %CONFIG% --force-live
 ) else (
@@ -165,6 +174,11 @@ if "%FORCE%"=="true" (
 :: Bot has exited — close any live-monitor windows that are still open.
 :: (Safe: only targets pythonw processes that loaded live_monitor.py.)
 for /f "tokens=2" %%p in ('wmic process where "CommandLine like '%%live_monitor.py%%'" get ProcessId ^| findstr /r "[0-9]"') do (
+    taskkill /PID %%p /F >nul 2>&1
+)
+
+:: Also stop the Telegram bot scheduler if it's still running.
+for /f "tokens=2" %%p in ('wmic process where "CommandLine like '%%trading_bot.scheduler%%'" get ProcessId ^| findstr /r "[0-9]"') do (
     taskkill /PID %%p /F >nul 2>&1
 )
 
