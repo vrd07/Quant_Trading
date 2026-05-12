@@ -92,6 +92,12 @@ graphify-out/
 # Per-user runtime risk overrides (written by scripts/runtime_setup.py)
 config/runtime_overrides.yaml
 
+# ============================================
+# Runtime Data Override Files (written by download_data / re-download scripts)
+# ============================================
+data/config_override*.json
+data/config_override*.json.*
+
 # Local backtest docs
 backtest.md
 
@@ -101,3 +107,25 @@ backtest.md
 
 # Editor / AI Rules
 .cursorrules
+
+# ============================================
+# Telegram Bot Module (separate service, not part of core bot)
+# ============================================
+trading_bot/
+
+# ============================================
+# Planning / Scratch Markdown Docs (not source documentation)
+# ============================================
+telegram_bot.md
+mini_medallion.md
+
+# ============================================
+# Generated Images & Charts (regenerable from scripts)
+# ============================================
+docs/*.png
+docs/*.jpg
+
+# ============================================
+# Root-level Scratch / One-off Test Files
+# ============================================
+test_min_stops.py
