@@ -304,12 +304,12 @@ strategies:
     # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
     session_filter_enabled: true
     allowed_sessions: [[0,23]]   # 2026-05-05: user directive — 24h play (Kalman has daily setup + accuracy)
-    ema_confirm_enabled: false
-    macd_confirmation: false
+    ema_confirm_enabled: true
+    macd_confirmation: true
     kalman_accel_enabled: false
     stoch_confirm_enabled: false
     range_rsi_buy: 42
-    range_rsi_sell: 58
+    range_rsi_sell: 65
 
   # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
   # Mini Medallion v2: Optimized from backtest analysis
