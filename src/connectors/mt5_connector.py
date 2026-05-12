@@ -177,7 +177,10 @@ class MT5Connector:
                 'equity': Decimal(str(response.get('equity', 0))),
                 'margin': Decimal(str(response.get('margin', 0))),
                 'free_margin': Decimal(str(response.get('free_margin', 0))),
-                'margin_level': Decimal(str(response.get('margin_level', 0)))
+                'margin_level': Decimal(str(response.get('margin_level', 0))),
+                'login': int(response.get('login', 0) or 0),
+                'server': str(response.get('server', '') or ''),
+                'company': str(response.get('company', '') or ''),
             }
             
             logger.debug("Account info retrieved: balance=%s, equity=%s", 
