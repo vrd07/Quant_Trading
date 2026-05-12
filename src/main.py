@@ -1776,6 +1776,22 @@ def _pick_daily_quote() -> tuple:
     return _MOTIVATIONAL_QUOTES[_dt.date.today().toordinal() % len(_MOTIVATIONAL_QUOTES)]
 
 
+def _active_config() -> str:
+    """Resolve the active live config path from config/ACTIVE_CONFIG.
+
+    Single source of truth so every launcher agrees on which account-size
+    config is in use. Falls back to the $10k config if the marker is missing.
+    """
+    marker = PROJECT_ROOT / "config" / "ACTIVE_CONFIG"
+    try:
+        path = marker.read_text(encoding="utf-8").strip().splitlines()[0].strip()
+        if path:
+            return path
+    except (OSError, IndexError):
+        pass
+    return "config/config_live_10000.yaml"
+
+
 def main():
     """Main entry point."""
     log_trace("Entering main()")
@@ -1816,7 +1832,7 @@ def main():
     config_files = {
         'dev': 'config/config_dev.yaml',
         'paper': 'config/config_paper.yaml',
-        'live': 'config/config_live_5000.yaml'
+        'live': _active_config()
     }
     
     config_file = args.config
@@ -1847,7 +1863,7 @@ def main():
             "5": "config/config_live_25000.yaml",
             "6": "config/config_live_50000.yaml"
         }
-        config_file = choice_map.get(choice, "config/config_live_5000.yaml")
+        config_file = choice_map.get(choice, _active_config())
         
     if not config_file:
         config_file = config_files.get(args.env, 'config/config_dev.yaml')
