@@ -1223,7 +1223,7 @@ class TradingSystem:
                     self.live_monitor.mark_last_signal(
                         "FIRED",
                         f"order {str(order.order_id)[:8]} {order.status.value}",
-                        price=float(order.entry_price) if order.entry_price else None,
+                        price=float(order.price) if order.price else None,
                         sl=float(order.stop_loss) if order.stop_loss else None,
                         tp=float(order.take_profit) if order.take_profit else None,
                     )
