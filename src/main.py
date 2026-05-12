@@ -285,11 +285,30 @@ class TradingSystem:
             )
             self.logger.info("✓ Portfolio engine ready")
             
-            # 8. Initialize state manager
+            # 8. Initialize state manager.
+            # State is namespaced by MT5 account login so switching to a
+            # different broker account never inherits the previous account's
+            # equity_high_water_mark, daily_start_equity, daily_pnl, or open
+            # positions. Two same-size accounts that share an env path would
+            # otherwise silently bleed state into each other and could open at
+            # 100% daily-loss or 70% drawdown before the first tick.
             self.logger.info("8. Initializing state manager...")
-            state_dir = f"data/state/{self.env}"
+            login = 0
+            try:
+                login = int(self.connector.get_account_info().get('login', 0) or 0)
+            except Exception as e:
+                self.logger.warning(f"Could not read MT5 login for state namespacing: {e}")
+            if login > 0:
+                state_dir = f"data/state/{self.env}/{login}"
+            else:
+                state_dir = f"data/state/{self.env}"
+                self.logger.warning(
+                    "MT5 login unavailable — falling back to shared state dir. "
+                    "Update EA_FileBridge.mq5 (HandleGetAccountInfo emits 'login') "
+                    "to enable per-account state isolation."
+                )
             self.state_manager = StateManager(state_dir=state_dir)
-            self.logger.info(f"✓ State manager ready (env: {self.env})")
+            self.logger.info(f"✓ State manager ready (env: {self.env}, login: {login or 'shared'})")
             
             # 7b. Initialize dashboard
             initial_capital = Decimal(str(self.config.get('account', {}).get('initial_balance', 10000)))
