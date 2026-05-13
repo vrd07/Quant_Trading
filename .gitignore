@@ -98,9 +98,6 @@ config/runtime_overrides.yaml
 data/config_override*.json
 data/config_override*.json.*
 
-# Local backtest docs
-backtest.md
-
 # Strategy Specific Backtest Outputs
 *continuation_breakout*.csv
 *continuation_breakout*.txt
@@ -114,10 +111,13 @@ backtest.md
 trading_bot/
 
 # ============================================
-# Planning / Scratch Markdown Docs (not source documentation)
+# Markdown Files
+# Ignore ALL .md files except the two listed below.
 # ============================================
-telegram_bot.md
-mini_medallion.md
+*.md
+**/*.md
+!config/backtest_grids/README.md
+!mt5_bridge/README_SETUP.md
 
 # ============================================
 # Generated Images & Charts (regenerable from scripts)
