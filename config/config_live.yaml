@@ -73,6 +73,20 @@ risk:
     cooldown_minutes: 15            # Was 60 → faster recovery
 
 strategies:
+
+  # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
+  #    COMBO A (TREND): sbr + fib + momentum
+  #    COMBO B (RANGE): vwap + asia_range_fade + smc_ob
+  #    COMBO C (any):   smc_ob + fib + momentum → sniper (1.5× sized)
+  #    Solo allow: kalman_regime. Filter-only: momentum, asia_range_fade,
+  #    smc_ob, fibonacci_retracement. Kill list: breakout, mean_reversion,
+  #    supply_demand, descending_channel_breakout, mini_medallion,
+  #    continuation_breakout — also disabled below.
+  confluence_gate:
+    enabled: true
+    window_minutes: 25            # ≈ 5 × 5m bars; covers TF skew between legs
+    sniper_lot_multiplier: 1.5    # COMBO C oversize
+    sniper_cooldown_minutes: 60   # Prevent duplicate sniper emits on consecutive ticks
   signal_cooldown_minutes: 5   # 5min for prop challenge (was 10m)
   primary_timeframe: 1m  # Keeping 1m as per user's success
   min_bars_required: 10  # Slightly more data for live stability
@@ -90,8 +104,7 @@ strategies:
     hurst_range_threshold: 0.45
   
   breakout:
-    enabled: true
-    donchian_period: 20  # Use standard period for live
+    enabled: false    # disabled 2026-05-13 (kill list)    donchian_period: 20  # Use standard period for live
     confirmation_bars: 1 # Require 1 bar confirmation for safety
     rr_ratio: 1.5               # Was 2.0 → take profits sooner
     only_in_regime: TREND
@@ -103,8 +116,7 @@ strategies:
     rsi_oversold: 25                 # Don't sell below RSI 25
   
   mean_reversion:
-    enabled: true
-    zscore_lookback: 20
+    enabled: false    # disabled 2026-05-13 (kill list)    zscore_lookback: 20
     entry_threshold: 2.0
     exit_threshold: 0.5
     stop_threshold: 3.0
@@ -237,8 +249,7 @@ strategies:
   # re-accumulation cluster → fires on second breakout in same direction.
   # Disabled by default — backtest before enabling live.
   continuation_breakout:
-    enabled: true
-    timeframe: 5m
+    enabled: false    # disabled 2026-05-13 (kill list)    timeframe: 5m
     donchian_period: 20
     lookback_window: 60
     min_consolidation_bars: 5
@@ -266,7 +277,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [asia_range_fade, vwap, fibonacci_retracement, mini_medallion, kalman_regime]
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -274,7 +285,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [breakout, sbr, kalman_regime, momentum, smc_ob, descending_channel_breakout, mini_medallion, fibonacci_retracement, continuation_breakout]
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -282,7 +293,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, vwap, asia_range_fade, descending_channel_breakout, smc_ob, fibonacci_retracement, continuation_breakout]
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -290,7 +301,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [momentum, kalman_regime, breakout, sbr, mini_medallion, fibonacci_retracement, smc_ob, continuation_breakout]
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -298,7 +309,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [mini_medallion, fibonacci_retracement, kalman_regime]
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
