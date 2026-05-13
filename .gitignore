@@ -111,11 +111,23 @@ data/config_override*.json.*
 trading_bot/
 
 # ============================================
-# Markdown Files
-# Ignore ALL .md files except the two listed below.
+# Markdown Files — ignore scratch/planning docs, keep key documentation.
 # ============================================
 *.md
 **/*.md
+
+# Keep: all README files (GitHub-facing documentation)
+!README.md
+!**/README.md
+
+# Keep: Claude / Agents / lean-ctx infrastructure files
+!CLAUDE.md
+!AGENTS.md
+!LEAN-CTX.md
+!.claude/**/*.md
+!.agents/**/*.md
+
+# Keep: explicit project docs
 !config/backtest_grids/README.md
 !mt5_bridge/README_SETUP.md
 
