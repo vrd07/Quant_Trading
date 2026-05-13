@@ -41,11 +41,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.connectors.mt5_connector import MT5Connector
 from src.data.data_engine import DataEngine
 from src.strategies.strategy_manager import StrategyManager
+from src.strategies.confluence_gate import ConfluenceGate
 from src.risk.risk_engine import RiskEngine
 from src.execution.execution_engine import ExecutionEngine
 from src.portfolio.portfolio_engine import PortfolioEngine
 from src.state.state_manager import StateManager
 from src.core.types import Symbol
+from src.core.constants import MarketRegime
 from src.core.exceptions import (
     KillSwitchActiveError,
     DailyLossLimitError,
@@ -322,6 +324,21 @@ class TradingSystem:
             
             self.logger.info("8. Initializing strategies...")
             self.strategy_manager = StrategyManager(symbols, self.config)
+
+            # ConfluenceGate — combo-based filter that gates signals before
+            # execution (COMBO A/B/C policy from combine_startegy.md). When
+            # disabled in config, falls back to passthrough plus kill-list drop.
+            gate_cfg = self.config.get('strategies', {}).get('confluence_gate', {})
+            self.confluence_gate = ConfluenceGate(gate_cfg)
+            self._symbol_regimes: Dict[str, MarketRegime] = {}
+            self.logger.info(
+                "✓ ConfluenceGate ready (enabled=%s window_min=%s sniper_mult=%s)"
+                % (
+                    self.confluence_gate.enabled,
+                    self.confluence_gate.window_minutes,
+                    self.confluence_gate.sniper_lot_multiplier,
+                )
+            )
 
             # Mitnick Rule: Never allow test strategies on live accounts.
             # Two 'test_strategy' trades leaked through in March, losing $27 on funded capital.
@@ -680,9 +697,24 @@ class TradingSystem:
                             symbol=symbol_ticker, error=str(se), exc_info=True
                         )
 
-                for _, signal in all_signals:
-                    # Inject session lot-size multiplier from SessionManager
-                    signal.metadata['lot_size_multiplier'] = lot_multiplier
+                # ConfluenceGate filter — applies COMBO A/B/C policy, drops
+                # kill-list strategies, and emits sniper signals (1.5×) when
+                # SMC+Fib+Momentum align. Passthrough when gate disabled.
+                current_regime = self._symbol_regimes.get(symbol_ticker, MarketRegime.UNKNOWN)
+                executable_signals = self.confluence_gate.filter(
+                    symbol=symbol_ticker,
+                    signals=all_signals,
+                    regime=current_regime,
+                )
+
+                for signal in executable_signals:
+                    # Compose session multiplier with any combo multiplier the
+                    # gate already attached (sniper writes lot_size_multiplier
+                    # into metadata — multiply, don't overwrite).
+                    existing_mult = float(
+                        signal.metadata.get('lot_size_multiplier', 1.0) or 1.0
+                    )
+                    signal.metadata['lot_size_multiplier'] = existing_mult * lot_multiplier
                     self._execute_signal(signal)
                     
             except Exception as e:
@@ -836,6 +868,10 @@ class TradingSystem:
 
             ml_regime = _parse_ml_regime(regime)
             self.strategy_manager.set_ml_regime_all(symbol_ticker, ml_regime)
+            # Mirror into local map so ConfluenceGate can read regime per symbol
+            # without re-parsing the on-disk override on every tick.
+            if ml_regime is not None:
+                self._symbol_regimes[symbol_ticker] = ml_regime
 
             for strat_name, strategy_obj in strategies.items():
                 if strat_name in overrides:
