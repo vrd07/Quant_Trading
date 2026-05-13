@@ -1,7 +1,7 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-05-12T22:48:11.464977+00:00",
-  "valid_until": "2026-05-13T22:48:11.464977+00:00",
+  "generated_at": "2026-05-13T04:19:50.485548+00:00",
+  "valid_until": "2026-05-14T04:19:50.485548+00:00",
   "regime": "TREND",
   "confidence": 0.55,
   "classifier": "rule-based",
@@ -21,15 +21,15 @@
     "continuation_breakout": true
   },
   "diagnostics": {
-    "adx_14": 38.197706,
-    "atr_pct": 0.005485,
-    "bb_width_ratio": 0.487258,
-    "close_ema20_pct": 0.0033,
-    "momentum_1d": 0.002813,
-    "momentum_5d": 0.005525,
-    "range_atr_ratio": 1.325365,
-    "vol_ratio": 4.531871,
-    "park_vol_zscore": -0.612935
+    "adx_14": 37.980015,
+    "atr_pct": 0.005441,
+    "bb_width_ratio": 0.495283,
+    "close_ema20_pct": 0.001903,
+    "momentum_1d": -0.00363,
+    "momentum_5d": 0.004498,
+    "range_atr_ratio": 0.886401,
+    "vol_ratio": 3.763748,
+    "park_vol_zscore": -1.180516
   },
   "strategy_weights": {
     "breakout": 0.85,

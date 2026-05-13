@@ -1,7 +1,7 @@
 {
   "symbol": "XAUUSDS",
-  "generated_at": "2026-05-12T22:48:11.752497+00:00",
-  "valid_until": "2026-05-13T22:48:11.752497+00:00",
+  "generated_at": "2026-05-13T04:19:51.000794+00:00",
+  "valid_until": "2026-05-14T04:19:51.000794+00:00",
   "regime": "RANGE",
   "confidence": 0.52,
   "classifier": "rule-based (no data)",
