@@ -44,6 +44,8 @@ from ..core.types import Order, Symbol
 from ..risk.risk_engine import RiskEngine
 from ..risk.risk_processor import RiskProcessor
 from ..strategies.strategy_manager import StrategyManager
+from ..strategies.confluence_gate import ConfluenceGate
+from ..core.constants import MarketRegime
 
 log = logging.getLogger(__name__)
 
@@ -105,6 +107,8 @@ class EnsembleBacktestEngine:
 
         # Live components — same code as production.
         self.strategy_manager = StrategyManager([symbol], cfg)
+        gate_cfg = cfg.get('strategies', {}).get('confluence_gate', {})
+        self.confluence_gate = ConfluenceGate(gate_cfg)
         self.risk_engine = RiskEngine(cfg)
         self.risk_engine.equity_high_water_mark = initial_capital
         self.risk_engine.daily_start_equity = initial_capital
@@ -215,9 +219,29 @@ class EnsembleBacktestEngine:
             if signal is not None:
                 signals.append((strategy_name, signal))
 
-        # Execute every signal — same as live (RiskEngine gates which actually open).
-        for strategy_name, signal in signals:
-            self._execute(signal, strategy_name, current_bar)
+        # ConfluenceGate filter — mirrors live `_process_strategies` path.
+        # Backtest has no nightly ML regime override, so derive regime from
+        # whichever incoming signal carries one (each strategy's RegimeFilter
+        # tags its own signals).
+        regime = MarketRegime.UNKNOWN
+        for _, sig in signals:
+            sig_regime = getattr(sig, 'regime', None)
+            if sig_regime and sig_regime != MarketRegime.UNKNOWN:
+                regime = sig_regime
+                break
+
+        bar_ts = pd.to_datetime(current_bar.name).to_pydatetime()
+        if bar_ts.tzinfo is None:
+            from datetime import timezone as _tz
+            bar_ts = bar_ts.replace(tzinfo=_tz.utc)
+        executable = self.confluence_gate.filter(
+            symbol=self.symbol.ticker,
+            signals=signals,
+            regime=regime,
+            now=bar_ts,
+        )
+        for signal in executable:
+            self._execute(signal, signal.strategy_name, current_bar)
 
         self.metrics.update_equity(
             timestamp=current_bar.name,
