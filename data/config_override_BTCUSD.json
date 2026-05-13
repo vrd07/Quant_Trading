@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-05-13T04:19:48.960694+00:00",
-  "valid_until": "2026-05-14T04:19:48.960694+00:00",
+  "generated_at": "2026-05-13T05:04:15.075483+00:00",
+  "valid_until": "2026-05-14T05:04:15.075483+00:00",
   "regime": "RANGE",
   "confidence": 0.6226,
   "classifier": "RandomForest+Markov (n=37 samples)",
@@ -46,7 +46,9 @@
     "fibonacci_retracement": 0.5,
     "continuation_breakout": 0.3
   },
-  "performance_scores": {},
+  "performance_scores": {
+    "kalman_regime": 0.1275
+  },
   "regime_probabilities": {
     "TREND": 0.3693,
     "RANGE": 0.6226,
