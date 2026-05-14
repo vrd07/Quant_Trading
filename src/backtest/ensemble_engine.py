@@ -133,7 +133,69 @@ class EnsembleBacktestEngine:
         # within the same bar (mirrors live `_last_processed_bars`).
         self._last_processed: Dict[str, datetime] = {}
 
+        # Per-strategy native timeframe. Mirrors `_strategy_timeframe` in
+        # src/main.py:_process_strategies — strategies tuned for 15m
+        # behave very differently on 5m bars, so the backtest must respect
+        # each strategy's declared TF.
+        strat_cfg = cfg.get('strategies', {})
+        global_tf = strat_cfg.get('primary_timeframe', '5m')
+        self._strategy_tfs: Dict[str, str] = {
+            name: (strat_cfg.get(name, {}) or {}).get('timeframe', global_tf)
+            for name in self.strategy_manager.strategies.get(symbol.ticker, {})
+        }
+        # Filled in run() — resampled views of source bars keyed by TF string.
+        self._bars_by_tf: Dict[str, pd.DataFrame] = {}
+
     # ------------------------------------------------------------------
+    _TF_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
+
+    def _resample_bars(self, src: pd.DataFrame, src_tf_min: int, tgt_tf: str) -> pd.DataFrame:
+        """Resample source bars to the target timeframe, OHLCV-correct."""
+        tgt_min = self._TF_MINUTES.get(tgt_tf)
+        if tgt_min is None:
+            log.warning(f"Unknown TF '{tgt_tf}' — falling back to source TF.")
+            return src
+        if tgt_min == src_tf_min:
+            return src
+        if tgt_min < src_tf_min:
+            # Can't upsample without lookahead. Strategies tuned to sub-source
+            # TFs run on source data with a warning — they'll behave oddly but
+            # won't lookahead.
+            log.warning(
+                f"Strategy expects {tgt_tf} bars but source is {src_tf_min}m — "
+                "feeding source bars unchanged (no upsample available)."
+            )
+            return src
+        rule = f"{tgt_min}min"
+        # label="left" + closed="left" matches MT5/yfinance convention:
+        # a bar timestamped 10:00 covers 10:00–10:14:59 (for 15m).
+        out = src.resample(rule, label="left", closed="left").agg({
+            "open": "first",
+            "high": "max",
+            "low": "min",
+            "close": "last",
+            "volume": "sum",
+        }).dropna(subset=["open", "high", "low", "close"])
+        return out
+
+    def _view_at(self, tf_bars: pd.DataFrame, src_tf_min: int, tgt_tf: str,
+                 t: pd.Timestamp, max_window: int) -> pd.DataFrame:
+        """View of `tf_bars` containing only fully-closed bars at backtest time `t`."""
+        tgt_min = self._TF_MINUTES.get(tgt_tf, src_tf_min)
+        if tgt_min <= src_tf_min:
+            # Source-TF or sub-source: every bar with index <= t is fully observed.
+            visible = tf_bars[tf_bars.index <= t]
+        else:
+            # Higher TF: bar at L is closed at L+tgt_min. Include only bars
+            # whose close time has arrived by t — prevents lookahead from an
+            # in-progress higher-TF bar leaking the current close back to the
+            # strategy.
+            close_delta = pd.Timedelta(minutes=tgt_min)
+            visible = tf_bars[tf_bars.index + close_delta <= t + pd.Timedelta(seconds=1)]
+        if max_window and len(visible) > max_window:
+            visible = visible.iloc[-max_window:]
+        return visible
+
     def run(
         self,
         bars: pd.DataFrame,
@@ -156,6 +218,16 @@ class EnsembleBacktestEngine:
         if len(bars) >= 2:
             delta = (bars.index[1] - bars.index[0]).total_seconds() / 60.0
             self.broker._bar_interval_minutes = max(delta, 1.0)
+        src_tf_min = int(self.broker._bar_interval_minutes or 5)
+
+        # Pre-resample once per unique TF. Strategies hit the cache below at
+        # each tick instead of resampling 1k+ times per backtest.
+        self._bars_by_tf = {}
+        for tf in set(self._strategy_tfs.values()):
+            self._bars_by_tf[tf] = self._resample_bars(bars, src_tf_min, tf)
+            log.info(f"  TF '{tf}': {len(self._bars_by_tf[tf])} bars after resample")
+        self._src_tf_min = src_tf_min
+        self._max_window = max_window
 
         current_day = None
         for i in range(len(bars)):
@@ -200,19 +272,32 @@ class EnsembleBacktestEngine:
             )
             return
 
-        # Iterate every enabled strategy. Each strategy emits at most one
-        # signal per call. Same-bar dedupe via _last_processed.
+        # Iterate every enabled strategy. Each strategy receives bars at its
+        # YAML-declared timeframe (15m strategies see 15m bars, 5m strategies
+        # see 5m). Dedupe is keyed by the strategy's native bar timestamp so a
+        # 15m strategy isn't re-fired three times within one 15m window.
         signals: List[tuple] = []
+        current_ts = pd.Timestamp(current_bar.name)
         for strategy_name, strategy in self.strategy_manager.strategies.get(
             self.symbol.ticker, {}
         ).items():
-            bar_key = f"{self.symbol.ticker}_{strategy_name}"
-            if self._last_processed.get(bar_key) == current_bar.name:
+            tf = self._strategy_tfs.get(strategy_name, f"{self._src_tf_min}m")
+            tf_bars = self._bars_by_tf.get(tf)
+            if tf_bars is None or tf_bars.empty:
                 continue
-            self._last_processed[bar_key] = current_bar.name
+            view = self._view_at(tf_bars, self._src_tf_min, tf,
+                                 current_ts, self._max_window)
+            if len(view) < 30:  # mirror min_history per-TF (was 50 globally)
+                continue
+
+            native_last_ts = view.index[-1]
+            bar_key = f"{self.symbol.ticker}_{strategy_name}"
+            if self._last_processed.get(bar_key) == native_last_ts:
+                continue
+            self._last_processed[bar_key] = native_last_ts
 
             try:
-                signal = strategy.on_bar(available)
+                signal = strategy.on_bar(view)
             except Exception as e:
                 log.debug(f"strategy {strategy_name} raised: {e}")
                 continue
