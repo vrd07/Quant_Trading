@@ -41,14 +41,30 @@ def _load_active_config() -> tuple[dict, Path]:
     return cfg, cfg_path
 
 
-def _force_fixed_lot(cfg: dict, lot: Decimal) -> dict:
-    """Mutate the config so RiskEngine returns ``lot`` verbatim per trade."""
+def _force_fixed_lot(cfg: dict, lot: Decimal, symbol: str) -> dict:
+    """Mutate the config so RiskEngine returns ``lot`` verbatim per trade.
+
+    RiskEngine.calculate_position_size hits the "user-fixed lot" branch when
+    ``symbol.min_lot == symbol.max_lot``. We pin both to ``lot`` so every
+    order opens with exactly that size regardless of risk %.
+    """
     cfg = deepcopy(cfg)
     cfg.setdefault("risk", {}).setdefault("position_sizing", {})
     cfg["risk"]["position_sizing"]["method"] = "fixed_lot"
     cfg["risk"]["position_sizing"]["fixed_lot"] = str(lot)
-    # Widen the per-trade dollar caps so the fixed lot isn't clamped.
-    cfg["risk"]["risk_per_trade_pct"] = 0.10  # 10% — effectively uncapped for 0.05 lot
+    cfg["risk"]["risk_per_trade_pct"] = 0.10  # 10% — uncap
+
+    # Pin XAUUSD symbol block: min_lot == max_lot triggers the authoritative
+    # user-fixed-lot path in RiskEngine. Without this, the live config's
+    # operator-set lot wins.
+    cfg.setdefault("symbols", {}).setdefault(symbol, {})
+    cfg["symbols"][symbol]["min_lot"] = float(lot)
+    cfg["symbols"][symbol]["max_lot"] = float(lot)
+    cfg["symbols"][symbol]["lot_step"] = float(lot)
+
+    # Manual-guard halving would silently cut 0.05 in half — disable for the
+    # duration of the backtest.
+    cfg.setdefault("risk", {}).setdefault("manual_guard", {})["enabled"] = False
     return cfg
 
 
@@ -61,6 +77,10 @@ def _build_symbol(cfg: dict, ticker: str) -> Symbol:
         max_lot=Decimal(str(sym_cfg.get("max_lot", "100"))),
         lot_step=Decimal(str(sym_cfg.get("lot_step", "0.01"))),
         value_per_lot=Decimal(str(sym_cfg.get("value_per_lot", "100"))),
+        # SimulatedBroker margin check: required = price*qty*vpl / leverage.
+        # Without this, 0.05-lot XAUUSD at $4700 needs $23.5K margin and
+        # every order silently rejects as insufficient capital.
+        leverage=Decimal(str(sym_cfg.get("leverage", "30"))),
     )
 
 
@@ -95,7 +115,7 @@ def main():
     cfg, cfg_path = _load_active_config()
     print(f"[combo-backtest] active config = {cfg_path.relative_to(ROOT)}")
 
-    cfg = _force_fixed_lot(cfg, Decimal(args.lot))
+    cfg = _force_fixed_lot(cfg, Decimal(args.lot), args.symbol)
     if args.gate_off:
         cfg.setdefault("strategies", {}).setdefault("confluence_gate", {})["enabled"] = False
         print("[combo-backtest] ConfluenceGate DISABLED (baseline run — kill-list still drops)")
@@ -126,34 +146,59 @@ def main():
         slippage_model="strict",
         bypass_risk_limits=True,
     )
-    # Pin the user's fixed lot at the symbol boundary so RiskEngine's
-    # "user-fixed lot" branch fires (min_lot == max_lot).
-    engine.symbol = Symbol(
-        ticker=symbol.ticker,
-        pip_value=symbol.pip_value,
-        min_lot=Decimal(args.lot),
-        max_lot=Decimal(args.lot),
-        lot_step=symbol.lot_step,
-        value_per_lot=symbol.value_per_lot,
-    )
+
+    # Instrument ConfluenceGate with a thin counter wrapper so we can verify
+    # the gate is exercised and report combo throughput in the summary.
+    gate = engine.confluence_gate
+    counters = {"calls": 0, "kalman_pass": 0, "combo_A": 0, "combo_B": 0,
+                "combo_C": 0, "suppressed": 0}
+    original_filter = gate.filter
+
+    def counting_filter(symbol, signals, regime=None, now=None):
+        counters["calls"] += 1
+        n_in = sum(1 for _ in signals)
+        out = original_filter(symbol=symbol, signals=signals, regime=regime, now=now)
+        for s in out:
+            combo = s.metadata.get("combo") if s.metadata else None
+            if combo == "A":
+                counters["combo_A"] += 1
+            elif combo == "B":
+                counters["combo_B"] += 1
+            elif combo == "C":
+                counters["combo_C"] += 1
+            elif s.strategy_name == "kalman_regime":
+                counters["kalman_pass"] += 1
+        counters["suppressed"] += max(0, n_in - len(out))
+        return out
+
+    gate.filter = counting_filter
 
     result = engine.run(bars=bars)
     print_ensemble_report(result)
 
-    # Per-combo attribution — the gate stamps signal.metadata['combo']
-    # before execution, so trade records carry it through.
     print()
     print("=" * 60)
-    print("PER-STRATEGY ATTRIBUTION (post-ConfluenceGate)")
+    print("CONFLUENCEGATE THROUGHPUT")
+    print("=" * 60)
+    print(f"  filter calls           : {counters['calls']}")
+    print(f"  signals suppressed     : {counters['suppressed']}")
+    print(f"  kalman_regime (solo)   : {counters['kalman_pass']}")
+    print(f"  COMBO A (TREND surge)  : {counters['combo_A']}")
+    print(f"  COMBO B (RANGE fade)   : {counters['combo_B']}")
+    print(f"  COMBO C (sniper 1.5×)  : {counters['combo_C']}")
+
+    print()
+    print("=" * 60)
+    print("PER-STRATEGY ATTRIBUTION (executed trades)")
     print("=" * 60)
     for name, attrib in sorted(result.per_strategy.items(),
-                                key=lambda kv: kv[1].net_pnl,
+                                key=lambda kv: kv[1].gross_pnl,
                                 reverse=True):
         if attrib.trades == 0:
             continue
         print(f"  {name:22s}  trades={attrib.trades:4d}  "
               f"wins={attrib.wins:4d} ({attrib.win_rate*100:5.1f}%)  "
-              f"net_pnl={float(attrib.net_pnl):+9.2f}")
+              f"gross_pnl={float(attrib.gross_pnl):+9.2f}")
 
 
 if __name__ == "__main__":
