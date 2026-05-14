@@ -92,6 +92,12 @@ class TradingSystem:
                 circuit breaker is never silently neutered.
         """
         self._reset_hwm_acknowledged = bool(reset_hwm)
+        # Remember which config we're running on so state / journal / live
+        # monitor paths can namespace by config stem. Prevents two configs
+        # pointing at the same MT5 login from bleeding HWM / daily P&L /
+        # trade history into each other.
+        self.config_file = config_file
+        self.config_stem = Path(config_file).stem  # e.g. "config_live_1000"
         # Load configuration
         with open(config_file, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
@@ -146,8 +152,10 @@ class TradingSystem:
 
         # Live monitor pop-up feed. Always-on — it is a passive file writer
         # so the dashboard process can render a UI without touching the hot loop.
+        # State file is namespaced by config stem so switching accounts day-to-day
+        # gives each its own monitor history.
         self.live_monitor: Optional[LiveMonitorEmitter] = LiveMonitorEmitter(
-            state_file="data/metrics/live_monitor_state.json",
+            state_file=f"data/metrics/live_monitor_state_{self.config_stem}.json",
             config_file=config_file,
             env=self.config.get('environment', 'dev'),
             user_profile=user_profile or {},
@@ -247,10 +255,14 @@ class TradingSystem:
             )
             self.logger.info("✓ Execution engine ready")
             
-            # 6. Initialize trade journal (before portfolio so it can be passed)
+            # 6. Initialize trade journal (before portfolio so it can be passed).
+            # Per-config CSV so trades from different accounts don't mingle —
+            # the legacy shared trade_journal.csv stays in place for history
+            # but new trades from this session land in the namespaced file.
             self.logger.info("6. Initializing trade journal...")
-            self.trade_journal = TradeJournal()
-            self.logger.info("✓ Trade journal ready")
+            journal_path = f"data/logs/trade_journal_{self.config_stem}.csv"
+            self.trade_journal = TradeJournal(journal_file=journal_path)
+            self.logger.info(f"✓ Trade journal ready ({journal_path})")
 
             # 6a. Manual-trade monitor (audits MT5-side manual clicks against
             # the same guards RiskEngine applies to bot orders).
@@ -300,17 +312,24 @@ class TradingSystem:
                 login = int(self.connector.get_account_info().get('login', 0) or 0)
             except Exception as e:
                 self.logger.warning(f"Could not read MT5 login for state namespacing: {e}")
+            # Two-layer namespacing: MT5 login isolates accounts; config stem
+            # isolates day-to-day config switches even when configs share a
+            # broker login. Belt-and-suspenders against any HWM / daily-loss
+            # leak across $1K / $5K / $10K configs.
             if login > 0:
-                state_dir = f"data/state/{self.env}/{login}"
+                state_dir = f"data/state/{self.env}/{login}/{self.config_stem}"
             else:
-                state_dir = f"data/state/{self.env}"
+                state_dir = f"data/state/{self.env}/{self.config_stem}"
                 self.logger.warning(
-                    "MT5 login unavailable — falling back to shared state dir. "
+                    "MT5 login unavailable — falling back to env+config state dir. "
                     "Update EA_FileBridge.mq5 (HandleGetAccountInfo emits 'login') "
                     "to enable per-account state isolation."
                 )
             self.state_manager = StateManager(state_dir=state_dir)
-            self.logger.info(f"✓ State manager ready (env: {self.env}, login: {login or 'shared'})")
+            self.logger.info(
+                f"✓ State manager ready (env: {self.env}, login: {login or 'shared'}, "
+                f"config: {self.config_stem}, path: {state_dir})"
+            )
             
             # 7b. Initialize dashboard
             initial_capital = Decimal(str(self.config.get('account', {}).get('initial_balance', 10000)))
