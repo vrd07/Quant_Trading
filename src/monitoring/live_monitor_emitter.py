@@ -138,6 +138,14 @@ class LiveMonitorEmitter:
         self.state_path.parent.mkdir(parents=True, exist_ok=True)
         self.config_file = config_file
         self.env = env
+        # Journal path mirrors main.py's per-config namespacing
+        # (data/logs/trade_journal_{stem}.csv). Falls back to the legacy
+        # shared file only if no config_file was supplied.
+        if config_file:
+            stem = Path(config_file).stem
+            self._journal_path = Path(f"data/logs/trade_journal_{stem}.csv")
+        else:
+            self._journal_path = Path("data/logs/trade_journal.csv")
         # Trader-supplied identity (shown next to the RUNNING pill + under it).
         self.user_profile: Dict[str, Any] = {
             "username": (user_profile or {}).get("username") or "Trader",
@@ -867,7 +875,7 @@ class LiveMonitorEmitter:
             "current_streak": 0, "streak_type": "",
             "total_pnl": 0.0,
         }
-        path = Path("data/logs/trade_journal.csv")
+        path = self._journal_path
         if not path.exists():
             return out
 
@@ -963,7 +971,7 @@ class LiveMonitorEmitter:
 
     def _collect_journal_from_csv(self) -> List[Dict[str, Any]]:
         """Read last 15 closed trades directly from the journal CSV (cheap)."""
-        path = Path("data/logs/trade_journal.csv")
+        path = self._journal_path
         if not path.exists():
             return []
         try:
