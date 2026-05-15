@@ -85,6 +85,20 @@ if "!CONFIG!"=="" (
 
 :account_selected
 
+:: Persist the chosen config back to ACTIVE_CONFIG so it stays the
+:: "last launched" pointer for the next session and any tooling that
+:: auto-resolves from it (journal viewer, dashboards, etc.).
+if /i not "!CONFIG!"=="!ACTIVE_CONFIG!" (
+    > "config\ACTIVE_CONFIG" echo !CONFIG!
+    echo   --^> Updated ACTIVE_CONFIG to !CONFIG!
+)
+
+:: Derive the per-config state-file stem (matches state_namespacing
+:: from 2026-05-14) so the monitor pairs with THIS launch's bot,
+:: regardless of any later ACTIVE_CONFIG edits.
+for %%F in ("!CONFIG!") do set "CONFIG_STEM=%%~nF"
+set "MONITOR_STATE_FILE=data\metrics\live_monitor_state_!CONFIG_STEM!.json"
+
 if not exist "!CONFIG!" (
     echo.
     echo ERROR: Config file not found: !CONFIG!
@@ -171,10 +185,11 @@ if not exist "logs" mkdir "logs"
 python -c "import tkinter" >nul 2>&1
 if !errorlevel! equ 0 (
     echo   [INFO] Launching live monitor pop-up...
+    echo   [INFO] Monitor state: !MONITOR_STATE_FILE!
     if exist "venv\Scripts\pythonw.exe" (
-        start "QuantLiveMonitor" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000 --state-file "!MONITOR_STATE_FILE!"
     ) else (
-        start "QuantLiveMonitor" python scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" python scripts\live_monitor.py --refresh 1000 --state-file "!MONITOR_STATE_FILE!"
     )
 ) else (
     echo   [WARN] Tkinter not available — skipping live monitor pop-up.

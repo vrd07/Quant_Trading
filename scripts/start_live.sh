@@ -73,6 +73,20 @@ else
     esac
 fi
 
+# Persist the chosen config back to ACTIVE_CONFIG so it stays the
+# "last launched" pointer for the next session and any tooling that
+# auto-resolves from it (journal viewer, dashboards, etc.).
+if [ "$CONFIG" != "$ACTIVE_CONFIG" ]; then
+    echo "$CONFIG" > config/ACTIVE_CONFIG
+    echo "  ➜ Updated ACTIVE_CONFIG → $CONFIG"
+fi
+
+# Derive the per-config state-file stem (matches state_namespacing
+# from 2026-05-14) so the monitor pairs with THIS launch's bot,
+# regardless of any later ACTIVE_CONFIG edits.
+CONFIG_STEM="$(basename "$CONFIG" .yaml)"
+MONITOR_STATE_FILE="data/metrics/live_monitor_state_${CONFIG_STEM}.json"
+
 echo ""
 echo "============================================================"
 echo "  Quant Trading Bot — GFT Account"
@@ -143,9 +157,11 @@ mkdir -p logs
 if python3 -c "import tkinter" >/dev/null 2>&1; then
     echo "  ➜ Launching live monitor pop-up..."
     nohup python3 scripts/live_monitor.py --refresh 1000 \
+        --state-file "$MONITOR_STATE_FILE" \
         >"$MONITOR_LOG" 2>&1 &
     MONITOR_PID=$!
     echo "    Monitor PID: $MONITOR_PID   (log: $MONITOR_LOG)"
+    echo "    Monitor state: $MONITOR_STATE_FILE"
 else
     echo "  ⚠ Tkinter not available — skipping live monitor pop-up."
 fi
