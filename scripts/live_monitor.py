@@ -1146,10 +1146,32 @@ class LiveMonitorApp:
         self.root.mainloop()
 
 
+def _resolve_default_state_file(root: Path) -> str:
+    """Pick the live monitor JSON path that matches the active config.
+
+    The bot writes to data/metrics/live_monitor_state_{config_stem}.json
+    (per-config namespacing 2026-05-14). Auto-resolve config_stem from
+    config/ACTIVE_CONFIG so users switching configs day-to-day don't have
+    to remember a --state-file flag. Falls back to the legacy shared path
+    if the namespaced file doesn't exist (older bot runs).
+    """
+    active_marker = root / "config" / "ACTIVE_CONFIG"
+    if active_marker.exists():
+        try:
+            stem = Path(active_marker.read_text().strip()).stem
+            ns = root / "data" / "metrics" / f"live_monitor_state_{stem}.json"
+            if ns.exists():
+                return str(ns)
+        except Exception:
+            pass
+    return str(root / "data" / "metrics" / "live_monitor_state.json")
+
+
 def main() -> int:
     p = argparse.ArgumentParser(description="Live trading bot monitor (pop-up).")
-    p.add_argument("--state-file", default="data/metrics/live_monitor_state.json",
-                   help="Path to live monitor JSON produced by the bot.")
+    p.add_argument("--state-file", default=None,
+                   help="Path to live monitor JSON. Default: auto-resolved from "
+                        "config/ACTIVE_CONFIG (per-config namespacing).")
     p.add_argument("--refresh", type=int, default=1000,
                    help="Refresh interval in milliseconds (default: 1000)")
     p.add_argument("--no-topmost", action="store_true",
@@ -1157,9 +1179,10 @@ def main() -> int:
     args = p.parse_args()
 
     root = Path(__file__).resolve().parent.parent
-    state = args.state_file
+    state = args.state_file or _resolve_default_state_file(root)
     if not os.path.isabs(state):
         state = str(root / state)
+    print(f"[live_monitor] reading {state}")
 
     app = LiveMonitorApp(state_file=state, refresh_ms=args.refresh,
                          topmost=not args.no_topmost)

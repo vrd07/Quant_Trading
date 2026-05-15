@@ -41,11 +41,13 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.connectors.mt5_connector import MT5Connector
 from src.data.data_engine import DataEngine
 from src.strategies.strategy_manager import StrategyManager
+from src.strategies.confluence_gate import ConfluenceGate
 from src.risk.risk_engine import RiskEngine
 from src.execution.execution_engine import ExecutionEngine
 from src.portfolio.portfolio_engine import PortfolioEngine
 from src.state.state_manager import StateManager
 from src.core.types import Symbol
+from src.core.constants import MarketRegime
 from src.core.exceptions import (
     KillSwitchActiveError,
     DailyLossLimitError,
@@ -90,6 +92,12 @@ class TradingSystem:
                 circuit breaker is never silently neutered.
         """
         self._reset_hwm_acknowledged = bool(reset_hwm)
+        # Remember which config we're running on so state / journal / live
+        # monitor paths can namespace by config stem. Prevents two configs
+        # pointing at the same MT5 login from bleeding HWM / daily P&L /
+        # trade history into each other.
+        self.config_file = config_file
+        self.config_stem = Path(config_file).stem  # e.g. "config_live_1000"
         # Load configuration
         with open(config_file, 'r', encoding='utf-8') as f:
             self.config = yaml.safe_load(f)
@@ -144,8 +152,10 @@ class TradingSystem:
 
         # Live monitor pop-up feed. Always-on — it is a passive file writer
         # so the dashboard process can render a UI without touching the hot loop.
+        # State file is namespaced by config stem so switching accounts day-to-day
+        # gives each its own monitor history.
         self.live_monitor: Optional[LiveMonitorEmitter] = LiveMonitorEmitter(
-            state_file="data/metrics/live_monitor_state.json",
+            state_file=f"data/metrics/live_monitor_state_{self.config_stem}.json",
             config_file=config_file,
             env=self.config.get('environment', 'dev'),
             user_profile=user_profile or {},
@@ -245,10 +255,14 @@ class TradingSystem:
             )
             self.logger.info("✓ Execution engine ready")
             
-            # 6. Initialize trade journal (before portfolio so it can be passed)
+            # 6. Initialize trade journal (before portfolio so it can be passed).
+            # Per-config CSV so trades from different accounts don't mingle —
+            # the legacy shared trade_journal.csv stays in place for history
+            # but new trades from this session land in the namespaced file.
             self.logger.info("6. Initializing trade journal...")
-            self.trade_journal = TradeJournal()
-            self.logger.info("✓ Trade journal ready")
+            journal_path = f"data/logs/trade_journal_{self.config_stem}.csv"
+            self.trade_journal = TradeJournal(journal_file=journal_path)
+            self.logger.info(f"✓ Trade journal ready ({journal_path})")
 
             # 6a. Manual-trade monitor (audits MT5-side manual clicks against
             # the same guards RiskEngine applies to bot orders).
@@ -298,17 +312,24 @@ class TradingSystem:
                 login = int(self.connector.get_account_info().get('login', 0) or 0)
             except Exception as e:
                 self.logger.warning(f"Could not read MT5 login for state namespacing: {e}")
+            # Two-layer namespacing: MT5 login isolates accounts; config stem
+            # isolates day-to-day config switches even when configs share a
+            # broker login. Belt-and-suspenders against any HWM / daily-loss
+            # leak across $1K / $5K / $10K configs.
             if login > 0:
-                state_dir = f"data/state/{self.env}/{login}"
+                state_dir = f"data/state/{self.env}/{login}/{self.config_stem}"
             else:
-                state_dir = f"data/state/{self.env}"
+                state_dir = f"data/state/{self.env}/{self.config_stem}"
                 self.logger.warning(
-                    "MT5 login unavailable — falling back to shared state dir. "
+                    "MT5 login unavailable — falling back to env+config state dir. "
                     "Update EA_FileBridge.mq5 (HandleGetAccountInfo emits 'login') "
                     "to enable per-account state isolation."
                 )
             self.state_manager = StateManager(state_dir=state_dir)
-            self.logger.info(f"✓ State manager ready (env: {self.env}, login: {login or 'shared'})")
+            self.logger.info(
+                f"✓ State manager ready (env: {self.env}, login: {login or 'shared'}, "
+                f"config: {self.config_stem}, path: {state_dir})"
+            )
             
             # 7b. Initialize dashboard
             initial_capital = Decimal(str(self.config.get('account', {}).get('initial_balance', 10000)))
@@ -322,6 +343,21 @@ class TradingSystem:
             
             self.logger.info("8. Initializing strategies...")
             self.strategy_manager = StrategyManager(symbols, self.config)
+
+            # ConfluenceGate — combo-based filter that gates signals before
+            # execution (COMBO A/B/C policy from combine_startegy.md). When
+            # disabled in config, falls back to passthrough plus kill-list drop.
+            gate_cfg = self.config.get('strategies', {}).get('confluence_gate', {})
+            self.confluence_gate = ConfluenceGate(gate_cfg)
+            self._symbol_regimes: Dict[str, MarketRegime] = {}
+            self.logger.info(
+                "✓ ConfluenceGate ready (enabled=%s window_min=%s sniper_mult=%s)"
+                % (
+                    self.confluence_gate.enabled,
+                    self.confluence_gate.window_minutes,
+                    self.confluence_gate.sniper_lot_multiplier,
+                )
+            )
 
             # Mitnick Rule: Never allow test strategies on live accounts.
             # Two 'test_strategy' trades leaked through in March, losing $27 on funded capital.
@@ -680,9 +716,24 @@ class TradingSystem:
                             symbol=symbol_ticker, error=str(se), exc_info=True
                         )
 
-                for _, signal in all_signals:
-                    # Inject session lot-size multiplier from SessionManager
-                    signal.metadata['lot_size_multiplier'] = lot_multiplier
+                # ConfluenceGate filter — applies COMBO A/B/C policy, drops
+                # kill-list strategies, and emits sniper signals (1.5×) when
+                # SMC+Fib+Momentum align. Passthrough when gate disabled.
+                current_regime = self._symbol_regimes.get(symbol_ticker, MarketRegime.UNKNOWN)
+                executable_signals = self.confluence_gate.filter(
+                    symbol=symbol_ticker,
+                    signals=all_signals,
+                    regime=current_regime,
+                )
+
+                for signal in executable_signals:
+                    # Compose session multiplier with any combo multiplier the
+                    # gate already attached (sniper writes lot_size_multiplier
+                    # into metadata — multiply, don't overwrite).
+                    existing_mult = float(
+                        signal.metadata.get('lot_size_multiplier', 1.0) or 1.0
+                    )
+                    signal.metadata['lot_size_multiplier'] = existing_mult * lot_multiplier
                     self._execute_signal(signal)
                     
             except Exception as e:
@@ -836,6 +887,10 @@ class TradingSystem:
 
             ml_regime = _parse_ml_regime(regime)
             self.strategy_manager.set_ml_regime_all(symbol_ticker, ml_regime)
+            # Mirror into local map so ConfluenceGate can read regime per symbol
+            # without re-parsing the on-disk override on every tick.
+            if ml_regime is not None:
+                self._symbol_regimes[symbol_ticker] = ml_regime
 
             for strat_name, strategy_obj in strategies.items():
                 if strat_name in overrides:
@@ -1223,7 +1278,7 @@ class TradingSystem:
                     self.live_monitor.mark_last_signal(
                         "FIRED",
                         f"order {str(order.order_id)[:8]} {order.status.value}",
-                        price=float(order.entry_price) if order.entry_price else None,
+                        price=float(order.price) if order.price else None,
                         sl=float(order.stop_loss) if order.stop_loss else None,
                         tp=float(order.take_profit) if order.take_profit else None,
                     )

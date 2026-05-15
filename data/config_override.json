@@ -1,10 +1,10 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-05-12T15:46:29.950722+00:00",
-  "valid_until": "2026-05-13T15:46:29.950722+00:00",
+  "generated_at": "2026-05-15T00:04:42.043288+00:00",
+  "valid_until": "2026-05-16T00:04:42.043288+00:00",
   "regime": "RANGE",
-  "confidence": 0.856,
-  "classifier": "RandomForest+Markov (n=311 samples)",
+  "confidence": 0.52,
+  "classifier": "rule-based",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -15,21 +15,21 @@
     "sbr": true,
     "supply_demand": false,
     "asia_range_fade": true,
-    "descending_channel_breakout": false,
+    "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true,
-    "continuation_breakout": false
+    "continuation_breakout": true
   },
   "diagnostics": {
-    "adx_14": 11.810645,
-    "atr_pct": 0.0225,
-    "bb_width_ratio": 0.768758,
-    "close_ema20_pct": 0.001728,
-    "momentum_1d": 0.007245,
-    "momentum_5d": 0.035969,
-    "range_atr_ratio": 0.94629,
-    "vol_ratio": 0.741589,
-    "park_vol_zscore": -1.073374
+    "adx_14": 23.671393,
+    "atr_pct": 0.021335,
+    "bb_width_ratio": 0.777657,
+    "close_ema20_pct": -0.007912,
+    "momentum_1d": -0.009403,
+    "momentum_5d": -0.016541,
+    "range_atr_ratio": 0.749448,
+    "vol_ratio": 1.434597,
+    "park_vol_zscore": -0.468973
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -48,30 +48,26 @@
   },
   "performance_scores": {
     "descending_channel_breakout": 0.0386,
-    "kalman_regime": 0.0121,
-    "structure_break_retest": -0.1639,
-    "supply_demand": -0.0128
+    "kalman_regime": 0.0075,
+    "structure_break_retest": -0.115,
+    "supply_demand": -0.0069
   },
-  "regime_probabilities": {
-    "TREND": 0.1419,
-    "RANGE": 0.856,
-    "VOLATILE": 0.0022
-  },
+  "regime_probabilities": {},
   "transition_matrix": {
     "TREND": {
-      "TREND": 0.2162,
-      "RANGE": 0.6486,
-      "VOLATILE": 0.1351
+      "TREND": 0.3333,
+      "RANGE": 0.3333,
+      "VOLATILE": 0.3333
     },
     "RANGE": {
-      "TREND": 0.0982,
-      "RANGE": 0.8945,
-      "VOLATILE": 0.0073
+      "TREND": 0.05,
+      "RANGE": 0.9,
+      "VOLATILE": 0.05
     },
     "VOLATILE": {
-      "TREND": 0.25,
-      "RANGE": 0.625,
-      "VOLATILE": 0.125
+      "TREND": 0.3333,
+      "RANGE": 0.3333,
+      "VOLATILE": 0.3333
     }
   }
 }
