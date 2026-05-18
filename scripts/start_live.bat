@@ -126,7 +126,7 @@ if /i "!FORCE!"=="false" (
 )
 
 :: ── Step 1: Health Check ─────────────────────────────────────
-echo --- [1/4] Pre-flight Health Check ---
+echo --- [1/5] Pre-flight Health Check ---
 echo.
 
 python scripts\health_check.py --config "!CONFIG!"
@@ -149,7 +149,7 @@ if "!HEALTH_RC!"=="0" (
 )
 
 :: ── Step 2: Fetch Daily News ─────────────────────────────────
-echo --- [2/4] Fetching Today's News Events ---
+echo --- [2/5] Fetching Today's News Events ---
 echo.
 
 python scripts\fetch_daily_news.py
@@ -162,7 +162,7 @@ if !errorlevel! equ 0 (
 )
 
 :: ── Step 3: Regime Classifier ────────────────────────────────
-echo --- [3/4] Nightly Regime Classifier ---
+echo --- [3/5] Nightly Regime Classifier ---
 echo.
 
 python scripts\regime_classifier.py
@@ -174,8 +174,28 @@ if !errorlevel! equ 0 (
     echo.
 )
 
-:: ── Step 4: Launch Live Trading ──────────────────────────────
-echo --- [4/4] Starting Live Trading ---
+:: ── Step 4: Regime Health Sanity Check ───────────────────────
+echo --- [4/5] Regime Health Sanity Check ---
+echo.
+
+python scripts\check_regime_health.py
+if !errorlevel! neq 0 (
+    echo.
+    if /i "!FORCE!"=="false" (
+        set /p REGIME_CONTINUE=  Continue with degraded regime ML? [y/N]:
+        if /i not "!REGIME_CONTINUE!"=="y" if /i not "!REGIME_CONTINUE!"=="yes" (
+            echo   Aborting. Fix the regime CSV ^(see scripts\refresh_historical_data.py^).
+            exit /b 1
+        )
+        echo   Continuing as requested.
+    ) else (
+        echo   --force flag set, continuing despite degraded regime ML...
+    )
+    echo.
+)
+
+:: ── Step 5: Launch Live Trading ──────────────────────────────
+echo --- [5/5] Starting Live Trading ---
 echo.
 
 :: Spawn the interactive live-monitor pop-up in a separate window so

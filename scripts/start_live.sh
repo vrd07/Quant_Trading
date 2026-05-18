@@ -134,7 +134,7 @@ else
 fi
 
 # ── Step 3: Regime Classifier ────────────────────────────────
-echo "─── [3/4] Nightly Regime Classifier ───"
+echo "─── [3/5] Nightly Regime Classifier ───"
 echo ""
 
 if python3 scripts/regime_classifier.py; then
@@ -145,8 +145,29 @@ else
     echo ""
 fi
 
-# ── Step 4: Launch Live Trading ──────────────────────────────
-echo "─── [4/4] Starting Live Trading ───"
+# ── Step 4: Regime Health Sanity Check ───────────────────────
+echo "─── [4/5] Regime Health Sanity Check ───"
+echo ""
+
+if python3 scripts/check_regime_health.py; then
+    echo ""
+else
+    echo ""
+    if [ "$FORCE" = false ]; then
+        printf "  Continue with degraded regime ML? [y/N]: "
+        read -r REGIME_CONTINUE
+        case "${REGIME_CONTINUE:-N}" in
+            y|Y|yes|YES) echo "  Continuing as requested." ;;
+            *) echo "  Aborting. Fix the regime CSV (see scripts/refresh_historical_data.py)."; exit 1 ;;
+        esac
+    else
+        echo "  --force flag set, continuing despite degraded regime ML..."
+    fi
+    echo ""
+fi
+
+# ── Step 5: Launch Live Trading ──────────────────────────────
+echo "─── [5/5] Starting Live Trading ───"
 echo ""
 
 # Spawn the interactive live-monitor pop-up in the background so the user
