@@ -169,8 +169,16 @@ fi
 # ── Telegram bot scheduler (optional — needs trading_bot/.env) ──
 TG_LOG="logs/telegram_bot.log"
 if [ -f "trading_bot/.env" ]; then
+    # Orphaned schedulers freeze their CONFIG (incl. the namespaced
+    # live_monitor_state path) at process start, so a 4-day-old scheduler will
+    # silently poll a stale state file after ACTIVE_CONFIG changes. Reap any
+    # existing instance before starting the new one.
+    if pkill -f "python.* -m trading_bot.scheduler" 2>/dev/null; then
+        echo "  ➜ Reaping stale Telegram bot scheduler(s)..."
+        sleep 1
+    fi
     echo "  ➜ Launching Telegram bot scheduler..."
-    nohup python3 -m trading_bot.scheduler >"$TG_LOG" 2>&1 &
+    nohup python3 -m trading_bot.scheduler >>"$TG_LOG" 2>&1 &
     TG_PID=$!
     echo "    Telegram bot PID: $TG_PID   (log: $TG_LOG)"
 else
