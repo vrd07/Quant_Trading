@@ -23,11 +23,7 @@ cd /d "%~dp0.."
 ::  because CR is never a line/token delimiter — bites on every CRLF-saved file.)
 set "ACTIVE_CONFIG=config\config_live_10000.yaml"
 if exist "config\ACTIVE_CONFIG" (
-    for /f "usebackq tokens=* delims=" %%i in ("config\ACTIVE_CONFIG") do (
-        set "ACTIVE_CONFIG=%%i"
-        goto :active_config_loaded
-    )
-    :active_config_loaded
+    for /f "usebackq tokens=* delims=" %%i in ("config\ACTIVE_CONFIG") do set "ACTIVE_CONFIG=%%i"
 )
 
 set "CONFIG="
