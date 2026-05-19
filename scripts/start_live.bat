@@ -18,11 +18,16 @@ title Quant Trading Bot - LIVE
 cd /d "%~dp0.."
 
 :: Single source of truth for the active live config.
+:: `for /f "usebackq"` opens the file in text mode, which strips CRLF properly.
+:: (set /p leaves the CR behind, and a for /f over a quoted string can't strip it
+::  because CR is never a line/token delimiter — bites on every CRLF-saved file.)
 set "ACTIVE_CONFIG=config\config_live_10000.yaml"
 if exist "config\ACTIVE_CONFIG" (
-    set /p "ACTIVE_CONFIG="<"config\ACTIVE_CONFIG"
-    :: Strip any trailing CR / whitespace that crept in from the file.
-    for /f "tokens=* delims= " %%i in ("!ACTIVE_CONFIG!") do set "ACTIVE_CONFIG=%%i"
+    for /f "usebackq tokens=* delims=" %%i in ("config\ACTIVE_CONFIG") do (
+        set "ACTIVE_CONFIG=%%i"
+        goto :active_config_loaded
+    )
+    :active_config_loaded
 )
 
 set "CONFIG="
