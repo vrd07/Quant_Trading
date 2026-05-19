@@ -85,6 +85,20 @@ if "!CONFIG!"=="" (
 
 :account_selected
 
+:: Persist the chosen config back to ACTIVE_CONFIG so it stays the
+:: "last launched" pointer for the next session and any tooling that
+:: auto-resolves from it (journal viewer, dashboards, etc.).
+if /i not "!CONFIG!"=="!ACTIVE_CONFIG!" (
+    > "config\ACTIVE_CONFIG" echo !CONFIG!
+    echo   --^> Updated ACTIVE_CONFIG to !CONFIG!
+)
+
+:: Derive the per-config state-file stem (matches state_namespacing
+:: from 2026-05-14) so the monitor pairs with THIS launch's bot,
+:: regardless of any later ACTIVE_CONFIG edits.
+for %%F in ("!CONFIG!") do set "CONFIG_STEM=%%~nF"
+set "MONITOR_STATE_FILE=data\metrics\live_monitor_state_!CONFIG_STEM!.json"
+
 if not exist "!CONFIG!" (
     echo.
     echo ERROR: Config file not found: !CONFIG!
@@ -112,7 +126,7 @@ if /i "!FORCE!"=="false" (
 )
 
 :: ── Step 1: Health Check ─────────────────────────────────────
-echo --- [1/4] Pre-flight Health Check ---
+echo --- [1/5] Pre-flight Health Check ---
 echo.
 
 python scripts\health_check.py --config "!CONFIG!"
@@ -135,7 +149,7 @@ if "!HEALTH_RC!"=="0" (
 )
 
 :: ── Step 2: Fetch Daily News ─────────────────────────────────
-echo --- [2/4] Fetching Today's News Events ---
+echo --- [2/5] Fetching Today's News Events ---
 echo.
 
 python scripts\fetch_daily_news.py
@@ -148,7 +162,7 @@ if !errorlevel! equ 0 (
 )
 
 :: ── Step 3: Regime Classifier ────────────────────────────────
-echo --- [3/4] Nightly Regime Classifier ---
+echo --- [3/5] Nightly Regime Classifier ---
 echo.
 
 python scripts\regime_classifier.py
@@ -160,8 +174,28 @@ if !errorlevel! equ 0 (
     echo.
 )
 
-:: ── Step 4: Launch Live Trading ──────────────────────────────
-echo --- [4/4] Starting Live Trading ---
+:: ── Step 4: Regime Health Sanity Check ───────────────────────
+echo --- [4/5] Regime Health Sanity Check ---
+echo.
+
+python scripts\check_regime_health.py
+if !errorlevel! neq 0 (
+    echo.
+    if /i "!FORCE!"=="false" (
+        set /p REGIME_CONTINUE=  Continue with degraded regime ML? [y/N]:
+        if /i not "!REGIME_CONTINUE!"=="y" if /i not "!REGIME_CONTINUE!"=="yes" (
+            echo   Aborting. Fix the regime CSV ^(see scripts\refresh_historical_data.py^).
+            exit /b 1
+        )
+        echo   Continuing as requested.
+    ) else (
+        echo   --force flag set, continuing despite degraded regime ML...
+    )
+    echo.
+)
+
+:: ── Step 5: Launch Live Trading ──────────────────────────────
+echo --- [5/5] Starting Live Trading ---
 echo.
 
 :: Spawn the interactive live-monitor pop-up in a separate window so
@@ -171,10 +205,11 @@ if not exist "logs" mkdir "logs"
 python -c "import tkinter" >nul 2>&1
 if !errorlevel! equ 0 (
     echo   [INFO] Launching live monitor pop-up...
+    echo   [INFO] Monitor state: !MONITOR_STATE_FILE!
     if exist "venv\Scripts\pythonw.exe" (
-        start "QuantLiveMonitor" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" "venv\Scripts\pythonw.exe" scripts\live_monitor.py --refresh 1000 --state-file "!MONITOR_STATE_FILE!"
     ) else (
-        start "QuantLiveMonitor" python scripts\live_monitor.py --refresh 1000
+        start "QuantLiveMonitor" python scripts\live_monitor.py --refresh 1000 --state-file "!MONITOR_STATE_FILE!"
     )
 ) else (
     echo   [WARN] Tkinter not available — skipping live monitor pop-up.
@@ -182,6 +217,9 @@ if !errorlevel! equ 0 (
 
 :: ── Telegram bot scheduler (optional — needs trading_bot\.env) ──
 if exist "trading_bot\.env" (
+    :: Reap any prior scheduler so it can't keep polling the old namespaced
+    :: state file (CONFIG is frozen at process start).
+    powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -like '*trading_bot.scheduler*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
     echo   [INFO] Launching Telegram bot scheduler...
     start "QuantTelegramBot" /min cmd /c "python -m trading_bot.scheduler >> logs\telegram_bot.log 2>&1"
 ) else (

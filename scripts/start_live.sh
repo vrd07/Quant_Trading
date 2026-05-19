@@ -73,6 +73,20 @@ else
     esac
 fi
 
+# Persist the chosen config back to ACTIVE_CONFIG so it stays the
+# "last launched" pointer for the next session and any tooling that
+# auto-resolves from it (journal viewer, dashboards, etc.).
+if [ "$CONFIG" != "$ACTIVE_CONFIG" ]; then
+    echo "$CONFIG" > config/ACTIVE_CONFIG
+    echo "  ➜ Updated ACTIVE_CONFIG → $CONFIG"
+fi
+
+# Derive the per-config state-file stem (matches state_namespacing
+# from 2026-05-14) so the monitor pairs with THIS launch's bot,
+# regardless of any later ACTIVE_CONFIG edits.
+CONFIG_STEM="$(basename "$CONFIG" .yaml)"
+MONITOR_STATE_FILE="data/metrics/live_monitor_state_${CONFIG_STEM}.json"
+
 echo ""
 echo "============================================================"
 echo "  Quant Trading Bot — GFT Account"
@@ -120,7 +134,7 @@ else
 fi
 
 # ── Step 3: Regime Classifier ────────────────────────────────
-echo "─── [3/4] Nightly Regime Classifier ───"
+echo "─── [3/5] Nightly Regime Classifier ───"
 echo ""
 
 if python3 scripts/regime_classifier.py; then
@@ -131,8 +145,29 @@ else
     echo ""
 fi
 
-# ── Step 4: Launch Live Trading ──────────────────────────────
-echo "─── [4/4] Starting Live Trading ───"
+# ── Step 4: Regime Health Sanity Check ───────────────────────
+echo "─── [4/5] Regime Health Sanity Check ───"
+echo ""
+
+if python3 scripts/check_regime_health.py; then
+    echo ""
+else
+    echo ""
+    if [ "$FORCE" = false ]; then
+        printf "  Continue with degraded regime ML? [y/N]: "
+        read -r REGIME_CONTINUE
+        case "${REGIME_CONTINUE:-N}" in
+            y|Y|yes|YES) echo "  Continuing as requested." ;;
+            *) echo "  Aborting. Fix the regime CSV (see scripts/refresh_historical_data.py)."; exit 1 ;;
+        esac
+    else
+        echo "  --force flag set, continuing despite degraded regime ML..."
+    fi
+    echo ""
+fi
+
+# ── Step 5: Launch Live Trading ──────────────────────────────
+echo "─── [5/5] Starting Live Trading ───"
 echo ""
 
 # Spawn the interactive live-monitor pop-up in the background so the user
@@ -143,9 +178,11 @@ mkdir -p logs
 if python3 -c "import tkinter" >/dev/null 2>&1; then
     echo "  ➜ Launching live monitor pop-up..."
     nohup python3 scripts/live_monitor.py --refresh 1000 \
+        --state-file "$MONITOR_STATE_FILE" \
         >"$MONITOR_LOG" 2>&1 &
     MONITOR_PID=$!
     echo "    Monitor PID: $MONITOR_PID   (log: $MONITOR_LOG)"
+    echo "    Monitor state: $MONITOR_STATE_FILE"
 else
     echo "  ⚠ Tkinter not available — skipping live monitor pop-up."
 fi
@@ -153,8 +190,16 @@ fi
 # ── Telegram bot scheduler (optional — needs trading_bot/.env) ──
 TG_LOG="logs/telegram_bot.log"
 if [ -f "trading_bot/.env" ]; then
+    # Orphaned schedulers freeze their CONFIG (incl. the namespaced
+    # live_monitor_state path) at process start, so a 4-day-old scheduler will
+    # silently poll a stale state file after ACTIVE_CONFIG changes. Reap any
+    # existing instance before starting the new one.
+    if pkill -f "python.* -m trading_bot.scheduler" 2>/dev/null; then
+        echo "  ➜ Reaping stale Telegram bot scheduler(s)..."
+        sleep 1
+    fi
     echo "  ➜ Launching Telegram bot scheduler..."
-    nohup python3 -m trading_bot.scheduler >"$TG_LOG" 2>&1 &
+    nohup python3 -m trading_bot.scheduler >>"$TG_LOG" 2>&1 &
     TG_PID=$!
     echo "    Telegram bot PID: $TG_PID   (log: $TG_LOG)"
 else
