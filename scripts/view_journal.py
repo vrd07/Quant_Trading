@@ -43,7 +43,8 @@ import argparse
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-JOURNAL_FILE = PROJECT_ROOT / "data" / "logs" / "trade_journal.csv"
+JOURNAL_DIR = PROJECT_ROOT / "data" / "logs"
+JOURNAL_GLOB = "trade_journal*.csv"  # legacy + namespaced (per-config) journals
 
 # ── graceful shutdown ────────────────────────────────────────────────
 _running = True
@@ -123,15 +124,41 @@ def clear():
 
 # ── data loading ─────────────────────────────────────────────────────
 
-def _read_journal():
+def _discover_journals(journal_filter: str = None):
+    """Return all trade_journal*.csv files, optionally filtered by substring."""
+    if not JOURNAL_DIR.exists():
+        return []
+    files = sorted(JOURNAL_DIR.glob(JOURNAL_GLOB))
+    if journal_filter:
+        files = [f for f in files if journal_filter.lower() in f.stem.lower()]
+    return files
+
+
+def _read_journal(journal_filter: str = None):
     import pandas as pd
 
-    if not JOURNAL_FILE.exists():
+    files = _discover_journals(journal_filter)
+    if not files:
         return pd.DataFrame()
 
-    df = pd.read_csv(JOURNAL_FILE)
-    if df.empty:
-        return df
+    frames = []
+    for f in files:
+        try:
+            sub = pd.read_csv(f)
+            if not sub.empty:
+                sub["_source_file"] = f.name
+                frames.append(sub)
+        except Exception as e:
+            print(f"  {Y}Warn: failed to read {f.name}: {e}{RST}")
+
+    if not frames:
+        return pd.DataFrame()
+
+    df = pd.concat(frames, ignore_index=True)
+
+    # Dedupe by trade_id (legacy file may overlap with namespaced ones)
+    if "trade_id" in df.columns:
+        df = df.drop_duplicates(subset=["trade_id"], keep="last")
 
     df["exit_time"] = pd.to_datetime(df["exit_time"], errors="coerce")
     df["entry_time"] = pd.to_datetime(df["entry_time"], errors="coerce")
@@ -153,9 +180,10 @@ def _apply_filters(df, symbol=None, strategy=None):
     return df
 
 
-def load_trades(days: int = 30, symbol: str = None, strategy: str = None):
+def load_trades(days: int = 30, symbol: str = None, strategy: str = None,
+                journal: str = None):
     """Load trade journal, filter by recency + optional symbol/strategy."""
-    df = _read_journal()
+    df = _read_journal(journal)
     if df.empty:
         return df
     cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -176,9 +204,10 @@ def week_bounds(offset: int = 0):
     return start, end
 
 
-def load_trades_window(start, end, symbol: str = None, strategy: str = None):
+def load_trades_window(start, end, symbol: str = None, strategy: str = None,
+                       journal: str = None):
     """Load trades whose exit_time falls in [start, end]."""
-    df = _read_journal()
+    df = _read_journal(journal)
     if df.empty:
         return df
     df = df[(df["exit_time"] >= start) & (df["exit_time"] <= end)].copy()
@@ -256,6 +285,17 @@ def compute_metrics(df):
         "sum_r": sum_r,
         "r_count": len(r_multiples) if r_multiples is not None else 0,
     }
+
+
+def _print_journal_sources(journal_filter: str = None):
+    """Show which journal files were merged so the source is never ambiguous."""
+    files = _discover_journals(journal_filter)
+    if not files:
+        return
+    names = ", ".join(f.name for f in files)
+    tag = f"journal={journal_filter}" if journal_filter else "all journals"
+    print(f"  {DIM}Sources ({tag}): {names}{RST}")
+    print()
 
 
 # ── section printers (shared) ────────────────────────────────────────
@@ -782,10 +822,12 @@ def print_takeaways(notes):
 
 # ── modes ────────────────────────────────────────────────────────────
 
-def run_report(days: int = 30, symbol: str = None, strategy: str = None):
-    df = load_trades(days=days, symbol=symbol, strategy=strategy)
+def run_report(days: int = 30, symbol: str = None, strategy: str = None,
+               journal: str = None):
+    df = load_trades(days=days, symbol=symbol, strategy=strategy, journal=journal)
     filters = {"symbol": symbol, "strategy": strategy}
     print_header(days, len(df), filters)
+    _print_journal_sources(journal)
 
     if df.empty:
         print(f"  {Y}No closed trades in the selected range.{RST}\n")
@@ -799,15 +841,17 @@ def run_report(days: int = 30, symbol: str = None, strategy: str = None):
     print_daily_summary(df)
 
 
-def run_weekly(offset: int = 0, symbol: str = None, strategy: str = None):
+def run_weekly(offset: int = 0, symbol: str = None, strategy: str = None,
+               journal: str = None):
     start, end = week_bounds(offset)
     prev_start, prev_end = week_bounds(offset + 1)
 
-    df = load_trades_window(start, end, symbol, strategy)
-    prev_df = load_trades_window(prev_start, prev_end, symbol, strategy)
+    df = load_trades_window(start, end, symbol, strategy, journal)
+    prev_df = load_trades_window(prev_start, prev_end, symbol, strategy, journal)
 
     filters = {"symbol": symbol, "strategy": strategy}
     print_week_header(start, end, len(df), filters, offset)
+    _print_journal_sources(journal)
 
     if df.empty:
         print(f"  {Y}No closed trades in {start.strftime('%b %d')} → "
@@ -843,33 +887,37 @@ def main():
                         help="Saturday weekly review: Mon–Sat with WoW compare + takeaways")
     parser.add_argument("--week-offset", type=int, default=0,
                         help="0 = current week, 1 = previous, etc. (only with --weekly)")
+    parser.add_argument("--journal", type=str, default=None,
+                        help="Substring filter on journal filename "
+                             "(e.g. '1000' → only trade_journal_config_live_1000.csv). "
+                             "Default: merge all trade_journal*.csv")
     args = parser.parse_args()
 
     if args.weekly:
         if args.live:
             while _running:
                 clear()
-                run_weekly(args.week_offset, args.symbol, args.strategy)
+                run_weekly(args.week_offset, args.symbol, args.strategy, args.journal)
                 print(f"  {DIM}Refreshing in {args.interval}s  (Ctrl+C to exit){RST}")
                 for _ in range(args.interval * 2):
                     if not _running:
                         break
                     time.sleep(0.5)
         else:
-            run_weekly(args.week_offset, args.symbol, args.strategy)
+            run_weekly(args.week_offset, args.symbol, args.strategy, args.journal)
         return
 
     if args.live:
         while _running:
             clear()
-            run_report(args.days, args.symbol, args.strategy)
+            run_report(args.days, args.symbol, args.strategy, args.journal)
             print(f"  {DIM}Refreshing in {args.interval}s  (Ctrl+C to exit){RST}")
             for _ in range(args.interval * 2):
                 if not _running:
                     break
                 time.sleep(0.5)
     else:
-        run_report(args.days, args.symbol, args.strategy)
+        run_report(args.days, args.symbol, args.strategy, args.journal)
 
 
 if __name__ == "__main__":
