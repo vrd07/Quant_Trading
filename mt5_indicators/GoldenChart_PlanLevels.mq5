@@ -25,6 +25,19 @@ input int    InpRefreshSec  = 2;              // Poll interval (seconds)
 const string PFX = "GC_PLAN_";
 
 //+------------------------------------------------------------------+
+//| Match a CSV symbol against the chart symbol, ignoring the broker  |
+//| suffix (e.g. CSV "XAUUSD" matches chart "XAUUSDs" / "XAUUSD.m").  |
+//+------------------------------------------------------------------+
+bool SymbolMatches(const string csvSym, const string chartSym)
+{
+   if(csvSym == chartSym) return true;
+   if(StringLen(csvSym) == 0) return false;
+   if(StringFind(chartSym, csvSym) == 0) return true;   // chart has a suffix
+   if(StringFind(csvSym, chartSym) == 0) return true;   // csv has a suffix
+   return false;
+}
+
+//+------------------------------------------------------------------+
 int OnInit()
 {
    IndicatorSetString(INDICATOR_SHORTNAME, "GoldenChart Plan Levels");
@@ -109,7 +122,7 @@ void RefreshPlans()
       int n = StringSplit(line, sep, p);
       if(n < 7) continue;
       if(p[0] == "symbol") continue;                       // header
-      if(!InpAllSymbols && p[0] != _Symbol) continue;      // other symbol
+      if(!InpAllSymbols && !SymbolMatches(p[0], _Symbol)) continue; // other symbol
 
       long exp = (long)StringToInteger(p[6]);
       if(exp > 0 && exp <= now) continue;                  // expired plan
