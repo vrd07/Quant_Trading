@@ -1,12 +1,7 @@
 {
   "symbol": "BTCUSD",
-<<<<<<< HEAD
-  "generated_at": "2026-05-19T04:33:04.072032+00:00",
-  "valid_until": "2026-05-20T04:33:04.072032+00:00",
-=======
-  "generated_at": "2026-05-19T09:17:44.993174+00:00",
-  "valid_until": "2026-05-20T09:17:44.993174+00:00",
->>>>>>> 6dca34796b899e7d5217616dab007a294e6d995c
+  "generated_at": "2026-05-23T15:07:58.693654+00:00",
+  "valid_until": "2026-05-24T15:07:58.693654+00:00",
   "regime": "RANGE",
   "confidence": 0.52,
   "classifier": "rule-based (no features)",

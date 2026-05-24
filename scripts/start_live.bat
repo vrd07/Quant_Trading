@@ -23,11 +23,7 @@ cd /d "%~dp0.."
 ::  because CR is never a line/token delimiter — bites on every CRLF-saved file.)
 set "ACTIVE_CONFIG=config\config_live_10000.yaml"
 if exist "config\ACTIVE_CONFIG" (
-    for /f "usebackq tokens=* delims=" %%i in ("config\ACTIVE_CONFIG") do (
-        set "ACTIVE_CONFIG=%%i"
-        goto :active_config_loaded
-    )
-    :active_config_loaded
+    for /f "usebackq tokens=* delims=" %%i in ("config\ACTIVE_CONFIG") do set "ACTIVE_CONFIG=%%i"
 )
 
 set "CONFIG="
@@ -222,8 +218,8 @@ if !errorlevel! equ 0 (
 
 :: ── Telegram bot scheduler (optional — needs trading_bot\.env) ──
 if exist "trading_bot\.env" (
-    :: Reap any prior scheduler so it can't keep polling the old namespaced
-    :: state file (CONFIG is frozen at process start).
+    REM Reap any prior scheduler so it can't keep polling the old namespaced
+    REM state file. CONFIG is frozen at process start.
     powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and $_.CommandLine -like '*trading_bot.scheduler*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
     echo   [INFO] Launching Telegram bot scheduler...
     start "QuantTelegramBot" /min cmd /c "python -m trading_bot.scheduler >> logs\telegram_bot.log 2>&1"
