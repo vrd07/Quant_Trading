@@ -317,12 +317,12 @@ strategies:
     # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
     session_filter_enabled: true
     allowed_sessions: [[0,23]]   # 2026-05-05: user directive — 24h play (Kalman has daily setup + accuracy)
-    ema_confirm_enabled: true
-    macd_confirmation: true
+    ema_confirm_enabled: false
+    macd_confirmation: false
     kalman_accel_enabled: false
     stoch_confirm_enabled: false
     range_rsi_buy: 42
-    range_rsi_sell: 65
+    range_rsi_sell: 58
 
   # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
   # Mini Medallion v2: Optimized from backtest analysis
@@ -608,7 +608,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-23_news.csv
+    csv_path: news/2026-05-22_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

@@ -162,7 +162,22 @@ class TradingSystem:
         )
         self.live_monitor.install_log_handler()
         self.live_monitor.set_status("STARTING", "Initialising trading system...")
-        
+
+        # Chart signal exporter — writes planned entry/SL/TP to MT5 Common Files
+        # so GoldenChart_PlanLevels.mq5 can draw them on the chart. Pure
+        # cosmetics: any failure here must never affect the trading loop.
+        self.chart_signals = None
+        try:
+            _cs_cfg = (self.config.get('chart_signals') or {})
+            if _cs_cfg.get('enabled', True):
+                from mt5_bridge.chart_signal_export import ChartSignalExporter
+                self.chart_signals = ChartSignalExporter(
+                    data_dir=_cs_cfg.get('data_dir'),
+                    ttl_minutes=int(_cs_cfg.get('ttl_minutes', 30)),
+                )
+        except Exception:
+            self.chart_signals = None
+
         # State
         self.running = False
         self.last_state_save = datetime.now(timezone.utc)
@@ -1126,6 +1141,20 @@ class TradingSystem:
                         tp=float(getattr(signal, "take_profit", 0) or 0),
                         status="RECEIVED",
                         reason=str(signal.metadata.get("reason", "")),
+                    )
+                except Exception:
+                    pass
+
+            # --- chart plan markers: export planned entry/SL/TP for MT5 ---
+            if self.chart_signals is not None:
+                try:
+                    self.chart_signals.add_signal(
+                        symbol=signal.symbol.ticker if signal.symbol else "",
+                        side=getattr(signal.side, "value", str(signal.side)),
+                        entry=float(getattr(signal, "entry_price", 0) or 0),
+                        sl=float(getattr(signal, "stop_loss", 0) or 0),
+                        tp=float(getattr(signal, "take_profit", 0) or 0),
+                        label=signal.strategy_name or "signal",
                     )
                 except Exception:
                     pass
