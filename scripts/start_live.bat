@@ -117,7 +117,7 @@ echo   Time:   %date% %time:~0,5%
 echo ============================================================
 echo.
 
-:: ── Runtime Risk Setup (lot size / max loss per trade / daily loss) ─
+:: ── Runtime Risk Setup (lot size / max loss / daily loss / max positions) ─
 if /i "!FORCE!"=="false" (
     python scripts\runtime_setup.py --config "!CONFIG!"
     if errorlevel 1 (

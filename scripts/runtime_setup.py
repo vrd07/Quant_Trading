@@ -6,6 +6,7 @@ Interactive runtime setup. Prompts the user for:
   4. Max daily loss (USD)
   5. Max total drawdown (USD)
   6. Max daily profit (USD)
+  7. Max concurrent positions
 
 Writes the chosen values to config/runtime_overrides.yaml, which is merged
 on top of the selected config by src/main.py at startup.
@@ -49,6 +50,22 @@ def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> 
             val = float(raw)
         except ValueError:
             print("  Invalid number, try again.")
+            continue
+        if minimum is not None and val < minimum:
+            print(f"  Must be >= {minimum}.")
+            continue
+        return val
+
+
+def _prompt_int(prompt: str, default: int, minimum: int | None = None) -> int:
+    while True:
+        raw = input(f"{prompt} [default: {default}]: ").strip()
+        if raw == "":
+            return default
+        try:
+            val = int(raw)
+        except ValueError:
+            print("  Invalid integer, try again.")
             continue
         if minimum is not None and val < minimum:
             print(f"  Must be >= {minimum}.")
@@ -221,6 +238,17 @@ def main() -> int:
         print("  => Daily profit target disabled")
     print()
 
+    # ── Max concurrent positions ──
+    print("--- Step 6: Max concurrent positions ---")
+    default_max_positions = int(config["risk"].get("max_positions", 1) or 1)
+    max_positions = _prompt_int(
+        "  Max open positions at once",
+        default=default_max_positions,
+        minimum=1,
+    )
+    print(f"  => Risk engine will reject new orders once {max_positions} position(s) are open")
+    print()
+
     # ── Build overrides ──
     risk_per_trade_pct = max_loss_trade / balance if balance else default_risk_pct
 
@@ -241,6 +269,7 @@ def main() -> int:
             "max_drawdown_pct": dd_pct,
             "absolute_max_drawdown_usd": max_drawdown_usd,
             "max_daily_profit_usd": max_daily_profit,
+            "max_positions": max_positions,
         },
     }
 
@@ -255,6 +284,7 @@ def main() -> int:
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print(f"   Max drawdown    : ${max_drawdown_usd:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))
+    print(f"   Max positions   : {max_positions}")
     print("=" * 60)
     print()
     print("!" * 60)
