@@ -76,27 +76,57 @@ STRATEGY_CLASS_MAP = {
 }
 
 
+# Minutes per timeframe — single source of truth for resample math here and in
+# src/backtest/ensemble_engine.py (kept identical so standalone == ensemble).
+_TF_MINUTES = {"1m": 1, "5m": 5, "15m": 15, "30m": 30, "1h": 60, "4h": 240, "1d": 1440}
+
+
 def load_historical_data(symbol: str, timeframe: str = "5m") -> pd.DataFrame:
-    data_files = [
-        Path(f"data/historical/{symbol}_{timeframe}_real.csv"),
-        Path(f"data/historical/{symbol}_{timeframe}.csv"),
-        Path(f"data/historical/{symbol}_{timeframe}_trending.csv"),
-        Path(f"data/historical/{symbol}_{timeframe}_ranging.csv"),
-    ]
+    """Load bars for `symbol` at `timeframe`.
 
-    for data_file in data_files:
-        if data_file.exists():
-            print(f"  Loading data from {data_file}")
-            df = pd.read_csv(data_file, parse_dates=['timestamp'], index_col='timestamp')
-            return df
+    Single source of truth: the canonical 5m CSV. Any timeframe coarser than 5m
+    is derived by resampling on load (label/closed="left"), exactly matching the
+    ensemble engine and the live DataEngine. We never read a separate per-TF
+    `_{tf}_real.csv` — those drift from the 5m series and were the cause of the
+    kalman sign-flip (native-15m said -52%, resampled-from-5m said +40%).
+    """
+    tf_min = _TF_MINUTES.get(timeframe)
 
-    print(f"  No historical data found for {symbol}")
-    print(f"\nSearched locations:")
-    for f in data_files:
-        print(f"  - {f}")
-    print(f"\nTo generate sample data:")
-    print(f"  python scripts/generate_sample_data.py")
-    sys.exit(1)
+    # 5m and sub-5m: load a native file (can't manufacture finer bars from 5m).
+    if tf_min is None or tf_min <= 5:
+        data_files = [
+            Path(f"data/historical/{symbol}_{timeframe}_real.csv"),
+            Path(f"data/historical/{symbol}_{timeframe}.csv"),
+            Path(f"data/historical/{symbol}_{timeframe}_trending.csv"),
+            Path(f"data/historical/{symbol}_{timeframe}_ranging.csv"),
+        ]
+        for data_file in data_files:
+            if data_file.exists():
+                print(f"  Loading data from {data_file}")
+                return pd.read_csv(data_file, parse_dates=['timestamp'], index_col='timestamp')
+
+        print(f"  No historical data found for {symbol}")
+        print(f"\nSearched locations:")
+        for f in data_files:
+            print(f"  - {f}")
+        print(f"\nTo generate sample data:")
+        print(f"  python scripts/generate_sample_data.py")
+        sys.exit(1)
+
+    # Coarser than 5m: derive from the canonical 5m series.
+    src = Path(f"data/historical/{symbol}_5m_real.csv")
+    if not src.exists():
+        print(f"  No canonical 5m source for {symbol} at {src}")
+        print(f"  ({timeframe} bars are derived from 5m — refresh it with "
+              f"scripts/refresh_historical_data.py)")
+        sys.exit(1)
+    print(f"  Loading data from {src} → resampling to {timeframe}")
+    df = pd.read_csv(src, parse_dates=['timestamp'], index_col='timestamp')
+    out = df.resample(f"{tf_min}min", label="left", closed="left").agg({
+        "open": "first", "high": "max", "low": "min",
+        "close": "last", "volume": "sum",
+    }).dropna(subset=["open", "high", "low", "close"])
+    return out
 
 
 def create_symbol(symbol_name: str, config: dict) -> Symbol:
