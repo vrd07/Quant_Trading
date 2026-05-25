@@ -341,7 +341,10 @@ class DataEngine:
 
             try:
                 df = bars_base.set_index('timestamp')
-                resampled = df.resample(resample_rule).agg({
+                # label/closed="left" is explicit (not pandas-default) so live
+                # higher-TF bars align with the epoch-floored tick aggregation in
+                # _BarBuilder._align_to_period AND the backtest/ensemble resample.
+                resampled = df.resample(resample_rule, label='left', closed='left').agg({
                     'open': 'first', 'high': 'max', 'low': 'min',
                     'close': 'last', 'volume': 'sum'
                 }).dropna()
@@ -389,7 +392,8 @@ class DataEngine:
             
             try:
                 df = bars_1m.set_index('timestamp')
-                resampled = df.resample(resample_rule).agg({
+                # label/closed="left" explicit — see _build_higher_tf_from_base.
+                resampled = df.resample(resample_rule, label='left', closed='left').agg({
                     'open': 'first',
                     'high': 'max',
                     'low': 'min',
