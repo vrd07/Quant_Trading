@@ -131,6 +131,10 @@ trading_bot/
 !config/backtest_grids/README.md
 !mt5_bridge/README_SETUP.md
 
+# Keep: committed weekly reports (Saturday automation writes here)
+!docs/weekly/
+!docs/weekly/*.md
+
 # ============================================
 # Generated Images & Charts (regenerable from scripts)
 # ============================================
