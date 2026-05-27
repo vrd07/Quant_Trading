@@ -249,6 +249,16 @@ def main() -> int:
     print(f"  => Risk engine will reject new orders once {max_positions} position(s) are open")
     print()
 
+    # ── Directional lock (The5ers no-hedge rule) ──
+    print("--- Step 7: Directional lock (no hedging) ---")
+    print("  When ON, the bot refuses a SELL while a BUY is open (and vice-versa),")
+    print("  so you never hold opposing positions. Turn OFF to allow both directions")
+    print("  open at once (hedging) up to your max-positions limit.")
+    default_dir_lock = bool(config["risk"].get("directional_lock", True))
+    directional_lock = _prompt_yn("  Enable directional lock?", default=default_dir_lock)
+    print(f"  => Directional lock {'ON (no hedging)' if directional_lock else 'OFF (hedging allowed)'}")
+    print()
+
     # ── Build overrides ──
     risk_per_trade_pct = max_loss_trade / balance if balance else default_risk_pct
 
@@ -270,6 +280,7 @@ def main() -> int:
             "absolute_max_drawdown_usd": max_drawdown_usd,
             "max_daily_profit_usd": max_daily_profit,
             "max_positions": max_positions,
+            "directional_lock": directional_lock,
         },
     }
 
@@ -285,6 +296,7 @@ def main() -> int:
     print(f"   Max drawdown    : ${max_drawdown_usd:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))
     print(f"   Max positions   : {max_positions}")
+    print(f"   Directional lock: {'ON (no hedging)' if directional_lock else 'OFF (hedging allowed)'}")
     print("=" * 60)
     print()
     print("!" * 60)
