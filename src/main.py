@@ -1220,8 +1220,14 @@ class TradingSystem:
                     pos_side = getattr(pos, 'side', None)
                     if pos_side is None:
                         continue
-                    pos_sym = pos.symbol.ticker if getattr(pos, 'symbol', None) else None
-                    if pos_sym != signal_sym:
+                    # Match on symbol, tolerant of broker suffixes (e.g. the
+                    # signal's "XAUUSD" vs the broker position's "XAUUSDs").
+                    # The existing directional lock is symbol-agnostic; we keep
+                    # a prefix match so multi-symbol configs still flip only the
+                    # right instrument.
+                    pos_sym = (pos.symbol.ticker if getattr(pos, 'symbol', None) else '') or ''
+                    _ps, _ss = pos_sym.upper(), signal_sym.upper()
+                    if not (_ps.startswith(_ss) or _ss.startswith(_ps)):
                         continue
                     is_long = pos_side == _PositionSide.LONG
                     is_short = pos_side == _PositionSide.SHORT
