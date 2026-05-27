@@ -116,6 +116,20 @@ risk:
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
                                       # would push daily loss past 85% of $5 = $4.25
 
+  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here
+  # so TP distance always exceeds SL distance (never a sub-1R target).
+  kalman_min_tp_rr: 2.0
+
+  # ── Confidence-based reversal / flip (2026-05-27) ────────────────
+  # An opposite-direction signal with higher confidence than an open bot
+  # position closes the weaker trade and takes the stronger one at once,
+  # bypassing the directional lock + reversal buffer.
+  confidence_flip:
+    enabled: true
+    min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
+
   max_positions: 1                # Micro account — 1 position at a time
   max_daily_trades: 8             # Conservative: limited trades on micro account
   max_exposure_per_symbol_pct: 5.0

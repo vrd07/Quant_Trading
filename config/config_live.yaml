@@ -60,6 +60,20 @@ risk:
   absolute_max_loss_usd: 250        # Daily loss limit
   max_daily_profit_usd: 135         # $133.33/day to hit $400 in 3 days
   
+  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here
+  # so TP distance always exceeds SL distance (never a sub-1R target).
+  kalman_min_tp_rr: 2.0
+
+  # ── Confidence-based reversal / flip (2026-05-27) ────────────────
+  # An opposite-direction signal with higher confidence than an open bot
+  # position closes the weaker trade and takes the stronger one at once,
+  # bypassing the directional lock + reversal buffer.
+  confidence_flip:
+    enabled: true
+    min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
+
   max_positions: 2                  # Restrict to two trades at a time
   max_daily_trades: 50
   max_exposure_per_symbol_pct: 5.0    # 500% - needed for small accounts on high-priced instruments (0.01 BTCUSD = ~$66k notional vs $154 equity)

@@ -120,6 +120,20 @@ risk:
                                       # would push daily loss past 85% of $295 = $250.75
                                       # Gives $44 buffer for slippage / concurrent fills
 
+  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here
+  # so TP distance always exceeds SL distance (never a sub-1R target).
+  kalman_min_tp_rr: 2.0
+
+  # ── Confidence-based reversal / flip (2026-05-27) ────────────────
+  # An opposite-direction signal with higher confidence than an open bot
+  # position closes the weaker trade and takes the stronger one at once,
+  # bypassing the directional lock + reversal buffer.
+  confidence_flip:
+    enabled: true
+    min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
+
   max_positions: 2
   max_daily_trades: 15                # Reduced from 50 — audit: 21 trades/day × $350 daily StdDev ≫ $295 limit
   max_exposure_per_symbol_pct: 5.0
