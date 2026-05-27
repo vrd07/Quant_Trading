@@ -195,6 +195,13 @@ class TradingSystem:
         self._last_close_time: Dict[str, datetime] = {}  # 'BUY' or 'SELL' → close timestamp
         self._reversal_buffer_min: int = 5
 
+        # Bot directional lock (no-hedge rule): when True, a SELL is rejected while
+        # a BUY is open and vice-versa. Set at startup via scripts/runtime_setup.py
+        # (risk.directional_lock); defaults to True to preserve historical behavior.
+        self._directional_lock: bool = bool(
+            self.config.get('risk', {}).get('directional_lock', True)
+        )
+
         # Confidence of every bot position we open, keyed by symbol → ticket → conf.
         # Used by the confidence-based reversal (flip): an opposite-direction
         # signal with HIGHER confidence closes the weaker open position and takes
@@ -1321,26 +1328,28 @@ class TradingSystem:
 
             # ── The5ers Rule: Directional Lock (bot positions) ────────────
             # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
-            for pos in mt5_positions.values():
-                pos_side = getattr(pos, 'side', None)
-                if pos_side is None:
-                    continue
-                is_long = pos_side == _PositionSide.LONG
-                is_short = pos_side == _PositionSide.SHORT
-                if (signal_side == _OrderSide.BUY and is_short) or \
-                   (signal_side == _OrderSide.SELL and is_long):
-                    self.logger.info(
-                        f"[The5ers] Directional lock: {'SHORT' if is_short else 'LONG'} open, "
-                        f"rejecting {signal_side.value} signal",
-                        strategy=signal.strategy_name,
-                        symbol=signal_sym,
-                    )
-                    if self.live_monitor is not None:
-                        self.live_monitor.mark_last_signal(
-                            "VETOED",
-                            f"Directional lock — {'SHORT' if is_short else 'LONG'} already open",
+            # Toggled at startup via risk.directional_lock (runtime_setup.py).
+            if self._directional_lock:
+                for pos in mt5_positions.values():
+                    pos_side = getattr(pos, 'side', None)
+                    if pos_side is None:
+                        continue
+                    is_long = pos_side == _PositionSide.LONG
+                    is_short = pos_side == _PositionSide.SHORT
+                    if (signal_side == _OrderSide.BUY and is_short) or \
+                       (signal_side == _OrderSide.SELL and is_long):
+                        self.logger.info(
+                            f"[The5ers] Directional lock: {'SHORT' if is_short else 'LONG'} open, "
+                            f"rejecting {signal_side.value} signal",
+                            strategy=signal.strategy_name,
+                            symbol=signal_sym,
                         )
-                    return
+                        if self.live_monitor is not None:
+                            self.live_monitor.mark_last_signal(
+                                "VETOED",
+                                f"Directional lock — {'SHORT' if is_short else 'LONG'} already open",
+                            )
+                        return
             
             # ── The5ers Rule: 5-Minute Reversal Buffer ────────────────────
             # After closing a position in one direction, block the opposite
@@ -2161,6 +2170,8 @@ def main():
         else:
             print(f"  Symbols / Lot Size:  (none enabled)")
         print(f"  Max Positions:       {_max_pos}")
+        _dir_lock = bool(_risk.get('directional_lock', True))
+        print(f"  Directional Lock:    {'ON (no hedging)' if _dir_lock else 'OFF (hedging allowed)'}")
         print("=" * 60)
 
         try:
