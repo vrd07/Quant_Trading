@@ -1193,66 +1193,21 @@ class TradingSystem:
                 # Fallback to portfolio engine if MT5 fetch fails
                 mt5_positions = {str(p.position_id): p for p in self.portfolio_engine.get_all_positions()}
 
-            # ── Kalman confidence-based position-count gate ───────────────
-            # Low-confidence kalman_regime signals are limited to 1 concurrent
-            # position; high-confidence (>= threshold) signals may stack up to
-            # risk.max_positions (still enforced by RiskEngine).
-            if signal.strategy_name == "kalman_regime":
-                conf = float(signal.metadata.get('confidence', signal.strength * 100.0))
-                conf_threshold = float(signal.metadata.get('high_confidence_threshold', 90.0))
-                if conf < conf_threshold:
-                    kalman_open = sum(
-                        1 for pos in mt5_positions.values()
-                        if (getattr(pos, 'metadata', None) or {}).get('strategy') == 'kalman_regime'
-                    )
-                    if kalman_open >= 1:
-                        self.logger.info(
-                            f"[KalmanRegime] Low confidence ({conf:.1f} < {conf_threshold:.1f}): "
-                            f"{kalman_open} kalman position(s) open, signal suppressed",
-                            strategy=signal.strategy_name,
-                            symbol=signal.symbol.ticker if signal.symbol else '?'
-                        )
-                        if self.live_monitor is not None:
-                            self.live_monitor.mark_last_signal(
-                                "VETOED",
-                                f"Low Kalman confidence ({conf:.1f}<{conf_threshold:.1f}) with position open",
-                            )
-                        return
-
-            # ── Manual Trade Directional Lock ─────────────────────────────
-            # If a manual position is open, block bot signals in the opposite
-            # direction. Same-direction signals are allowed (stacking).
             from src.core.constants import OrderSide as _OrderSide, PositionSide as _PositionSide
             signal_side = signal.side  # OrderSide.BUY or OrderSide.SELL
             signal_sym = signal.symbol.ticker if signal.symbol else '?'
 
-            if self._manual_directional_lock and self._manual_pos_tracker.has_manual_positions:
-                manual_dirs = self._manual_pos_tracker.get_manual_directions(symbol=signal_sym)
-                if manual_dirs:
-                    # BUY signal conflicts with SHORT manual; SELL conflicts with LONG manual
-                    if (signal_side == _OrderSide.BUY and 'SHORT' in manual_dirs) or \
-                       (signal_side == _OrderSide.SELL and 'LONG' in manual_dirs):
-                        conflicting = 'SHORT' if 'SHORT' in manual_dirs else 'LONG'
-                        self.logger.info(
-                            f"[ManualLock] {conflicting} manual trade open on {signal_sym} "
-                            f"→ {signal_side.value} bot signal blocked",
-                            strategy=signal.strategy_name,
-                            symbol=signal_sym,
-                        )
-                        if self.live_monitor is not None:
-                            self.live_monitor.mark_last_signal(
-                                "VETOED",
-                                f"Manual {conflicting} open on {signal_sym} — opposite signal blocked",
-                            )
-                        return
-
             # ── Confidence-Based Reversal (flip) ──────────────────────────
+            # Runs FIRST, before the Kalman position gate and directional lock.
             # If an opposite-direction BOT position is open but THIS signal has
             # higher confidence, close the weaker position and take the stronger
-            # trade immediately — bypassing the directional lock + reversal
-            # buffer below. Only fires when we actually know the open position's
-            # confidence (recorded at fire time); otherwise we fall through to
-            # the normal directional lock (reject), which is the safe default.
+            # trade immediately — bypassing the gate, directional lock and the
+            # reversal buffer below. Only fires when we actually know the open
+            # position's confidence (recorded at fire time); otherwise we fall
+            # through to the normal locks (reject), which is the safe default.
+            # Closing the weaker position and popping it from mt5_positions makes
+            # the Kalman count gate below see one fewer position, so the flipped
+            # trade is not re-suppressed.
             flip_executed = False
             flip_cfg = (self.config.get('risk', {}) or {}).get('confidence_flip', {}) or {}
             if flip_cfg.get('enabled', True):
@@ -1308,6 +1263,55 @@ class TradingSystem:
                                     "FLIP",
                                     f"Reversed weaker opposite (conf {opp_conf:.1f} → {new_conf:.1f})",
                                 )
+
+            # ── Kalman confidence-based position-count gate ───────────────
+            # Low-confidence kalman_regime signals are limited to 1 concurrent
+            # position; high-confidence (>= threshold) signals may stack up to
+            # risk.max_positions (still enforced by RiskEngine).
+            if signal.strategy_name == "kalman_regime":
+                conf = float(signal.metadata.get('confidence', signal.strength * 100.0))
+                conf_threshold = float(signal.metadata.get('high_confidence_threshold', 90.0))
+                if conf < conf_threshold:
+                    kalman_open = sum(
+                        1 for pos in mt5_positions.values()
+                        if (getattr(pos, 'metadata', None) or {}).get('strategy') == 'kalman_regime'
+                    )
+                    if kalman_open >= 1:
+                        self.logger.info(
+                            f"[KalmanRegime] Low confidence ({conf:.1f} < {conf_threshold:.1f}): "
+                            f"{kalman_open} kalman position(s) open, signal suppressed",
+                            strategy=signal.strategy_name,
+                            symbol=signal.symbol.ticker if signal.symbol else '?'
+                        )
+                        if self.live_monitor is not None:
+                            self.live_monitor.mark_last_signal(
+                                "VETOED",
+                                f"Low Kalman confidence ({conf:.1f}<{conf_threshold:.1f}) with position open",
+                            )
+                        return
+
+            # ── Manual Trade Directional Lock ─────────────────────────────
+            # If a manual position is open, block bot signals in the opposite
+            # direction. Same-direction signals are allowed (stacking).
+            if self._manual_directional_lock and self._manual_pos_tracker.has_manual_positions:
+                manual_dirs = self._manual_pos_tracker.get_manual_directions(symbol=signal_sym)
+                if manual_dirs:
+                    # BUY signal conflicts with SHORT manual; SELL conflicts with LONG manual
+                    if (signal_side == _OrderSide.BUY and 'SHORT' in manual_dirs) or \
+                       (signal_side == _OrderSide.SELL and 'LONG' in manual_dirs):
+                        conflicting = 'SHORT' if 'SHORT' in manual_dirs else 'LONG'
+                        self.logger.info(
+                            f"[ManualLock] {conflicting} manual trade open on {signal_sym} "
+                            f"→ {signal_side.value} bot signal blocked",
+                            strategy=signal.strategy_name,
+                            symbol=signal_sym,
+                        )
+                        if self.live_monitor is not None:
+                            self.live_monitor.mark_last_signal(
+                                "VETOED",
+                                f"Manual {conflicting} open on {signal_sym} — opposite signal blocked",
+                            )
+                        return
 
             # ── The5ers Rule: Directional Lock (bot positions) ────────────
             # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
