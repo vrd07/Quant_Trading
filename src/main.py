@@ -195,6 +195,13 @@ class TradingSystem:
         self._last_close_time: Dict[str, datetime] = {}  # 'BUY' or 'SELL' → close timestamp
         self._reversal_buffer_min: int = 5
 
+        # Confidence of every bot position we open, keyed by symbol → ticket → conf.
+        # Used by the confidence-based reversal (flip): an opposite-direction
+        # signal with HIGHER confidence closes the weaker open position and takes
+        # the stronger trade immediately. Stale entries are harmless — they are
+        # only consulted when a matching opposing position is actually open.
+        self._open_position_confidence: Dict[str, Dict[str, float]] = {}
+
         # Carmack + TJ: session state grouped into one visible object,
         # managed by a focused SessionManager (not inline in main loop).
         self._session_mgr = SessionManager(self.config)
@@ -1239,6 +1246,69 @@ class TradingSystem:
                             )
                         return
 
+            # ── Confidence-Based Reversal (flip) ──────────────────────────
+            # If an opposite-direction BOT position is open but THIS signal has
+            # higher confidence, close the weaker position and take the stronger
+            # trade immediately — bypassing the directional lock + reversal
+            # buffer below. Only fires when we actually know the open position's
+            # confidence (recorded at fire time); otherwise we fall through to
+            # the normal directional lock (reject), which is the safe default.
+            flip_executed = False
+            flip_cfg = (self.config.get('risk', {}) or {}).get('confidence_flip', {}) or {}
+            if flip_cfg.get('enabled', True):
+                new_conf = float(signal.metadata.get('confidence',
+                                  (signal.strength or 0.0) * 100.0))
+                margin = float(flip_cfg.get('min_confidence_margin', 0.0))
+
+                opposing = []
+                for tk, pos in mt5_positions.items():
+                    pos_side = getattr(pos, 'side', None)
+                    if pos_side is None:
+                        continue
+                    pos_sym = pos.symbol.ticker if getattr(pos, 'symbol', None) else None
+                    if pos_sym != signal_sym:
+                        continue
+                    is_long = pos_side == _PositionSide.LONG
+                    is_short = pos_side == _PositionSide.SHORT
+                    if (signal_side == _OrderSide.BUY and is_short) or \
+                       (signal_side == _OrderSide.SELL and is_long):
+                        opposing.append((str(tk), pos))
+
+                if opposing:
+                    conf_map = self._open_position_confidence.get(signal_sym, {})
+                    known = [conf_map[tk] for tk, _ in opposing if tk in conf_map]
+                    opp_conf = max(known) if known else None
+
+                    if opp_conf is not None and new_conf > opp_conf + margin:
+                        closed_any = False
+                        for tk, pos in opposing:
+                            try:
+                                ticket = pos.metadata.get('mt5_ticket', tk) \
+                                    if hasattr(pos, 'metadata') and pos.metadata else tk
+                                self.connector.close_position(str(ticket))
+                                conf_map.pop(tk, None)
+                                mt5_positions.pop(tk, None)
+                                closed_any = True
+                                self.logger.info(
+                                    f"[ConfidenceFlip] Closed weaker {'SHORT' if signal_side == _OrderSide.BUY else 'LONG'} "
+                                    f"(conf={opp_conf:.1f}) to take {signal_side.value} "
+                                    f"(conf={new_conf:.1f}) on {signal_sym}",
+                                    strategy=signal.strategy_name,
+                                    symbol=signal_sym,
+                                )
+                            except Exception as _fe:
+                                self.logger.error(
+                                    f"[ConfidenceFlip] Failed to close ticket={tk}: {_fe}",
+                                    symbol=signal_sym,
+                                )
+                        if closed_any:
+                            flip_executed = True
+                            if self.live_monitor is not None:
+                                self.live_monitor.mark_last_signal(
+                                    "FLIP",
+                                    f"Reversed weaker opposite (conf {opp_conf:.1f} → {new_conf:.1f})",
+                                )
+
             # ── The5ers Rule: Directional Lock (bot positions) ────────────
             # No SELL allowed if a BUY is open; no BUY allowed if a SELL is open.
             for pos in mt5_positions.values():
@@ -1269,7 +1339,7 @@ class TradingSystem:
                 'SELL' if signal_side == _OrderSide.BUY else 'BUY'
             )
             last_opposite_close = self._last_close_time.get(opposite_side_key)
-            if last_opposite_close is not None:
+            if not flip_executed and last_opposite_close is not None:
                 elapsed_min = (datetime.now(timezone.utc) - last_opposite_close).total_seconds() / 60.0
                 if elapsed_min < self._reversal_buffer_min:
                     self.logger.info(
@@ -1296,6 +1366,17 @@ class TradingSystem:
             )
             
             if order:
+                # Record this position's confidence so a future higher-confidence
+                # opposite signal can flip it (see Confidence-Based Reversal above).
+                try:
+                    _ticket = order.metadata.get('mt5_ticket') if getattr(order, 'metadata', None) else None
+                    if _ticket is not None:
+                        _conf = float(signal.metadata.get('confidence',
+                                       (signal.strength or 0.0) * 100.0))
+                        self._open_position_confidence.setdefault(signal_sym, {})[str(_ticket)] = _conf
+                except Exception:
+                    pass
+
                 self.logger.info(
                     "Signal executed",
                     strategy=signal.strategy_name,
@@ -1354,6 +1435,11 @@ class TradingSystem:
 
                 # Mark as processed immediately to avoid double-counting on retries
                 self._processed_deal_tickets.add(ticket)
+
+                # Drop any recorded flip-confidence for this ticket (closed now).
+                # Broker symbol may differ from our canonical key, so sweep all.
+                for _cm in self._open_position_confidence.values():
+                    _cm.pop(ticket, None)
 
                 realized_pnl = float(deal.get('profit', 0))
                 symbol_name = str(deal.get('symbol', ''))
