@@ -36,6 +36,28 @@ class RiskProcessor:
         'fibonacci_retracement': 'fibonacci_retracement',
     }
 
+    def _rr_tier(self, strength) -> tuple:
+        """
+        Resolve the reward-to-risk tier the risk engine wants for a signal,
+        derived from its 0–1 confidence. Single source of truth shared by the
+        Kalman TP sizing and the bottom RR-floor guard.
+
+        Returns (tier_name, rr_floor) where rr_floor is a Decimal.
+        """
+        rr_cfg = (self.config.get('risk', {}) or {}).get('rr_floors', {}) or {}
+        floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   1.0)))
+        floor_default     = Decimal(str(rr_cfg.get('default',     0.75)))
+        floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 0.5)))
+        th_confirmed   = float(rr_cfg.get('confirmed_strength_threshold',   0.7))
+        th_unconfirmed = float(rr_cfg.get('unconfirmed_strength_threshold', 0.4))
+
+        s = float(strength) if strength is not None else 0.5
+        if s >= th_confirmed:
+            return "CONFIRMED", floor_confirmed
+        elif s < th_unconfirmed:
+            return "UNCONFIRMED", floor_unconfirmed
+        return "DEFAULT", floor_default
+
     def calculate_stops(self, signal: Signal) -> Signal:
         """
         Attaches calculated stop_loss and take_profit to the Signal object inline.
@@ -53,14 +75,26 @@ class RiskProcessor:
         tp = None
 
         if strategy_name == 'kalman_regime':
+            # SL stays exactly as the user configured (sl_atr_multiplier × ATR).
+            # TP is NOT a fixed ATR multiple anymore — it is set to whatever R:R
+            # the risk engine wants for this confidence tier, then floored by
+            # `risk.kalman_min_tp_rr` so the reward ALWAYS strictly exceeds the
+            # risk (TP distance > SL distance ⇒ we always book net-positive R).
+            # tp_atr_multiplier is intentionally ignored here.
             atr = Decimal(str(signal.metadata.get('atr', 0)))
             sl_mult = Decimal(str(strat_cfg.get('sl_atr_multiplier', 2.5)))
-            tp_mult = Decimal(str(strat_cfg.get('tp_atr_multiplier', 2.0)))
-            
-            sl_dist = sl_mult * atr
-            tp_dist = tp_mult * atr
 
+            sl_dist = sl_mult * atr
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+
+            _, desired_rr = self._rr_tier(signal.strength)
+            # Hard invariant: TP must beat SL. Floor the risk-engine R:R above 1.
+            min_tp_rr = Decimal(str(
+                (self.config.get('risk', {}) or {}).get('kalman_min_tp_rr', 2.0)
+            ))
+            tp_rr = max(desired_rr, min_tp_rr)
+
+            tp_dist = sl_dist * tp_rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
         elif strategy_name == 'momentum_scalp':
@@ -348,20 +382,8 @@ class RiskProcessor:
         # Rejection (set SL/TP to None) is the explicit action when the
         # floor is breached — matches the prior fail-closed pattern.
         if sl is not None and tp is not None:
-            rr_cfg = (self.config.get('risk', {}) or {}).get('rr_floors', {}) or {}
-            floor_confirmed   = Decimal(str(rr_cfg.get('confirmed',   1.0)))
-            floor_default     = Decimal(str(rr_cfg.get('default',     0.75)))
-            floor_unconfirmed = Decimal(str(rr_cfg.get('unconfirmed', 0.5)))
-            th_confirmed   = float(rr_cfg.get('confirmed_strength_threshold',   0.7))
-            th_unconfirmed = float(rr_cfg.get('unconfirmed_strength_threshold', 0.4))
-
             strength = float(signal.strength) if signal.strength is not None else 0.5
-            if strength >= th_confirmed:
-                tier, rr_floor = "CONFIRMED", floor_confirmed
-            elif strength < th_unconfirmed:
-                tier, rr_floor = "UNCONFIRMED", floor_unconfirmed
-            else:
-                tier, rr_floor = "DEFAULT", floor_default
+            tier, rr_floor = self._rr_tier(signal.strength)
 
             final_risk = abs(entry - sl)
             final_reward = abs(entry - tp)
