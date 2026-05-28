@@ -135,6 +135,10 @@ trading_bot/
 !docs/weekly/
 !docs/weekly/*.md
 
+# Keep: strategy review reports
+!reports/
+!reports/*.md
+
 # ============================================
 # Generated Images & Charts (regenerable from scripts)
 # ============================================
