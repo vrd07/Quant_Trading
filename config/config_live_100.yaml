@@ -120,7 +120,7 @@ risk:
   # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
   # TP is risk-engine-driven off the confidence R:R tier, then floored here
   # so TP distance always exceeds SL distance (never a sub-1R target).
-  kalman_min_tp_rr: 2.0
+  kalman_min_tp_rr: 1.0
 
   # ── Confidence-based reversal / flip (2026-05-27) ────────────────
   # An opposite-direction signal with higher confidence than an open bot
@@ -302,7 +302,7 @@ strategies:
     entry_threshold: 2.0            # v2: lowered from 2.5 — more range entries
     trend_adx_min: 20               # v2: lowered from 22
     kalman_confirm_bars: 2          # Keep 2-bar confirmation (proven in v1)
-    min_signal_strength: 0.50
+    min_signal_strength: 0.70
     cooldown_bars: 2                # v2: 30 min cooldown (was 30 bars = 7.5hr!)
     atr_period: 14
     sl_atr_multiplier: 2.0          # 2026-05-15: 3.0 → 2.0 — user-requested 1:2 RR (SL 2.0, TP 4.0)
