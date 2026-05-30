@@ -1393,6 +1393,17 @@ class TradingSystem:
                         _conf = float(signal.metadata.get('confidence',
                                        (signal.strength or 0.0) * 100.0))
                         self._open_position_confidence.setdefault(signal_sym, {})[str(_ticket)] = _conf
+                        # Persist fire-time context (regime/strength/confidence)
+                        # so the journal isn't blind once MT5 reconstructs the
+                        # position from just its order comment at close.
+                        if self.trade_journal is not None:
+                            self.trade_journal.record_signal_context(
+                                _ticket,
+                                strategy=signal.strategy_name,
+                                regime=getattr(signal, 'regime', None),
+                                confidence=_conf,
+                                signal_strength=signal.strength,
+                            )
                 except Exception:
                     pass
 
