@@ -1,19 +1,19 @@
 # Weekly Report — 2026-05-25 → 2026-05-30
-_Generated 2026-05-30 04:47 UTC · config `config_live_5000`_
+_Generated 2026-05-30 14:30 UTC · config `config_live_5000`_
 
 ## Status: 🔴 ACTION NEEDED
 - ⚠️ Zero trades this week — verify bot is running and signals firing
 
 ## ML Regime Classifier
 ```
-  BTCUSD   RANGE   conf=74%  ML  n=37   bars=16704   age=10h    [ok]
-  BTCUSDS  RANGE   conf=52%  rule n=0    bars=0       age=10h    [ok]
-  ETHUSD   RANGE   conf=77%  ML  n=36   bars=16704   age=10h    [ok]
-  ETHUSDS  RANGE   conf=52%  rule n=0    bars=0       age=10h    [ok]
-  EURUSD   TREND   conf=55%  rule n=0    bars=11293   age=10h    [ok]
-  EURUSDS  RANGE   conf=52%  rule n=0    bars=0       age=10h    [ok]
-  XAUUSD   RANGE   conf=75%  ML  n=321  bars=90600   age=10h    [ok]
-  XAUUSDS  RANGE   conf=52%  rule n=0    bars=0       age=10h    [ok]
+  BTCUSD   RANGE   conf=74%  ML  n=37   bars=16704   age=20h    [ok]
+  BTCUSDS  RANGE   conf=52%  rule n=0    bars=0       age=20h    [ok]
+  ETHUSD   RANGE   conf=77%  ML  n=36   bars=16704   age=20h    [ok]
+  ETHUSDS  RANGE   conf=52%  rule n=0    bars=0       age=20h    [ok]
+  EURUSD   TREND   conf=55%  rule n=0    bars=11293   age=20h    [ok]
+  EURUSDS  RANGE   conf=52%  rule n=0    bars=0       age=20h    [ok]
+  XAUUSD   RANGE   conf=75%  ML  n=321  bars=90600   age=20h    [ok]
+  XAUUSDS  RANGE   conf=52%  rule n=0    bars=0       age=20h    [ok]
 ```
 - XAUUSD per-strategy performance scores: kalman_regime=-0.0109
 
