@@ -31,11 +31,12 @@ symbols:
     enabled: false
     pip_value: 0.1
     min_lot: 0.01
-    max_lot: 0.01             # Lowered max limit for crypto margin safety
+    max_lot: 0.07             # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
     leverage: 2               # Crypto 1:2
+    max_notional_pct: 0.5     # margin-aware ceiling: $2.5k notional/pos ($1.25k margin @1:2); governs over the price-blind lot count
     min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
     max_spread: 15.0          # $15.00 max spread threshold
 
@@ -44,11 +45,12 @@ symbols:
     enabled: false
     pip_value: 0.01
     min_lot: 0.01
-    max_lot: 0.01             # exchange min — margin-safe on $5K account
+    max_lot: 3.0              # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
     leverage: 5               # Crypto 1:5
+    max_notional_pct: 1.0     # margin-aware ceiling: $5k notional/pos ($1k margin @1:5); governs over the price-blind lot count
     min_stops_distance: 1.0   # $1.00 min distance for Ethereum
     max_spread: 3.0           # $3.00 max spread threshold
 

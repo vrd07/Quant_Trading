@@ -97,11 +97,26 @@ class PositionSizer:
         lot_step = symbol.lot_step
         position_size = (raw_size / lot_step).quantize(Decimal("1"), rounding=ROUND_DOWN) * lot_step
         
+        # Effective upper bound. A flat max_lot is not price-aware: a 0.01 lot is
+        # ~$700 of BTC but ~$23 of ETH, so the same lot count means very different
+        # risk across symbols. When max_notional_pct is set, also cap by a
+        # margin-aware notional budget (balance * pct worth of exposure); the
+        # binding ceiling is the tighter of static max_lot and the notional budget.
+        max_size = symbol.max_lot
+        if (symbol.max_notional_pct > 0
+                and entry_price > 0
+                and symbol.value_per_lot > 0):
+            notional_budget = account_balance * symbol.max_notional_pct
+            notional_ceiling = notional_budget / (entry_price * symbol.value_per_lot)
+            notional_ceiling = (notional_ceiling / lot_step).quantize(
+                Decimal("1"), rounding=ROUND_DOWN) * lot_step
+            max_size = min(max_size, notional_ceiling)
+
         # Apply min/max limits
-        position_size = max(symbol.min_lot, min(symbol.max_lot, position_size))
-        
+        position_size = max(symbol.min_lot, min(max_size, position_size))
+
         return position_size
-    
+
     def calculate_risk_amount(
         self,
         position_size: Decimal,

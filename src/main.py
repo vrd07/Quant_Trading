@@ -1969,7 +1969,9 @@ class TradingSystem:
                     min_lot=Decimal(str(config.get('min_lot', 0.01))),
                     max_lot=Decimal(str(config.get('max_lot', 100.0))),
                     lot_step=Decimal(str(config.get('lot_step', 0.01))),
-                    value_per_lot=Decimal(str(config.get('value_per_lot', 1)))
+                    value_per_lot=Decimal(str(config.get('value_per_lot', 1))),
+                    leverage=Decimal(str(config.get('leverage', 1))),
+                    max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
                 )
                 symbols.append(symbol)
         
