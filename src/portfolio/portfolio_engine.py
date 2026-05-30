@@ -284,6 +284,36 @@ class PortfolioEngine:
         unrealized = self.get_total_unrealized_pnl()
         return self.total_realized_pnl + unrealized
     
+    def _classify_exit_reason(self, position, exit_price) -> str:
+        """Best-effort exit attribution from the close price vs the original
+        SL/TP levels. Lets the journal tell apart take_profit / stop_loss /
+        breakeven / discretionary closes instead of a blanket 'closed_on_broker'.
+
+        Note: the trailing-stop manager modifies SL on the broker but not on our
+        in-memory Position, so a trailed/breakeven exit lands near entry and is
+        labelled 'breakeven' rather than 'stop_loss'.
+        """
+        try:
+            ep = Decimal(str(exit_price))
+            entry = position.entry_price
+            sl = position.stop_loss
+            tp = position.take_profit
+            if sl and entry:
+                tol = abs(entry - sl) * Decimal("0.2")
+            elif entry:
+                tol = entry * Decimal("0.001")
+            else:
+                tol = Decimal("0")
+            if tp and abs(ep - tp) <= tol:
+                return 'take_profit'
+            if sl and abs(ep - sl) <= tol:
+                return 'stop_loss'
+            if entry and abs(ep - entry) <= tol:
+                return 'breakeven'
+            return 'manual_close'
+        except Exception:
+            return 'closed_on_broker'
+
     def reconcile_with_mt5(self) -> Tuple[bool, List[str]]:
         """
         Reconcile portfolio state with MT5.
@@ -365,9 +395,16 @@ class PortfolioEngine:
                         )
 
                         broker_offset = getattr(self.connector, "broker_offset", timedelta(0))
+                        deal_price = Decimal(str(matching_deal.get('price', 0)))
+                        # Attribute the close (tp/sl/breakeven/manual) unless an
+                        # upstream path already set a more specific reason.
+                        if not position.metadata.get('exit_reason'):
+                            position.metadata['exit_reason'] = self._classify_exit_reason(
+                                position, deal_price
+                            )
                         self.close_position(
                             position_id=position.position_id,
-                            exit_price=Decimal(str(matching_deal.get('price', 0))),
+                            exit_price=deal_price,
                             exit_time=datetime.fromtimestamp(int(matching_deal.get('time', 0)), tz=timezone.utc) - broker_offset,
                             override_pnl=actual_pnl,
                         )
