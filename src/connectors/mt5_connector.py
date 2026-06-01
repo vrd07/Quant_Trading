@@ -635,6 +635,8 @@ class MT5Connector:
                 commission_per_lot=Decimal(str(sym_cfg.get('commission_per_lot', '0.0'))),
                 max_spread=Decimal(str(sym_cfg.get('max_spread', '999.0'))),
                 min_stops_distance=Decimal(str(sym_cfg.get('min_stops_distance', '1.0'))),
+                leverage=Decimal(str(sym_cfg.get('leverage', '1'))),
+                max_notional_pct=Decimal(str(sym_cfg.get('max_notional_pct', '0'))),
             )
         return self.symbols_cache[ticker]
     

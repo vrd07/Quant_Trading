@@ -52,6 +52,11 @@ class Symbol:
     max_spread: Decimal = Decimal("999.0")
     min_stops_distance: Decimal = Decimal("0.0")
     leverage: Decimal = Decimal("1")
+    # Optional margin-aware lot ceiling. When > 0, the PositionSizer may raise the
+    # static max_lot up to (balance * max_notional_pct) / (price * value_per_lot)
+    # lots, so risk-based sizing isn't crippled on high-priced symbols (a flat
+    # max_lot makes 0.01 lot = $700 on BTC but $23 on ETH). 0 = disabled (legacy).
+    max_notional_pct: Decimal = Decimal("0")
 
     def __str__(self) -> str:
         return self.ticker

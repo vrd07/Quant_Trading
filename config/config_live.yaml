@@ -64,7 +64,7 @@ risk:
   # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
   # TP is risk-engine-driven off the confidence R:R tier, then floored here
   # so TP distance always exceeds SL distance (never a sub-1R target).
-  kalman_min_tp_rr: 2.0
+  kalman_min_tp_rr: 1.0
 
   # ── Confidence-based reversal / flip (2026-05-27) ────────────────
   # An opposite-direction signal with higher confidence than an open bot
@@ -181,6 +181,7 @@ strategies:
     sl_atr_multiplier: 2.0          # 2026-05-15: 3.0 → 2.0 — user-requested 1:2 RR (SL 2.0, TP 4.0)
     tp_atr_multiplier: 4.0          # 2026-05-06: 8.0 → 4.0 — XAU 15m trends rarely reach 8×ATR; tighter TP captures more wins without giving back via stops
     news_filter: true           # Skip signals during news blackout
+    min_signal_strength: 0.70   # 2026-05-30: WR variant (propagated from 5000)
 
   # -- SMC ORDER BLOCK (OB) STRATEGY ------------------------------------------
   # Your manual edge coded as a 5-phase state machine:
@@ -327,7 +328,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-28_news.csv
+    csv_path: news/2026-05-30_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

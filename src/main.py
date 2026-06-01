@@ -222,7 +222,11 @@ class TradingSystem:
         # ── Trailing stop manager ────────────────────────────────────────
         self._trailing_stop_mgr: Optional[TrailingStopManager] = None
         self._trailing_stop_fail_streak: int = 0
-        
+
+        # ── Volatility breaker (shock / geopolitical stand-aside) ─────────
+        self._vol_breaker = None
+        self._vol_shock_active: bool = False
+
         # Shutdown handler
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -403,7 +407,17 @@ class TradingSystem:
             
             # Initialize trailing stop manager
             self._trailing_stop_mgr = TrailingStopManager(self.config)
-            
+
+            # Initialize volatility breaker (shock-regime stand-aside)
+            from src.risk.volatility_breaker import VolatilityBreaker
+            self._vol_breaker = VolatilityBreaker(self.config)
+            if self._vol_breaker.enabled:
+                self.logger.info(
+                    f"✓ Volatility breaker armed "
+                    f"(trigger {self._vol_breaker.trigger_mult}× / release "
+                    f"{self._vol_breaker.release_mult}× ATR on {self._vol_breaker.timeframe})"
+                )
+
             # 10. Load news filter events if enabled
             self._load_news_filter()
 
@@ -519,6 +533,10 @@ class TradingSystem:
                 # 3b. Manage trailing stops (breakeven + lock)
                 self._manage_trailing_stops()
 
+                # 3b-ii. Volatility breaker — pause new entries + green stops to
+                # breakeven when ATR spikes (geopolitical / shock conditions).
+                self._check_volatility_breaker()
+
                 # 3c. Refresh manual position tracker (every tick for fresh lock data)
                 self._refresh_manual_position_tracker()
                 
@@ -611,6 +629,80 @@ class TradingSystem:
                     f"Trailing stop update error (streak={self._trailing_stop_fail_streak}): {e}"
                 )
 
+    def _check_volatility_breaker(self) -> None:
+        """Detect abnormal-volatility (shock) regime and react.
+
+        On the inactive→active edge we move every open *green* position's stop to
+        breakeven once. While active, `_process_strategies` vetoes new entries.
+        Throttled to 1 Hz; never raises into the loop.
+        """
+        if self._vol_breaker is None or not self._vol_breaker.enabled:
+            return
+        if self.loop_iteration % 4 != 0:
+            return
+        try:
+            symbols = [t for t, c in self.config.get('symbols', {}).items()
+                       if c.get('enabled', False)]
+            if not symbols:
+                return
+            bars = self.data_engine.get_bars(symbols[0], self._vol_breaker.timeframe)
+            active = self._vol_breaker.update(bars)
+            self._vol_shock_active = active
+            if self._vol_breaker.just_activated:
+                self._flatten_to_breakeven()
+                if self.live_monitor is not None:
+                    self.live_monitor.mark_last_signal(
+                        "SHOCK",
+                        f"Vol {self._vol_breaker.last_ratio:.1f}× baseline — entries paused, green stops → BE",
+                    )
+        except Exception as e:
+            # Protective overlay — a failure must not wedge the loop or trading.
+            self.logger.warning(f"Volatility breaker check error: {e}")
+
+    def _flatten_to_breakeven(self) -> None:
+        """Move every open position currently in profit to a breakeven stop.
+
+        Losing positions are left on their original stop — a breakeven SL on an
+        underwater trade would sit the wrong side of the market and be rejected.
+        """
+        if self.connector is None:
+            return
+        try:
+            positions = self.connector.get_positions()
+        except Exception as e:
+            self.logger.warning(f"[VolatilityBreaker] could not fetch positions for BE move: {e}")
+            return
+        from decimal import Decimal
+        from src.core.constants import PositionSide
+        moved = 0
+        for ticket, pos in (positions or {}).items():
+            try:
+                entry = float(getattr(pos, 'entry_price', 0) or 0)
+                price = float(getattr(pos, 'current_price', 0) or 0)
+                cur_sl = float(getattr(pos, 'stop_loss', 0) or 0)
+                if entry == 0 or price == 0:
+                    continue
+                is_long = getattr(pos, 'side', None) == PositionSide.LONG
+                in_profit = (price > entry) if is_long else (price < entry)
+                if not in_profit:
+                    continue  # cannot place a breakeven stop on a losing trade
+                # Only move the stop forward (never loosen it).
+                better = (entry > cur_sl) if is_long else (entry < cur_sl or cur_sl == 0)
+                if not better:
+                    continue
+                ok = self.connector.modify_position(
+                    position_id=str(ticket),
+                    stop_loss=Decimal(str(round(entry, 5))),
+                    take_profit=None,  # keep existing TP
+                )
+                if ok:
+                    moved += 1
+            except Exception as e:
+                self.logger.warning(f"[VolatilityBreaker] BE move failed on {ticket}: {e}")
+        self.logger.critical(
+            f"[VolatilityBreaker] Shock response: moved {moved} green position(s) to breakeven."
+        )
+
     def _refresh_manual_position_tracker(self) -> None:
         """Refresh the manual position tracker with current MT5 positions.
 
@@ -687,6 +779,17 @@ class TradingSystem:
         if not allowed:
             if self.loop_iteration % 60 == 1:
                 self.logger.info(f"[SessionManager] {reason}")
+            return
+
+        # Volatility breaker: while a shock regime is active, take NO new entries.
+        # Open positions are still managed (trailing/breakeven) elsewhere.
+        if self._vol_shock_active:
+            if self.loop_iteration % 60 == 1:
+                ratio = getattr(self._vol_breaker, 'last_ratio', 0.0)
+                self.logger.warning(
+                    f"[VolatilityBreaker] Shock active (ATR {ratio:.1f}× baseline) "
+                    f"— new entries suppressed."
+                )
             return
 
         # Only process enabled symbols
@@ -1393,6 +1496,17 @@ class TradingSystem:
                         _conf = float(signal.metadata.get('confidence',
                                        (signal.strength or 0.0) * 100.0))
                         self._open_position_confidence.setdefault(signal_sym, {})[str(_ticket)] = _conf
+                        # Persist fire-time context (regime/strength/confidence)
+                        # so the journal isn't blind once MT5 reconstructs the
+                        # position from just its order comment at close.
+                        if self.trade_journal is not None:
+                            self.trade_journal.record_signal_context(
+                                _ticket,
+                                strategy=signal.strategy_name,
+                                regime=getattr(signal, 'regime', None),
+                                confidence=_conf,
+                                signal_strength=signal.strength,
+                            )
                 except Exception:
                     pass
 
@@ -1855,7 +1969,9 @@ class TradingSystem:
                     min_lot=Decimal(str(config.get('min_lot', 0.01))),
                     max_lot=Decimal(str(config.get('max_lot', 100.0))),
                     lot_step=Decimal(str(config.get('lot_step', 0.01))),
-                    value_per_lot=Decimal(str(config.get('value_per_lot', 1)))
+                    value_per_lot=Decimal(str(config.get('value_per_lot', 1))),
+                    leverage=Decimal(str(config.get('leverage', 1))),
+                    max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
                 )
                 symbols.append(symbol)
         

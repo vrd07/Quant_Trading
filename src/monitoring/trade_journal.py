@@ -52,6 +52,17 @@ class TradeJournal:
         # O(1) dedup: load all recorded tickets into memory once
         self._recorded_tickets: Set[str] = self._load_recorded_tickets()
 
+        # ── Signal-context sidecar ────────────────────────────────────────
+        # Live positions are reconstructed from the MT5 order comment during
+        # reconciliation, so the regime / signal-strength known at fire time is
+        # otherwise lost — every kalman row landed in the journal as
+        # regime='unknown', signal_strength=0. We stash that context per ticket
+        # at fire time (record_signal_context) and merge it back in at close.
+        self._ctx_file = self.journal_file.with_name(
+            self.journal_file.stem + "_signalctx.json"
+        )
+        self._signal_context: Dict[str, dict] = self._load_signal_context()
+
         from .logger import get_logger
         self.logger = get_logger(__name__)
 
@@ -87,6 +98,14 @@ class TradeJournal:
             notional = position.entry_price * position.quantity * position.symbol.value_per_lot
             pnl_pct = float((realized_pnl / notional) * 100) if notional else 0.0
 
+            # Merge in fire-time context (regime / strength) lost when the
+            # position was reconstructed from MT5 during reconciliation.
+            regime = position.metadata.get('regime', 'unknown')
+            signal_strength = position.metadata.get('signal_strength', 0)
+            regime, signal_strength = self._enrich_from_context(
+                mt5_ticket, regime, signal_strength
+            )
+
             trade_record = {
                 'trade_id': str(position.position_id),
                 'symbol': position.symbol.ticker,
@@ -116,8 +135,8 @@ class TradeJournal:
                 'duration_seconds': (exit_time - position.opened_at).total_seconds(),
 
                 # Metadata
-                'regime': position.metadata.get('regime', 'unknown'),
-                'signal_strength': position.metadata.get('signal_strength', 0),
+                'regime': regime,
+                'signal_strength': signal_strength,
                 'mt5_ticket': str(position.metadata.get('mt5_ticket', '')) if position.metadata else ''
             }
 
@@ -186,6 +205,11 @@ class TradeJournal:
             if exit_time is None:
                 exit_time = now
 
+            # Merge fire-time context (regime / strength) by ticket.
+            regime, signal_strength = self._enrich_from_context(
+                mt5_ticket, metadata.get('regime', 'unknown'), 0
+            )
+
             trade_record = {
                 'trade_id': mt5_ticket or f"raw_{now.timestamp():.0f}",
                 'symbol': symbol,
@@ -203,8 +227,8 @@ class TradeJournal:
                 'take_profit': None,
                 'initial_risk': None,
                 'duration_seconds': 0,
-                'regime': metadata.get('regime', 'unknown'),
-                'signal_strength': 0,
+                'regime': regime,
+                'signal_strength': signal_strength,
                 'mt5_ticket': mt5_ticket,
             }
 
@@ -303,6 +327,89 @@ class TradeJournal:
         }
 
         return stats
+
+    # ── Signal-context sidecar (regime / strength known only at fire time) ──
+
+    def _load_signal_context(self) -> Dict[str, dict]:
+        """Load the ticket→context map. Best-effort: never raises."""
+        try:
+            if self._ctx_file.exists():
+                with open(self._ctx_file) as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    return data
+        except Exception:
+            pass
+        return {}
+
+    def _save_signal_context(self) -> None:
+        """Persist the context map, pruned to the most recent 500 tickets."""
+        try:
+            if len(self._signal_context) > 500:
+                # Keep the 500 newest by recorded timestamp
+                items = sorted(
+                    self._signal_context.items(),
+                    key=lambda kv: kv[1].get("ts", ""),
+                    reverse=True,
+                )[:500]
+                self._signal_context = dict(items)
+            tmp = self._ctx_file.with_suffix(".json.tmp")
+            with open(tmp, "w") as f:
+                json.dump(self._signal_context, f)
+            tmp.replace(self._ctx_file)  # atomic
+        except Exception:
+            pass  # journaling context is best-effort; never block trading
+
+    def record_signal_context(
+        self,
+        ticket,
+        *,
+        strategy: Optional[str] = None,
+        regime=None,
+        confidence: Optional[float] = None,
+        signal_strength: Optional[float] = None,
+    ) -> None:
+        """Stash the regime / strength / confidence known at signal-fire time,
+        keyed by MT5 ticket, so it can be merged into the journal at close.
+
+        Best-effort and side-effect-free on failure — must never raise into
+        the trading loop.
+        """
+        try:
+            if ticket is None:
+                return
+            key = str(ticket)
+            entry = self._signal_context.get(key, {})
+            if strategy is not None:
+                entry["strategy"] = str(strategy)
+            if regime is not None:
+                entry["regime"] = str(getattr(regime, "name", regime))
+            if confidence is not None:
+                entry["confidence"] = float(confidence)
+            if signal_strength is not None:
+                entry["signal_strength"] = float(signal_strength)
+            entry["ts"] = datetime.now(timezone.utc).isoformat()
+            self._signal_context[key] = entry
+            self._save_signal_context()
+        except Exception as e:
+            try:
+                self.logger.debug(f"record_signal_context failed: {e}")
+            except Exception:
+                pass
+
+    def _enrich_from_context(self, mt5_ticket, regime, signal_strength):
+        """Fill regime / signal_strength from the sidecar when the position
+        object didn't carry them (the common case for reconciled positions)."""
+        needs_regime = regime in (None, "", "unknown")
+        needs_strength = signal_strength in (None, 0, 0.0, "0")
+        if (needs_regime or needs_strength) and mt5_ticket:
+            ctx = self._signal_context.get(str(mt5_ticket))
+            if ctx:
+                if needs_regime and ctx.get("regime"):
+                    regime = ctx["regime"]
+                if needs_strength and ctx.get("signal_strength") is not None:
+                    signal_strength = ctx["signal_strength"]
+        return regime, signal_strength
 
     def _initialize_csv(self) -> None:
         """Initialize CSV file with headers."""

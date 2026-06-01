@@ -31,11 +31,12 @@ symbols:
     enabled: false
     pip_value: 0.1
     min_lot: 0.01
-    max_lot: 0.01             # Lowered max limit for crypto margin safety
+    max_lot: 0.07             # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
     leverage: 2               # Crypto 1:2
+    max_notional_pct: 0.5     # margin-aware ceiling: $2.5k notional/pos ($1.25k margin @1:2); governs over the price-blind lot count
     min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
     max_spread: 15.0          # $15.00 max spread threshold
 
@@ -44,11 +45,12 @@ symbols:
     enabled: false
     pip_value: 0.01
     min_lot: 0.01
-    max_lot: 0.01             # exchange min — margin-safe on $5K account
+    max_lot: 3.0              # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
     leverage: 5               # Crypto 1:5
+    max_notional_pct: 1.0     # margin-aware ceiling: $5k notional/pos ($1k margin @1:5); governs over the price-blind lot count
     min_stops_distance: 1.0   # $1.00 min distance for Ethereum
     max_spread: 3.0           # $3.00 max spread threshold
 
@@ -90,35 +92,36 @@ symbols:
 
 risk:
   # $5,000 Account Risk Parameters
-  max_drawdown_pct: 0.07          # 7% Max Overall/Trailing Drawdown ($300)
-  max_daily_loss_pct: 0.025       # 2.5% Max Daily Loss ($150)
+  max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
+  max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30
 
   # $15 risk per trade = 0.30% of $5,000
   # Basis: 0.02 lot XAUUSD × 75 pip stop × $10/pip/lot = $15
   risk_per_trade_pct: 0.003       # 0.30% = $15 per trade
 
-  # Per-strategy risk override (added 2026-05-06).
-  # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
-  # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
-  # needs ~5% of balance per trade to express its edge; clipping it back to
-  # the operator cap silently rejects the high-vol kalman trades.
+  # Per-strategy risk override.
+  # kalman_regime sizes off its own per-trade $ cap. Cut 250→50 on 2026-05-30:
+  # at the $250-DD / $150-daily budget a $250 cap (clamped to ~$120 at max_lot)
+  # blew the drawdown in a single losing cluster. $50/trade ⇒ ~0.02–0.04 lot,
+  # so 3 losses ≈ $150 daily cap and ~5 losses ≈ the $250 trailing-DD kill.
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
     kalman_regime:
-      risk_per_trade_usd: 250
+      risk_per_trade_usd: 50
 
-  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
-  absolute_max_loss_usd: 145      # Daily loss limit ($5k × 3.0%)
-  max_drawdown_usd: 295            # Overall drawdown limit ($300)
-  max_daily_profit_usd: 260       # Stop trading for the day once $260 profit hit (~7 winning trades)
+  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS  (user limits 2026-05-30)
+  absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3.0%)
+  max_drawdown_usd: 250            # Overall trailing drawdown limit (5%)
+  max_daily_profit_usd: 260       # Stop trading for the day once $260 profit hit
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
-                                      # would push daily loss past 85% of $145 = $123.25
+                                      # would push daily loss past 85% of $150 = $127.50
 
-  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # ── Kalman TP sizing ─────────────────────────────────────────────
   # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
-  # TP is risk-engine-driven off the confidence R:R tier, then floored here
-  # so TP distance always exceeds SL distance (never a sub-1R target).
-  kalman_min_tp_rr: 2.0
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here.
+  # Cut 2.0→1.0 on 2026-05-30: TP at 2× stop only won ~30% of the time; pulling
+  # it to 1× stop ~doubled the win rate to ~51% (walk-forward Jan-Mar→Apr-May).
+  kalman_min_tp_rr: 1.0
 
   # ── Confidence-based reversal / flip (2026-05-27) ────────────────
   # An opposite-direction signal with higher confidence than an open bot
@@ -128,7 +131,7 @@ risk:
     enabled: true
     min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
 
-  max_positions: 3                # 2026-05-05: 2→3 — ensemble diversification; 3×$15=$45 worst-case inside $145 daily cap
+  max_positions: 2                # 2026-05-30: 3→2 — at $50/trade, 2×$50=$100 worst-case stays inside the $150 daily cap (3 would equal it)
   max_daily_trades: 10            # Conservative — audit standard
   max_exposure_per_symbol_pct: 5.0
   max_daily_wins: 8               # Stop trading once 8 wins hit ($250+ target)
@@ -163,6 +166,24 @@ risk:
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
     # time_stop_minutes removed — was 45 min, killed 30-59% of trades before TP could be reached
     ml_exhaustion_factor: 0.8      # (ML ONLY) If exhaustion pipeline generates predicted pips, tight_lock 80% of it immediately when reached
+
+  # ── Volatility breaker (shock / geopolitical stand-aside) ─────────
+  # Pauses NEW entries + moves green stops to breakeven when ATR spikes far
+  # above its trailing baseline. DISABLED by default: a 2026-05-30 backtest
+  # (Jan–May 2026 XAUUSD) showed it makes kalman WORSE at every threshold —
+  # kalman *profits* from volatility, so pausing on high ATR strips winners
+  # (full period net $3811 → $939 at 1.6×, → $2599 at 2.0×). The Apr/May war
+  # loss was directional whipsaw (ATR only ~1.8× normal, below profitable
+  # months), which a magnitude filter cannot separate from good volatility.
+  # Code is wired and unit-tested; flip enabled:true only for a genuine
+  # flash-crash tail guard, NOT as a fix for moderate war chop.
+  volatility_breaker:
+    enabled: false
+    timeframe: 15m
+    atr_period: 14
+    baseline_window: 480           # ~5 trading days on 15m — long enough that a spike stands out
+    trigger_mult: 2.0              # ATR ≥ 2.0× baseline ⇒ shock mode on
+    release_mult: 1.5              # ATR ≤ 1.5× baseline ⇒ resume (hysteresis)
 
   # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
   # (enforced by trading_hours sessions below)
@@ -300,7 +321,7 @@ strategies:
     entry_threshold: 2.0            # v2: lowered from 2.5 — more range entries
     trend_adx_min: 20               # v2: lowered from 22
     kalman_confirm_bars: 2          # Keep 2-bar confirmation (proven in v1)
-    min_signal_strength: 0.50
+    min_signal_strength: 0.70       # 2026-05-30: 0.50→0.70 — skip weakest entries; best out-of-sample variant
     cooldown_bars: 2                # v2: 30 min cooldown (was 30 bars = 7.5hr!)
     atr_period: 14
     sl_atr_multiplier: 2.0          # 2026-05-15: 3.0 → 2.0 — user-requested 1:2 RR (SL 2.0, TP 4.0)
@@ -592,7 +613,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-05-28_news.csv
+    csv_path: news/2026-05-30_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
