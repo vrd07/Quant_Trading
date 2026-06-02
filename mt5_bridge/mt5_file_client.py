@@ -153,7 +153,19 @@ class MT5FileClient:
         # where the file is empty/half-written and the EA reads garbage.
         with open(self.command_tmp, 'w', encoding='utf-16') as f:
             json.dump(command_dict, f)
-        os.replace(self.command_tmp, self.command_file)
+
+        # os.replace() raises PermissionError (WinError 5) on Windows when
+        # the MT5 EA (or a virus-scanner) has the destination file open at
+        # the same moment.  Retry up to 5 times at 20ms intervals — well
+        # within the 5 s command timeout — before propagating.
+        for _attempt in range(5):
+            try:
+                os.replace(self.command_tmp, self.command_file)
+                break
+            except PermissionError:
+                if _attempt == 4:
+                    raise
+                time.sleep(0.02)
 
         # Poll for a response that matches our request timestamp.
         start_time = time.time()

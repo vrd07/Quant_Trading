@@ -84,8 +84,10 @@ set "ICON=%SystemRoot%\System32\shell32.dll"
 
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$s=(New-Object -ComObject WScript.Shell).CreateShortcut('%SHORTCUT%');" ^
-    "$s.TargetPath='%TARGET%';" ^
+    "$s.TargetPath='%ComSpec%';" ^
+    "$s.Arguments='/k \"%TARGET%\"';" ^
     "$s.WorkingDirectory='%PROJECT_ROOT%';" ^
+    "$s.WindowStyle=1;" ^
     "$s.IconLocation='%ICON%,137';" ^
     "$s.Description='Launch the Quant Trading Bot';" ^
     "$s.Save()"

@@ -49,6 +49,13 @@ MAX_FILE_AGE_DAYS = 2                    # Delete dated CSVs older than this
 
 # -─────────────────────────────────────────────────────────────────────────────
 
+# Ensure stdout/stderr can handle non-ASCII characters on Windows cp1252 terminals.
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
+
 def _log(msg: str) -> None:
     print(f"[news_fetcher] {datetime.now().strftime('%H:%M:%S')} {msg}", flush=True)
 
@@ -171,7 +178,7 @@ def save_events_csv(events: list[dict], target_date: datetime) -> Path:
         writer.writeheader()
         writer.writerows(events)
 
-    _log(f"Saved {len(events)} events → {csv_path}")
+    _log(f"Saved {len(events)} events -> {csv_path}")
     return csv_path
 
 
@@ -252,7 +259,7 @@ def update_config_csv_path(csv_path: Path) -> None:
                     continue
                 with open(config_file, "w", encoding="utf-8", newline="\n") as f:
                     f.write(new_content)
-                _log(f"Updated {config_file.name} csv_path → {rel_path}")
+                _log(f"Updated {config_file.name} csv_path -> {rel_path}")
             else:
                 _log(f"No csv_path found in {config_file.name}, skipped")
 

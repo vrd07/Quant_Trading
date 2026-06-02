@@ -1,9 +1,32 @@
 """Structured logging for the trading system."""
 
 import logging
+import os
 import sys
+from logging.handlers import RotatingFileHandler
 from typing import Any, Optional
 from datetime import datetime, timezone
+
+
+class WinSafeRotatingFileHandler(RotatingFileHandler):
+    """
+    RotatingFileHandler that tolerates Windows file-locking errors (WinError 32)
+    during log rotation.
+
+    On Windows, renaming an open log file raises PermissionError if another
+    process (e.g. the live monitor or a stale bot instance) still holds a
+    handle on it.  Rather than propagating the exception up through the logging
+    call stack and crashing the bot, we silently skip the rotation and keep
+    appending to the current file.  The rotation will succeed on the next
+    attempt once the competing handle is released.
+    """
+
+    def doRollover(self) -> None:  # noqa: N802
+        try:
+            super().doRollover()
+        except PermissionError:
+            # Another process holds the file open — skip this rotation cycle.
+            pass
 
 
 class TradingLogger:
@@ -35,17 +58,15 @@ class TradingLogger:
             self.logger.addHandler(console_handler)
             
             # File Handler
-            import os
-            from logging.handlers import RotatingFileHandler
-            
             log_dir = "data/logs"
             if not os.path.exists(log_dir):
                 os.makedirs(log_dir)
-                
-            file_handler = RotatingFileHandler(
+
+            file_handler = WinSafeRotatingFileHandler(
                 f"{log_dir}/trading_system.log",
-                maxBytes=10*1024*1024, # 10MB
-                backupCount=5
+                maxBytes=10 * 1024 * 1024,  # 10 MB
+                backupCount=5,
+                delay=True,  # don't open the file until the first write
             )
             file_handler.setLevel(level)
             file_handler.setFormatter(formatter)
@@ -95,25 +116,23 @@ def setup_logger(log_file: str = None, level: str = 'INFO') -> None:
     if _setup_done:
         return
     
-    import os
-    from logging.handlers import RotatingFileHandler
-    
     log_level = getattr(logging, level.upper(), logging.INFO)
-    
+
     # Configure root logger
     root = logging.getLogger()
     root.setLevel(log_level)
-    
+
     # Add environment-specific file handler if specified
     if log_file:
         log_dir = os.path.dirname(log_file)
         if log_dir and not os.path.exists(log_dir):
             os.makedirs(log_dir, exist_ok=True)
-        
-        file_handler = RotatingFileHandler(
+
+        file_handler = WinSafeRotatingFileHandler(
             log_file,
-            maxBytes=10*1024*1024,  # 10MB
-            backupCount=5
+            maxBytes=10 * 1024 * 1024,  # 10 MB
+            backupCount=5,
+            delay=True,  # don't open the file until the first write
         )
         file_handler.setLevel(log_level)
         formatter = logging.Formatter(
