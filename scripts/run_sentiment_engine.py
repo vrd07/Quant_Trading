@@ -50,6 +50,10 @@ from src.sentiment.gss import (                                            # noq
 )
 from src.sentiment.store import append_gss_history, write_gss              # noqa: E402
 from src.sentiment.technical import compute_technical                      # noqa: E402
+from src.sentiment.opportunity import evaluate_opportunity                 # noqa: E402
+from src.sentiment.decision import make_decision, load_last_decision       # noqa: E402
+from src.sentiment.notify import notify_decision, notify_text, is_noteworthy, is_configured  # noqa: E402
+from src.sentiment import paper_broker                                     # noqa: E402
 
 MONITOR_FILE = PROJECT_ROOT / "data" / "metrics" / "sentiment_monitor_state.json"
 
@@ -322,7 +326,22 @@ def main() -> int:
     ap.add_argument("--loop", type=int, default=0, help="Seconds between cycles (0 = once).")
     ap.add_argument("--once", action="store_true", help="Single cycle (default).")
     ap.add_argument("--print", dest="echo", action="store_true", help="Echo the JSON.")
+    ap.add_argument("--decisions", choices=["auto", "off"], default="auto",
+                    help="auto: ask Claude for a decision when an opportunity forms "
+                         "(intraday). off: scoring/display only.")
+    ap.add_argument("--decision-cooldown", type=float, default=20.0,
+                    help="Minimum minutes between AI decisions (default 20).")
+    ap.add_argument("--decision-refresh", type=float, default=90.0,
+                    help="Re-decide a standing actionable setup after N min (default 90).")
+    ap.add_argument("--notify", choices=["auto", "off"], default="auto",
+                    help="auto: push actionable signals to Telegram. off: no notifications.")
+    ap.add_argument("--paper", choices=["on", "off"], default="on",
+                    help="on: forward-test AI signals as PAPER trades (no real orders).")
     args = ap.parse_args()
+
+    if args.decisions == "auto" and args.notify == "auto" and not is_configured():
+        print("[sentiment] note: Telegram not configured — signals logged but not "
+              "notified. Set SENTIMENT_TELEGRAM_* (see config/sentiment.env.example).")
 
     def cycle() -> None:
         snap = build_snapshot(args.symbol)
@@ -333,6 +352,35 @@ def main() -> int:
               f"missing={snap['missing_components']}")
         if args.echo:
             print(json.dumps(snap, indent=2, default=str))
+
+        # Intraday AI decision — only when the opportunity gate trips (keeps
+        # Claude calls rare: chop costs nothing, real setups get a fresh call).
+        new_decision = None
+        if args.decisions == "auto":
+            prev = load_last_decision()
+            trip, reasons = evaluate_opportunity(
+                snap, prev, cooldown_min=args.decision_cooldown,
+                refresh_min=args.decision_refresh)
+            if trip:
+                why = "; ".join(reasons)
+                record, source = make_decision(snap, args.symbol, trigger=why)
+                new_decision = record
+                sent = (args.notify == "auto" and is_noteworthy(record)
+                        and notify_decision(record, reasons))
+                print(f"  ↳ opportunity [{why}] → {record['decision']} "
+                      f"conf={record['confidence']} size={record['position_size_pct']}% "
+                      f"({source}, ADVISORY{', 📲 notified' if sent else ''})")
+
+        # Paper forward-test: manage any open paper position every cycle (SL/TP),
+        # and open from a fresh actionable decision. NO real orders are sent.
+        if args.paper == "on":
+            notify_fn = notify_text if args.notify == "auto" else None
+            st = paper_broker.update(snap, new_decision, notify=notify_fn)
+            pos = st.get("position")
+            if pos:
+                print(f"     paper: {pos['side']} @ {pos['entry']} "
+                      f"SL {pos['stop_loss']} TP {pos['take_profit']} | "
+                      f"total {st['realized_r']:+.2f}R (${st['realized_usd']:+,.2f})")
 
     if args.loop and not args.once:
         print(f"[sentiment] loop every {args.loop}s — Ctrl-C to stop")
