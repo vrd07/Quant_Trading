@@ -27,6 +27,66 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 
+# Strategy tags that mark a trade as a MANUAL MT5 click rather than a bot trade.
+# Kept in sync with manual_position_tracker._MANUAL_TAGS (duplicated literally to
+# avoid an import cycle). Manual trades are excluded from bot performance metrics
+# and from the bot trade journal — they are the user's own discretionary trades
+# and counting them as bot results corrupts win-rate / PF / expectancy.
+_MANUAL_STRATEGY_TAGS: frozenset = frozenset({
+    "manual", "manual_gut", "manual_rules", "unknown", "", "none",
+})
+
+
+def _is_manual_strategy(strategy: Optional[str]) -> bool:
+    """Pure: true iff the strategy tag marks a discretionary (non-bot) trade."""
+    return (strategy or "").strip().lower() in _MANUAL_STRATEGY_TAGS
+
+
+# The four global FX sessions, as reference/context only (DISPLAY — they do NOT
+# gate which strategies fire; that is driven by trading_hours.sessions in config).
+# Stored as UTC windows; IST windows are shown to the user. A window that wraps
+# midnight (start_min > end_min) is handled in _world_sessions().
+#   Sydney 22:00–07:00 UTC = 03:30–12:30 IST
+#   Tokyo  00:00–09:00 UTC = 05:30–14:30 IST
+#   London 08:00–17:00 UTC = 13:30–22:30 IST
+#   NY     13:00–22:00 UTC = 18:30–03:30 IST
+_WORLD_FX_SESSIONS = (
+    ("Sydney", 22 * 60, 7 * 60, "03:30", "12:30", "AUD/NZD; week open, low liquidity"),
+    ("Tokyo", 0, 9 * 60, "05:30", "14:30", "JPY; Sydney overlap = early-day volume"),
+    ("London", 8 * 60, 17 * 60, "13:30", "22:30", "GBP/EUR/CHF; most active & liquid"),
+    ("New York", 13 * 60, 22 * 60, "18:30", "03:30", "USD-dominated; high volatility"),
+)
+
+
+def _world_sessions(now_utc: datetime) -> List[Dict[str, Any]]:
+    """Active state + minutes-left/until-open for the 4 global FX sessions.
+
+    Pure time math on the supplied UTC instant — no bot state, no config.
+    """
+    now_min = now_utc.hour * 60 + now_utc.minute
+    day = 24 * 60
+    out: List[Dict[str, Any]] = []
+    for name, start, end, ist_start, ist_end, note in _WORLD_FX_SESSIONS:
+        if start <= end:
+            active = start <= now_min < end
+            mins_left = (end - now_min) if active else None
+            mins_to_open = ((start - now_min) % day) if not active else None
+        else:  # wraps midnight
+            active = now_min >= start or now_min < end
+            mins_left = ((end - now_min) % day) if active else None
+            mins_to_open = ((start - now_min) % day) if not active else None
+        out.append({
+            "name": name,
+            "ist_window": f"{ist_start}–{ist_end}",
+            "utc_window": f"{start // 60:02d}:{start % 60:02d}–{end // 60:02d}:{end % 60:02d}",
+            "active": active,
+            "mins_left": mins_left,
+            "mins_to_open": mins_to_open,
+            "note": note,
+        })
+    return out
+
+
 def _j(val: Any) -> Any:
     """JSON-safe coercion for Decimal/datetime/misc objects."""
     if isinstance(val, Decimal):
@@ -357,14 +417,22 @@ class LiveMonitorEmitter:
             errors = list(self._errors)
             trade_closes = list(self._trade_closes)
 
-        # Overlay live trade-close events on top of CSV journal (live events first)
-        combined_journal = trade_closes + [
-            j for j in journal
-            if not any(
-                tc.get("symbol") == j.get("symbol") and
-                tc.get("ts", "")[:19] == j.get("ts_close", "")[:19]
-                for tc in trade_closes
+        # Overlay live trade-close events on top of the CSV journal. The live ring
+        # buffer stamps ts=now() (record time), not the CSV exit_time, so matching
+        # on timestamp never dedups — collapse on (symbol, side, entry, exit) which
+        # is identical in both records. Manual clicks are excluded from both sides.
+        def _trade_key(t: Dict[str, Any]) -> tuple:
+            return (
+                (t.get("symbol") or "").upper(),
+                (t.get("side") or "").upper(),
+                round(float(t.get("entry", 0) or 0), 2),
+                round(float(t.get("exit", 0) or 0), 2),
             )
+
+        live_closes = [t for t in trade_closes if not _is_manual_strategy(t.get("strategy"))]
+        seen_keys = {_trade_key(t) for t in live_closes}
+        combined_journal = live_closes + [
+            j for j in journal if _trade_key(j) not in seen_keys
         ]
 
         return {
@@ -709,10 +777,12 @@ class LiveMonitorEmitter:
             "regime_generated_at": "",
             "time_left_min": None,
             "all": [],
+            "world": [],
         }
 
         now = datetime.now(timezone.utc)
         now_hhmm = now.strftime("%H:%M")
+        out["world"] = _world_sessions(now)
 
         # Pull session config directly — cheap and gives us the full list.
         try:
@@ -873,7 +943,7 @@ class LiveMonitorEmitter:
             "profit_factor": 0.0, "expectancy": 0.0,
             "best_trade": 0.0, "worst_trade": 0.0,
             "current_streak": 0, "streak_type": "",
-            "total_pnl": 0.0,
+            "total_pnl": 0.0, "manual_trades": 0,
         }
         path = self._journal_path
         if not path.exists():
@@ -898,6 +968,9 @@ class LiveMonitorEmitter:
             pnl_idx = header.index("realized_pnl")
         except ValueError:
             return out
+        strat_idx = header.index("strategy") if "strategy" in header else None
+        ticket_idx = header.index("mt5_ticket") if "mt5_ticket" in header else None
+        tradeid_idx = header.index("trade_id") if "trade_id" in header else None
 
         lines = [l for l in tail.splitlines() if l.strip()]
         if not lines:
@@ -907,16 +980,36 @@ class LiveMonitorEmitter:
             lines[1:] if lines[0] == header_line else lines
         )
 
+        # Count each closed trade exactly once (dedup by mt5_ticket, fall back to
+        # trade_id) and exclude MANUAL trades — they are the user's discretionary
+        # clicks, not bot results, and double-counted/manual rows make win-rate,
+        # PF and expectancy lie.
         pnls: List[float] = []
+        manual_count = 0
+        seen_ids: set = set()
         for ln in data_lines:
             parts = ln.split(",")
             if len(parts) <= pnl_idx:
                 continue
+            if strat_idx is not None and len(parts) > strat_idx and \
+                    _is_manual_strategy(parts[strat_idx]):
+                manual_count += 1
+                continue
+            dedup_id = ""
+            if ticket_idx is not None and len(parts) > ticket_idx:
+                dedup_id = (parts[ticket_idx] or "").strip()
+            if not dedup_id and tradeid_idx is not None and len(parts) > tradeid_idx:
+                dedup_id = (parts[tradeid_idx] or "").strip()
+            if dedup_id:
+                if dedup_id in seen_ids:
+                    continue
+                seen_ids.add(dedup_id)
             try:
                 pnls.append(float(parts[pnl_idx] or 0))
             except Exception:
                 continue
 
+        out["manual_trades"] = manual_count
         if not pnls:
             return out
 
@@ -1006,11 +1099,21 @@ class LiveMonitorEmitter:
 
         header = [h.strip() for h in header_line.split(",")]
         rows = []
-        for ln in data_lines[-20:]:
+        seen_ids: set = set()
+        for ln in data_lines[-40:]:
             parts = ln.split(",")
             if len(parts) < len(header):
                 continue
             rec = dict(zip(header, parts[:len(header)]))
+            # Manual MT5 clicks are not bot trades — keep them out of the bot journal.
+            if _is_manual_strategy(rec.get("strategy")):
+                continue
+            # Each closed trade appears once (dedup by ticket, fall back to trade_id).
+            dedup_id = (rec.get("mt5_ticket") or "").strip() or (rec.get("trade_id") or "").strip()
+            if dedup_id:
+                if dedup_id in seen_ids:
+                    continue
+                seen_ids.add(dedup_id)
             try:
                 pnl = float(rec.get("realized_pnl", 0) or 0)
             except Exception:
