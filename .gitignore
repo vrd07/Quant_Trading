@@ -150,3 +150,6 @@ docs/*.jpg
 # Root-level Scratch / One-off Test Files
 # ============================================
 test_min_stops.py
+
+# Sentiment engine API keys (real keys — never commit)
+config/sentiment.env
