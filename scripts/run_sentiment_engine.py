@@ -185,7 +185,7 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
         "feeds": {
             "technical": "LIVE (local 5m)",
             "fundamental": "LIVE (FRED)" if os.environ.get("FRED_API_KEY") else "OFF (set FRED_API_KEY)",
-            "institutional": "TODO (COT)",
+            "institutional": "LIVE (CFTC COT)" if cot is not None else "OFF (CFTC unreachable)",
             "retail": "TODO (Myfxbook)",
             "news": "TODO (Alpha Vantage)",
         },
