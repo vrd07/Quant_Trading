@@ -228,8 +228,9 @@ if !errorlevel! equ 0 (
 :: data\metrics\sentiment_monitor_state.json; the pop-up renders it. Both are
 :: DISPLAY-ONLY — they never trade. Technical bias is live from our own 5m data;
 :: fundamental (FRED) bias needs FRED_API_KEY (config\sentiment.env.example).
-echo   [INFO] Launching market sentiment engine (XAUUSD GSS, 15-min loop)...
-start "QuantSentimentEngine" /min cmd /c "python scripts\run_sentiment_engine.py --loop 900 >> logs\sentiment_engine.log 2>&1"
+echo   [INFO] Launching market sentiment engine (XAUUSD GSS, 15-min loop,
+echo          intraday AI decisions on opportunity — advisory, never auto-executes)...
+start "QuantSentimentEngine" /min cmd /c "python scripts\run_sentiment_engine.py --loop 900 --decisions auto >> logs\sentiment_engine.log 2>&1"
 if "!FRED_API_KEY!"=="" echo   [note] FRED_API_KEY not set — fundamental bias shows MISSING. See config\sentiment.env.example.
 python -c "import tkinter" >nul 2>&1
 if !errorlevel! equ 0 (

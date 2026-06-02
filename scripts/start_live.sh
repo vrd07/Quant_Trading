@@ -206,8 +206,9 @@ fi
 # (FRED) bias needs FRED_API_KEY (see config/sentiment.env.example).
 SENTIMENT_LOG="logs/sentiment_engine.log"
 SENTIMENT_MON_LOG="logs/sentiment_monitor.log"
-echo "  ➜ Launching market sentiment engine (XAUUSD GSS, 15-min loop)..."
-nohup python3 scripts/run_sentiment_engine.py --loop 900 \
+echo "  ➜ Launching market sentiment engine (XAUUSD GSS, 15-min loop,"
+echo "    intraday AI decisions on opportunity — advisory, never auto-executes)..."
+nohup python3 scripts/run_sentiment_engine.py --loop 900 --decisions auto \
     >"$SENTIMENT_LOG" 2>&1 &
 SENTIMENT_PID=$!
 echo "    Sentiment engine PID: $SENTIMENT_PID   (log: $SENTIMENT_LOG)"
