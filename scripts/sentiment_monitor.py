@@ -125,8 +125,12 @@ class SentimentMonitorApp:
         feeds.grid(row=2, column=1, sticky="nsew", padx=(4, 0), pady=(0, 6))
         self.lbl_feeds = self._kv_block(feeds)
 
+        ai = self._panel(body, "AI TRADE DECISION (Dalio + Simons · ADVISORY)")
+        ai.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self._build_ai(ai)
+
         levels = self._panel(body, "KEY 2026 PRICE LEVELS (market_sentiment.md §8)")
-        levels.grid(row=3, column=0, columnspan=2, sticky="nsew")
+        levels.grid(row=4, column=0, columnspan=2, sticky="nsew")
         self._build_levels(levels)
 
         footer = tk.Frame(self.root, bg=BG_PANEL_2, padx=10, pady=4)
@@ -228,6 +232,37 @@ class SentimentMonitorApp:
                            font=("Menlo", 11, "bold"), anchor="w")
             lbl.pack(fill=tk.X, pady=1)
             self.flag_lbls[key] = lbl
+
+    def _build_ai(self, panel) -> None:
+        body = tk.Frame(panel, bg=BG_PANEL, padx=12, pady=4)
+        body.pack(fill=tk.BOTH, expand=True)
+        head = tk.Frame(body, bg=BG_PANEL)
+        head.pack(fill=tk.X)
+        self.ai_action = tk.Label(head, text="—", bg=BG_PANEL, fg=TEXT,
+                                  font=("Menlo", 16, "bold"))
+        self.ai_action.pack(side=tk.LEFT)
+        self.ai_conf = tk.Label(head, text="", bg=BG_PANEL, fg=TEXT_DIM,
+                                font=("Menlo", 10, "bold"))
+        self.ai_conf.pack(side=tk.LEFT, padx=(10, 0))
+        self.ai_meta = tk.Label(head, text="", bg=BG_PANEL, fg=TEXT_DIM,
+                                font=("Menlo", 9))
+        self.ai_meta.pack(side=tk.RIGHT)
+        self.ai_levels = tk.Label(body, text="", bg=BG_PANEL, fg=TEXT,
+                                  font=("Menlo", 10), anchor="w", justify="left")
+        self.ai_levels.pack(fill=tk.X, pady=(4, 0))
+        self.ai_rationale = tk.Label(body, text="run scripts/ai_trade_decision.py",
+                                     bg=BG_PANEL, fg=TEXT_FAINT, font=("Menlo", 9, "italic"),
+                                     anchor="w", justify="left", wraplength=940)
+        self.ai_rationale.pack(fill=tk.X, pady=(2, 0))
+
+        sep = tk.Frame(body, bg=BORDER, height=1)
+        sep.pack(fill=tk.X, pady=(6, 4))
+        self.paper_lbl = tk.Label(body, text="PAPER: —", bg=BG_PANEL, fg=TEXT_DIM,
+                                  font=("Menlo", 10, "bold"), anchor="w")
+        self.paper_lbl.pack(fill=tk.X)
+        self.paper_pos = tk.Label(body, text="", bg=BG_PANEL, fg=TEXT_FAINT,
+                                  font=("Menlo", 9), anchor="w")
+        self.paper_pos.pack(fill=tk.X)
 
     def _build_levels(self, panel) -> None:
         body = tk.Frame(panel, bg=BG_PANEL, padx=8, pady=4)
@@ -346,6 +381,9 @@ class SentimentMonitorApp:
         self.lbl_feeds.config(text="\n".join(
             f"{k:14} {v}" for k, v in feeds.items()))
 
+        # AI decision (separate file written by scripts/ai_trade_decision.py)
+        self._render_ai()
+
         # levels
         for iid in self.tree_levels.get_children():
             self.tree_levels.delete(iid)
@@ -361,6 +399,57 @@ class SentimentMonitorApp:
         self.footer.config(
             text=f"asset={d.get('asset','?')}  ·  price_src={d.get('price_source','?')}  "
                  f"·  generated {gen[11:19] if len(gen) >= 19 else gen}  ·  Ctrl-Q to quit")
+
+    def _render_ai(self) -> None:
+        path = self.state_file.parent.parent / "sentiment" / "ai_decision_XAUUSD.json"
+        try:
+            d = json.loads(path.read_text())
+        except Exception:
+            return
+        act = (d.get("decision") or "—").upper()
+        act_color = GREEN if act == "LONG" else RED if act == "SHORT" else (
+            ORANGE if act == "REDUCE" else YELLOW)
+        self.ai_action.config(text=act, fg=act_color)
+        self.ai_conf.config(text=f"conf {d.get('confidence','—')} · size {d.get('position_size_pct',0)}%")
+        gen = str(d.get("generated_at", ""))
+        self.ai_meta.config(
+            text=f"src={d.get('source','?')} · {'NOT EXECUTED' if not d.get('executed') else 'EXECUTED'} "
+                 f"· {gen[:16].replace('T',' ')}")
+        ez = d.get("entry_zone", {}) or {}
+        if act in ("LONG", "SHORT"):
+            self.ai_levels.config(text=(
+                f"entry {_fmt_num(ez.get('min'))}–{_fmt_num(ez.get('max'))}   "
+                f"SL {_fmt_num(d.get('stop_loss'))}   "
+                f"TP1 {_fmt_num(d.get('take_profit_1'))}   TP2 {_fmt_num(d.get('take_profit_2'))}"))
+        else:
+            self.ai_levels.config(text="no entry — flat / reduce")
+        self.ai_rationale.config(
+            text=(d.get("rationale") or "")[:300], fg=TEXT)
+        self._render_paper()
+
+    def _render_paper(self) -> None:
+        path = self.state_file.parent.parent / "sentiment" / "paper_state_XAUUSD.json"
+        try:
+            p = json.loads(path.read_text())
+        except Exception:
+            self.paper_lbl.config(text="PAPER: no trades yet", fg=TEXT_DIM)
+            self.paper_pos.config(text="")
+            return
+        r = float(p.get("realized_r", 0) or 0)
+        usd = float(p.get("realized_usd", 0) or 0)
+        w, l = int(p.get("wins", 0) or 0), int(p.get("losses", 0) or 0)
+        col = GREEN if r > 0 else RED if r < 0 else TEXT
+        self.paper_lbl.config(
+            text=f"PAPER (forward-test):  {r:+.2f}R  (${usd:+,.2f})  ·  {w}W / {l}L  "
+                 f"·  {p.get('trades', 0)} closed", fg=col)
+        pos = p.get("position")
+        if pos:
+            self.paper_pos.config(
+                text=f"open: {pos['side']} @ {_fmt_num(pos['entry'])}  "
+                     f"SL {_fmt_num(pos['stop_loss'])}  TP {_fmt_num(pos['take_profit'])}",
+                fg=GOLD)
+        else:
+            self.paper_pos.config(text="open: none", fg=TEXT_FAINT)
 
     def run(self) -> None:
         self.root.bind("<Control-q>", lambda _e: self.root.destroy())
