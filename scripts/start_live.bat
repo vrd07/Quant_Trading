@@ -48,6 +48,13 @@ if not exist "venv\Scripts\activate.bat" (
 )
 call "venv\Scripts\activate.bat"
 
+:: Sentiment engine API keys (optional). config\sentiment.env holds FRED_API_KEY
+:: and an optional DXY_LEVEL override (see config\sentiment.env.example). Lines are
+:: KEY=VALUE; '#' lines are skipped. Absent → fundamental feed stays MISSING.
+if exist "config\sentiment.env" (
+    for /f "usebackq eol=# tokens=1,* delims==" %%a in ("config\sentiment.env") do set "%%a=%%b"
+)
+
 :: ── Account Selection ───────────────────────────────────────
 if /i "!FORCE!"=="true" (
     set "CONFIG=!ACTIVE_CONFIG!"
@@ -216,6 +223,24 @@ if !errorlevel! equ 0 (
     echo   [WARN] Tkinter not available — skipping live monitor pop-up.
 )
 
+:: ── Market Sentiment Engine + pop-up (XAUUSD GSS) ────────────
+:: Engine assembles the Gold Sentiment Score on a 15-min loop and writes
+:: data\metrics\sentiment_monitor_state.json; the pop-up renders it. Both are
+:: DISPLAY-ONLY — they never trade. Technical bias is live from our own 5m data;
+:: fundamental (FRED) bias needs FRED_API_KEY (config\sentiment.env.example).
+echo   [INFO] Launching market sentiment engine (XAUUSD GSS, 15-min loop)...
+start "QuantSentimentEngine" /min cmd /c "python scripts\run_sentiment_engine.py --loop 900 >> logs\sentiment_engine.log 2>&1"
+if "!FRED_API_KEY!"=="" echo   [note] FRED_API_KEY not set — fundamental bias shows MISSING. See config\sentiment.env.example.
+python -c "import tkinter" >nul 2>&1
+if !errorlevel! equ 0 (
+    echo   [INFO] Launching market sentiment pop-up...
+    if exist "venv\Scripts\pythonw.exe" (
+        start "QuantSentimentMonitor" "venv\Scripts\pythonw.exe" scripts\sentiment_monitor.py --refresh 2000
+    ) else (
+        start "QuantSentimentMonitor" python scripts\sentiment_monitor.py --refresh 2000
+    )
+)
+
 :: ── Telegram bot scheduler (optional — needs trading_bot\.env) ──
 if exist "trading_bot\.env" (
     REM Reap any prior scheduler so it can't keep polling the old namespaced
@@ -240,7 +265,7 @@ if /i "!FORCE!"=="true" (
 :: are best-effort cleanups, not gates on the script returning.
 echo.
 echo   [INFO] Cleaning up live monitor and Telegram scheduler processes...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*live_monitor.py*' -or $_.CommandLine -like '*trading_bot.scheduler*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -and ($_.CommandLine -like '*live_monitor.py*' -or $_.CommandLine -like '*trading_bot.scheduler*' -or $_.CommandLine -like '*run_sentiment_engine.py*' -or $_.CommandLine -like '*sentiment_monitor.py*') } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }" >nul 2>&1
 
 :: If the bot exits, pause so you can read any error messages
 echo.

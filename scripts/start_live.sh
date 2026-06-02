@@ -38,6 +38,17 @@ else
     exit 1
 fi
 
+# Sentiment engine API keys (optional). config/sentiment.env holds FRED_API_KEY
+# and an optional DXY_LEVEL override (see config/sentiment.env.example). Exported
+# so the sentiment engine subprocess inherits them. Absent → fundamental feed
+# stays neutral/MISSING (fail-safe), the bot is unaffected.
+if [ -f "config/sentiment.env" ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source config/sentiment.env
+    set +a
+fi
+
 # ── Account Selection ───────────────────────────────────────
 if [ "$FORCE" = true ]; then
     CONFIG="$ACTIVE_CONFIG"
@@ -187,6 +198,31 @@ else
     echo "  ⚠ Tkinter not available — skipping live monitor pop-up."
 fi
 
+# ── Market Sentiment Engine + pop-up (XAUUSD GSS) ───────────────
+# The engine assembles the Gold Sentiment Score on a slow clock (15 min) and
+# writes data/metrics/sentiment_monitor_state.json; the pop-up renders it next
+# to the live monitor. Both are DISPLAY-ONLY — they never trade and never touch
+# the risk engine. Technical bias is live from our own 5m data; the fundamental
+# (FRED) bias needs FRED_API_KEY (see config/sentiment.env.example).
+SENTIMENT_LOG="logs/sentiment_engine.log"
+SENTIMENT_MON_LOG="logs/sentiment_monitor.log"
+echo "  ➜ Launching market sentiment engine (XAUUSD GSS, 15-min loop)..."
+nohup python3 scripts/run_sentiment_engine.py --loop 900 \
+    >"$SENTIMENT_LOG" 2>&1 &
+SENTIMENT_PID=$!
+echo "    Sentiment engine PID: $SENTIMENT_PID   (log: $SENTIMENT_LOG)"
+if [ -z "${FRED_API_KEY:-}" ]; then
+    echo "    [note] FRED_API_KEY not set — fundamental bias will show MISSING."
+    echo "           Copy config/sentiment.env.example → config/sentiment.env to enable it."
+fi
+if python3 -c "import tkinter" >/dev/null 2>&1; then
+    echo "  ➜ Launching market sentiment pop-up..."
+    nohup python3 scripts/sentiment_monitor.py --refresh 2000 \
+        >"$SENTIMENT_MON_LOG" 2>&1 &
+    SENTIMENT_MON_PID=$!
+    echo "    Sentiment monitor PID: $SENTIMENT_MON_PID   (log: $SENTIMENT_MON_LOG)"
+fi
+
 # ── Telegram bot scheduler (optional — needs trading_bot/.env) ──
 TG_LOG="logs/telegram_bot.log"
 if [ -f "trading_bot/.env" ]; then
@@ -208,7 +244,7 @@ else
 fi
 
 # Make sure background helpers die when the main bot exits.
-trap 'kill ${MONITOR_PID:-} ${TG_PID:-} 2>/dev/null || true' EXIT INT TERM
+trap 'kill ${MONITOR_PID:-} ${TG_PID:-} ${SENTIMENT_PID:-} ${SENTIMENT_MON_PID:-} 2>/dev/null || true' EXIT INT TERM
 
 if [ "$FORCE" = true ]; then
     exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG" --force-live
