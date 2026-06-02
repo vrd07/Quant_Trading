@@ -447,6 +447,17 @@ class LiveMonitorApp:
         tk.Label(hdr, text="UTC NOW:", bg=BG_PANEL, fg=TEXT_DIM,
                  font=("Menlo", 9, "bold")).pack(side=tk.RIGHT, padx=(0, 6))
 
+        # Global FX sessions — REFERENCE ONLY (do not gate strategy firing).
+        tk.Label(body, text="GLOBAL FX SESSIONS (reference · IST)", bg=BG_PANEL,
+                 fg=TEXT_DIM, font=("Menlo", 8, "bold")).pack(anchor="w", pady=(2, 1))
+        wcols = ("active", "name", "ist", "status", "note")
+        wheadings = ("", "Session", "IST Window", "Status", "Notes")
+        wwidths = (24, 90, 110, 110, 240)
+        self.tree_world = self._make_tree(body, wcols, wheadings, wwidths, height=4)
+        self.tree_world.pack(fill=tk.X, pady=(0, 4))
+        self.tree_world.tag_configure("active", foreground=GREEN, background=BG_PANEL_2)
+        self.tree_world.tag_configure("idle", foreground=TEXT_DIM)
+
         # Table of all configured sessions (compact: narrower cols, height=3)
         cols = ("active", "name", "window", "lot", "strats")
         headings = ("", "Session", "UTC Window", "Lot ×", "Strategies")
@@ -940,6 +951,28 @@ class LiveMonitorApp:
                 f"{s.get('start', '?')} – {s.get('end', '?')}",
                 f"{float(s.get('lot_mult', 1.0)):.2f}",
                 strats_txt or "—",
+            ), tags=(tag,))
+
+        # ---- global FX sessions (reference only) ----
+        self._clear(self.tree_world)
+        for w in (sess.get("world") or []):
+            active = bool(w.get("active"))
+            if active:
+                ml = w.get("mins_left")
+                h, m = divmod(int(ml), 60) if isinstance(ml, (int, float)) else (0, 0)
+                status = f"OPEN · {h}h {m:02d}m left" if ml is not None else "OPEN"
+                tag, marker = "active", "●"
+            else:
+                mo = w.get("mins_to_open")
+                h, m = divmod(int(mo), 60) if isinstance(mo, (int, float)) else (0, 0)
+                status = f"opens in {h}h {m:02d}m" if mo is not None else "closed"
+                tag, marker = "idle", "·"
+            self.tree_world.insert("", "end", values=(
+                marker,
+                w.get("name", "—"),
+                w.get("ist_window", "—"),
+                status,
+                (w.get("note") or "")[:40],
             ), tags=(tag,))
 
         # ---- news (IST) ----
