@@ -39,6 +39,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 from src.sentiment import GSSComponents, compute_gss                       # noqa: E402
 from src.sentiment.feeds import (                                          # noqa: E402
     fetch_cot_net_long_wow_pct,
+    fetch_etf_flow_3d,
     fetch_fundamental,
     fetch_news_sentiment,
     fetch_retail_long_pct,
@@ -47,7 +48,7 @@ from src.sentiment.gss import (                                            # noq
     MAX_FUNDAMENTAL, MAX_INSTITUTIONAL, MAX_NEWS, MAX_RETAIL, MAX_TECHNICAL,
     score_fundamental, score_institutional, score_news, score_retail,
 )
-from src.sentiment.store import write_gss                                  # noqa: E402
+from src.sentiment.store import append_gss_history, write_gss              # noqa: E402
 from src.sentiment.technical import compute_technical                      # noqa: E402
 
 MONITOR_FILE = PROJECT_ROOT / "data" / "metrics" / "sentiment_monitor_state.json"
@@ -104,9 +105,12 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
         dxy_falling=fund.dxy_falling,
         dxy_level=fund.dxy_level,
         cpi_yoy=fund.cpi_yoy,
+        fiscal_stress=fund.fiscal_stress,
     )
     cot = fetch_cot_net_long_wow_pct()
-    inst_pts = score_institutional(cot_net_long_wow_pct=cot) if cot is not None else None
+    etf_flow = fetch_etf_flow_3d()
+    inst_pts = (score_institutional(cot_net_long_wow_pct=cot, etf_flow_3d=etf_flow)
+                if (cot is not None or etf_flow is not None) else None)
     retail_long = fetch_retail_long_pct()
     retail_pts = score_retail(retail_long)
     news_sent = fetch_news_sentiment()
@@ -158,13 +162,15 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
             "fundamental": _component(
                 "fundamental", fund_pts, MAX_FUNDAMENTAL,
                 f"fed={fund.fed_policy} real10y={fund.real_yield_10y} "
-                f"yld_falling={fund.real_yield_falling} cpi={fund.cpi_yoy}"),
+                f"yld_falling={fund.real_yield_falling} cpi={fund.cpi_yoy} "
+                f"fiscal_stress={fund.fiscal_stress}"),
             "technical": _component(
                 "technical", tech["points"], MAX_TECHNICAL,
                 f"trend={structure.get('trend')} rsi={structure.get('rsi_14')} "
                 f"macd={structure.get('macd_signal')} bb={structure.get('bb_state')}"),
             "institutional": _component(
-                "institutional", inst_pts, MAX_INSTITUTIONAL, f"cot_wow={cot}"),
+                "institutional", inst_pts, MAX_INSTITUTIONAL,
+                f"cot_wow={cot} etf_flow={etf_flow}"),
             "retail": _component(
                 "retail", retail_pts, MAX_RETAIL, f"retail_long%={retail_long}"),
             "news": _component(
@@ -177,7 +183,10 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
             "real_yield_falling": fund.real_yield_falling,
             "dxy_falling": fund.dxy_falling,
             "cpi_yoy": fund.cpi_yoy,
+            "fiscal_stress": fund.fiscal_stress,
+            "next_high_impact_event": _next_event(symbol),
         },
+        "position_status": _position_status(symbol),
         "risk_flags": flags,
         "price_levels": _annotate_levels(price),
         "recommendation": _recommendation(result.total, flags),
@@ -185,12 +194,61 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
         "feeds": {
             "technical": "LIVE (local 5m)",
             "fundamental": "LIVE (FRED)" if os.environ.get("FRED_API_KEY") else "OFF (set FRED_API_KEY)",
-            "institutional": "LIVE (CFTC COT)" if cot is not None else "OFF (CFTC unreachable)",
-            "retail": "TODO (Myfxbook)",
-            "news": "TODO (Alpha Vantage)",
+            "institutional": (
+                f"LIVE (COT{'+ETF' if etf_flow is not None else ''})"
+                if (cot is not None or etf_flow is not None) else "OFF (CFTC unreachable)"),
+            "retail": "LIVE (Myfxbook)" if retail_long is not None else (
+                "OFF (set MYFXBOOK_*)" if not os.environ.get("MYFXBOOK_EMAIL") else "OFF (login/outlook failed)"),
+            "news": "LIVE (Alpha Vantage)" if news_sent is not None else (
+                "OFF (set ALPHAVANTAGE_API_KEY)" if not os.environ.get("ALPHAVANTAGE_API_KEY") else "OFF (rate-limited?)"),
         },
     }
     return snapshot
+
+
+def _bot_state() -> Optional[Dict[str, Any]]:
+    """Read the running bot's live_monitor_state JSON (active config first)."""
+    metrics = PROJECT_ROOT / "data" / "metrics"
+    paths = []
+    try:
+        stem = Path((PROJECT_ROOT / "config" / "ACTIVE_CONFIG")
+                    .read_text().strip().splitlines()[0].strip()).stem
+        paths.append(metrics / f"live_monitor_state_{stem}.json")
+    except Exception:
+        pass
+    paths.append(metrics / "live_monitor_state.json")
+    for p in paths:
+        try:
+            if p.exists():
+                return json.loads(p.read_text())
+        except Exception:
+            continue
+    return None
+
+
+def _position_status(symbol: str) -> Dict[str, Any]:
+    """Current bot position on `symbol` from the live monitor (§5.1)."""
+    state = _bot_state() or {}
+    for p in state.get("positions", []) or []:
+        if (p.get("symbol") or "").upper().startswith(symbol):
+            return {
+                "current_position": (p.get("side") or "none").lower(),
+                "qty": p.get("qty", 0),
+                "entry": p.get("entry", 0),
+                "unrealized_pnl": p.get("pnl", 0),
+            }
+    return {"current_position": "none", "unrealized_pnl": 0}
+
+
+def _next_event(symbol: str) -> Optional[str]:
+    """Nearest upcoming high-impact news event from the bot's news block (§5.1)."""
+    state = _bot_state() or {}
+    upcoming = (state.get("news", {}) or {}).get("upcoming", []) or []
+    for e in upcoming:
+        title = e.get("title") or e.get("currency") or "event"
+        when = e.get("time_ist") or ""
+        return f"{title} {when}".strip()
+    return None
 
 
 def _session_name(now: datetime) -> str:
@@ -254,6 +312,8 @@ def _write(snapshot: Dict[str, Any]) -> None:
         missing=snapshot["missing_components"],
     )
     write_gss(snapshot["asset"], res, source_detail={"feeds": snapshot["feeds"]})
+    # Accumulate one row per cycle for the future GSS backtest.
+    append_gss_history(snapshot["asset"], snapshot)
 
 
 def main() -> int:

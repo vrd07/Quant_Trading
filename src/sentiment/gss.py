@@ -48,9 +48,10 @@ def score_fundamental(
     dxy_falling: Optional[bool] = None,
     dxy_level: Optional[float] = None,
     cpi_yoy: Optional[float] = None,
+    fiscal_stress: Optional[bool] = None,    # debt-ceiling / shutdown active
 ) -> Optional[float]:
     """30-pt Fundamental Bias. Returns None if nothing is known (→ neutral)."""
-    if all(x is None for x in (fed_policy, real_yield_10y, dxy_level, cpi_yoy)):
+    if all(x is None for x in (fed_policy, real_yield_10y, dxy_level, cpi_yoy, fiscal_stress)):
         return None
     # FedScore (-10..+10) → shifted to 0..max contribution handled by sum/clamp.
     fed = {"dovish": 10, "neutral": 5, "hawkish": -10}.get((fed_policy or "").lower(), 0)
@@ -82,9 +83,11 @@ def score_fundamental(
         infl = 0
     else:
         infl = -5
-    raw = fed + yld + dxy + infl  # spec range roughly -35..+35
-    # Map raw [-35, +35] onto [0, 30] linearly (neutral 0 → 15).
-    pts = (raw + 35) / 70.0 * MAX_FUNDAMENTAL
+    # FiscalScore (§4.2 A): +5 during a debt-ceiling / shutdown episode.
+    fiscal = 5 if fiscal_stress else 0
+    raw = fed + yld + dxy + infl + fiscal  # range [-35, +40]
+    # Map raw [-35, +40] onto [0, 30] linearly (neutral 0 → 14).
+    pts = (raw + 35) / 75.0 * MAX_FUNDAMENTAL
     return _clamp(pts, 0, MAX_FUNDAMENTAL)
 
 
