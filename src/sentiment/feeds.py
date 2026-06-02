@@ -16,12 +16,15 @@ one at a time, each behind its own backtest, rather than wiring all eight APIs.
 """
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import os
+import time
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
-from typing import List, Optional
+from pathlib import Path
+from typing import Any, Callable, List, Optional
 
 
 @dataclass
@@ -32,11 +35,63 @@ class FundamentalInputs:
     dxy_level: Optional[float] = None
     dxy_falling: Optional[bool] = None
     cpi_yoy: Optional[float] = None
+    fiscal_stress: Optional[bool] = None      # debt-ceiling / shutdown active
 
 
 def _env(key: str) -> Optional[str]:
     val = os.environ.get(key)
     return val if val else None
+
+
+def _env_bool(key: str) -> Optional[bool]:
+    v = os.environ.get(key)
+    if v is None or v == "":
+        return None
+    return v.strip().lower() in ("1", "true", "yes", "on")
+
+
+# ── disk cache for slow feeds ────────────────────────────────────────────────
+# Alpha Vantage free tier is 25 calls/day; the engine's 15-min loop would make
+# ~96/day per AV feed. Macro/positioning data also changes daily/weekly, not
+# every 15 min. So cache each feed's last GOOD value with a TTL and only hit the
+# network when stale. Only non-None results are cached — a failed fetch never
+# poisons the cache, and the caller still falls back to neutral.
+_CACHE_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "sentiment" / ".feed_cache"
+
+
+def _cached(key: str, ttl_seconds: float, producer: Callable[[], Any]) -> Any:
+    try:
+        path = _CACHE_DIR / f"{key}.json"
+        if path.exists():
+            blob = json.loads(path.read_text())
+            if (time.time() - blob.get("ts", 0)) < ttl_seconds:
+                return blob.get("value")
+    except Exception:
+        pass
+    value = producer()
+    if value is not None:
+        try:
+            _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            (_CACHE_DIR / f"{key}.json").write_text(
+                json.dumps({"ts": time.time(), "value": value}))
+        except Exception:
+            pass
+    return value
+
+
+# Some endpoints (Myfxbook) 403 the default urllib User-Agent.
+_UA = {"User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36")}
+
+
+def _get_json(url: str, timeout: int = 20) -> Optional[dict]:
+    """GET JSON with a browser UA. Returns None on any error (fail-safe)."""
+    try:
+        req = urllib.request.Request(url, headers=_UA)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception:
+        return None
 
 
 _FRED_URL = "https://api.stlouisfed.org/fred/series/observations"
@@ -71,41 +126,52 @@ def _falling(series_newest_first: List[float], lookback: int = 3) -> Optional[bo
     return series_newest_first[0] < series_newest_first[lookback]
 
 
-def fetch_fundamental() -> FundamentalInputs:
-    """FRED real yields (DFII10) + broad-dollar trend + Fed funds + CPI YoY.
-
-    Highest-signal feed. Requires FRED_API_KEY (free). Every field independently
-    fails safe to None, so a partial outage degrades to neutral rather than a
-    fabricated bias. DXY proper needs Alpha Vantage; we use FRED's broad-dollar
-    index (DTWEXBGS) as a stand-in and normalize its level to a ~DXY scale only
-    for the falling/level classification, not as a true DXY print.
-    """
+def _fetch_fred_dict() -> Optional[dict]:
+    """Network half of the fundamental feed → plain dict (cacheable). None if no key."""
     key = _env("FRED_API_KEY")
     if not key:
-        return FundamentalInputs()
-    out = FundamentalInputs()
-
-    dfii10 = _fred_series("DFII10", key)        # 10Y TIPS real yield, %
+        return None
+    out: dict = {}
+    dfii10 = _fred_series("DFII10", key)               # 10Y TIPS real yield, %
     if dfii10:
-        out.real_yield_10y = dfii10[0]
-        out.real_yield_falling = _falling(dfii10)
-
+        out["real_yield_10y"] = dfii10[0]
+        out["real_yield_falling"] = _falling(dfii10)
     fedfunds = _fred_series("FEDFUNDS", key, limit=4)  # monthly effective rate
     if len(fedfunds) >= 2:
-        if fedfunds[0] < fedfunds[1]:
-            out.fed_policy = "dovish"
-        elif fedfunds[0] > fedfunds[1]:
-            out.fed_policy = "hawkish"
-        else:
-            out.fed_policy = "neutral"
-
-    # Broad-dollar index gives us a reliable DIRECTION; its level is on a
-    # different scale than DXY, so we do NOT use it as the level. If the user
-    # supplies a real DXY print via DXY_LEVEL (config/sentiment.env), use that
-    # for the level-based DXYScore — otherwise level stays None (direction-only).
-    dollar = _fred_series("DTWEXBGS", key)
+        out["fed_policy"] = ("dovish" if fedfunds[0] < fedfunds[1]
+                             else "hawkish" if fedfunds[0] > fedfunds[1] else "neutral")
+    dollar = _fred_series("DTWEXBGS", key)             # broad-dollar (direction only)
     if dollar:
-        out.dxy_falling = _falling(dollar)
+        out["dxy_falling"] = _falling(dollar)
+    cpi = _fred_series("CPIAUCSL", key, limit=14)      # monthly index level
+    if len(cpi) >= 13:
+        out["cpi_yoy"] = round((cpi[0] / cpi[12] - 1.0) * 100, 2)
+    # Only treat the fetch as good (cacheable) when the core anchors arrived;
+    # a transient partial must not be cached for 6h. Returning None → this cycle
+    # is neutral and the next cycle retries.
+    if "real_yield_10y" not in out or "cpi_yoy" not in out:
+        return None
+    return out
+
+
+def fetch_fundamental() -> FundamentalInputs:
+    """FRED real yields (DFII10) + broad-dollar trend + Fed funds + CPI YoY,
+    plus a manual fiscal-stress flag.
+
+    Requires FRED_API_KEY (free). FRED data is cached 6h (it updates daily at
+    most). True DXY is ICE-proprietary; we use FRED's broad-dollar index for
+    DIRECTION only, unless DXY_LEVEL is supplied. FiscalScore (§4.2 A) has no
+    clean free API, so it is driven by the FISCAL_STRESS env flag — set it true
+    during a known debt-ceiling / shutdown episode.
+    """
+    out = FundamentalInputs()
+    data = _cached("fred_fundamental", 6 * 3600, _fetch_fred_dict) or {}
+    out.real_yield_10y = data.get("real_yield_10y")
+    out.real_yield_falling = data.get("real_yield_falling")
+    out.fed_policy = data.get("fed_policy")
+    out.dxy_falling = data.get("dxy_falling")
+    out.cpi_yoy = data.get("cpi_yoy")
+
     dxy_override = _env("DXY_LEVEL")
     if dxy_override:
         try:
@@ -113,10 +179,7 @@ def fetch_fundamental() -> FundamentalInputs:
         except ValueError:
             pass
 
-    cpi = _fred_series("CPIAUCSL", key, limit=14)  # monthly index level
-    if len(cpi) >= 13:
-        out.cpi_yoy = round((cpi[0] / cpi[12] - 1.0) * 100, 2)
-
+    out.fiscal_stress = _env_bool("FISCAL_STRESS")
     return out
 
 
@@ -129,12 +192,13 @@ _GOLD_CONTRACT_CODE = "088691"
 
 
 def fetch_cot_net_long_wow_pct() -> Optional[float]:
-    """Week-over-week % change in non-commercial NET-long gold positioning.
+    """WoW % change in non-commercial NET-long gold positioning (cached 12h)."""
+    return _cached("cot_gold", 12 * 3600, _fetch_cot_raw)
 
-    net = noncomm_long - noncomm_short. Returns (net_now - net_prev)/|net_prev|
-    * 100, or None on any error / insufficient history (→ neutral institutional
-    sub-score). Weekly data (Fri release); polling faster is pointless.
-    """
+
+def _fetch_cot_raw() -> Optional[float]:
+    """net = noncomm_long - noncomm_short; (net_now - net_prev)/|net_prev| * 100.
+    None on error / insufficient history. Weekly data (Fri release)."""
     try:
         q = urllib.parse.urlencode({
             "cftc_contract_market_code": _GOLD_CONTRACT_CODE,
@@ -156,19 +220,156 @@ def fetch_cot_net_long_wow_pct() -> Optional[float]:
         return None
 
 
-def fetch_retail_long_pct() -> Optional[float]:
-    """Retail long % (contrarian). Myfxbook / OANDA. Build third.
+_MYFXBOOK = "https://www.myfxbook.com/api"
 
-    TODO: scrape/API the retail long/short ratio for XAUUSD. Returns None until
-    implemented.
+
+def _retail_once(email: str, password: str) -> Optional[float]:
+    """One login→outlook→logout attempt on a SHARED cookie jar.
+
+    Myfxbook sets a cookie at login that its API checks alongside the session
+    token; without it the very next call returns "Invalid session". So all three
+    calls must go through one opener that carries cookies forward.
     """
-    return None
+    jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(jar))
+
+    def call(url: str) -> Optional[dict]:
+        try:
+            req = urllib.request.Request(url, headers=_UA)
+            with opener.open(req, timeout=20) as resp:
+                return json.loads(resp.read().decode("utf-8"))
+        except Exception:
+            return None
+
+    session = None
+    try:
+        login = call(f"{_MYFXBOOK}/login.json?email={urllib.parse.quote(email)}"
+                     f"&password={urllib.parse.quote(password)}")
+        if not login or login.get("error") or not login.get("session"):
+            return None
+        session = login["session"]
+        out = call(f"{_MYFXBOOK}/get-community-outlook-by-country.json"
+                   f"?session={urllib.parse.quote(session)}&symbol=XAUUSD")
+        if not out or out.get("error"):
+            return None
+        countries = out.get("countries", []) or []
+        long_vol = sum(float(c.get("longVolume", 0) or 0) for c in countries)
+        short_vol = sum(float(c.get("shortVolume", 0) or 0) for c in countries)
+        if long_vol + short_vol > 0:
+            return round(long_vol / (long_vol + short_vol) * 100, 1)
+        long_pos = sum(float(c.get("longPositions", 0) or 0) for c in countries)
+        short_pos = sum(float(c.get("shortPositions", 0) or 0) for c in countries)
+        if long_pos + short_pos > 0:
+            return round(long_pos / (long_pos + short_pos) * 100, 1)
+        return None
+    finally:
+        if session:
+            try:
+                call(f"{_MYFXBOOK}/logout.json?session={urllib.parse.quote(session)}")
+            except Exception:
+                pass
+
+
+def fetch_retail_long_pct(retries: int = 2) -> Optional[float]:
+    """Retail % LONG on XAUUSD from Myfxbook Community Outlook (CONTRARIAN input).
+
+    Needs MYFXBOOK_EMAIL / MYFXBOOK_PASSWORD. Uses the by-country endpoint (the
+    plain get-community-outlook returns "Invalid session" for most accounts — a
+    documented Myfxbook restriction) and aggregates long/short across countries.
+    Long% is by volume (matches Myfxbook's headline), falling back to position
+    counts. Retries a couple of times because the session check is flaky, then
+    returns None → neutral retail sub-score (never blocks the engine).
+    """
+    email = _env("MYFXBOOK_EMAIL")
+    password = _env("MYFXBOOK_PASSWORD")
+    if not email or not password:
+        return None
+    # Cache good values 20 min so a transient Myfxbook throttle doesn't blank the
+    # component every cycle; the producer retries a couple of times itself.
+    def _produce() -> Optional[float]:
+        for _ in range(max(1, retries)):
+            result = _retail_once(email, password)
+            if result is not None:
+                return result
+            time.sleep(1.5)
+        return None
+    return _cached("myfxbook_retail", 20 * 60, _produce)
+
+
+_AV_DAILY = "https://www.alphavantage.co/query"
+
+
+def fetch_etf_flow_3d() -> Optional[str]:
+    """GLD 3-day flow proxy → 'inflow' | 'flat' | 'outflow' (cached 12h).
+
+    True GLD fund flows (tonnes in trust) have no clean free API, so we proxy
+    with the 3-day GLD price trend via Alpha Vantage TIME_SERIES_DAILY: ETF
+    money chases price. A proxy, not actual creations/redemptions — labeled as
+    such. None on rate-limit/error → neutral ETF sub-score.
+    """
+    return _cached("av_gld_flow", 12 * 3600, _fetch_etf_flow_raw)
+
+
+def _fetch_etf_flow_raw() -> Optional[str]:
+    key = _env("ALPHAVANTAGE_API_KEY")
+    if not key:
+        return None
+    data = _get_json(
+        f"{_AV_DAILY}?function=TIME_SERIES_DAILY&symbol=GLD&outputsize=compact"
+        f"&apikey={urllib.parse.quote(key)}")
+    series = (data or {}).get("Time Series (Daily)")
+    if not series:
+        return None
+    try:
+        dates = sorted(series.keys(), reverse=True)[:4]
+        closes = [float(series[d]["4. close"]) for d in dates]
+    except (KeyError, ValueError):
+        return None
+    if len(closes) < 4:
+        return None
+    # 3-day change: most recent close vs close 3 sessions ago.
+    chg = (closes[0] - closes[3]) / closes[3] * 100
+    if chg > 0.3:
+        return "inflow"
+    if chg < -0.3:
+        return "outflow"
+    return "flat"
 
 
 def fetch_news_sentiment() -> Optional[float]:
-    """Average NLP sentiment of recent gold headlines, in [-1, +1].
+    """Average gold news sentiment in [-1, +1] from Alpha Vantage (cached 3h)."""
+    return _cached("av_news_gld", 3 * 3600, _fetch_news_raw)
 
-    TODO: Alpha Vantage NEWS_SENTIMENT (function=NEWS_SENTIMENT, tickers/topics).
-    Lowest priority — noisiest signal. Returns None until implemented.
-    """
-    return None
+
+def _fetch_news_raw() -> Optional[float]:
+    """Query the GLD gold-ETF ticker (no clean spot-gold ticker) and average the
+    GLD-specific ticker_sentiment_score, falling back to overall. None on
+    rate-limit (no 'feed') / error."""
+    key = _env("ALPHAVANTAGE_API_KEY")
+    if not key:
+        return None
+    data = _get_json(
+        "https://www.alphavantage.co/query?function=NEWS_SENTIMENT"
+        f"&tickers=GLD&limit=50&apikey={urllib.parse.quote(key)}")
+    if not data or "feed" not in data:
+        return None
+    gld_scores: List[float] = []
+    overall_scores: List[float] = []
+    for article in data["feed"]:
+        ov = article.get("overall_sentiment_score")
+        if ov not in (None, ""):
+            try:
+                overall_scores.append(float(ov))
+            except ValueError:
+                pass
+        for t in article.get("ticker_sentiment", []) or []:
+            if t.get("ticker") == "GLD":
+                try:
+                    gld_scores.append(float(t["ticker_sentiment_score"]))
+                except (ValueError, KeyError):
+                    pass
+    scores = gld_scores or overall_scores
+    if not scores:
+        return None
+    avg = sum(scores) / len(scores)
+    return round(max(-1.0, min(1.0, avg)), 4)
