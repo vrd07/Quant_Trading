@@ -1,10 +1,10 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-05-29T19:00:05.160271+00:00",
-  "valid_until": "2026-05-30T19:00:05.160271+00:00",
+  "generated_at": "2026-06-01T19:27:44.938258+00:00",
+  "valid_until": "2026-06-02T19:27:44.938258+00:00",
   "regime": "RANGE",
-  "confidence": 0.7364,
-  "classifier": "RandomForest+Markov (n=37 samples)",
+  "confidence": 0.9694,
+  "classifier": "RandomForest+Markov (n=68 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -21,15 +21,15 @@
     "continuation_breakout": false
   },
   "diagnostics": {
-    "adx_14": 33.173101,
-    "atr_pct": 0.030534,
-    "bb_width_ratio": 0.830384,
-    "close_ema20_pct": 0.038132,
-    "momentum_1d": -0.024228,
-    "momentum_5d": 0.021314,
-    "range_atr_ratio": 1.244329,
-    "vol_ratio": 1.8e-05,
-    "park_vol_zscore": -0.859872
+    "adx_14": 25.454025,
+    "atr_pct": 0.025498,
+    "bb_width_ratio": 1.234248,
+    "close_ema20_pct": -0.032246,
+    "momentum_1d": 0.007061,
+    "momentum_5d": -0.043551,
+    "range_atr_ratio": 0.458487,
+    "vol_ratio": 0.557177,
+    "park_vol_zscore": -0.222914
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -50,20 +50,20 @@
     "kalman_regime": 0.1275
   },
   "regime_probabilities": {
-    "TREND": 0.2555,
-    "RANGE": 0.7364,
-    "VOLATILE": 0.0081
+    "TREND": 0.0263,
+    "RANGE": 0.9694,
+    "VOLATILE": 0.0044
   },
   "transition_matrix": {
     "TREND": {
-      "TREND": 0.1667,
-      "RANGE": 0.6667,
-      "VOLATILE": 0.1667
+      "TREND": 0.2,
+      "RANGE": 0.6,
+      "VOLATILE": 0.2
     },
     "RANGE": {
-      "TREND": 0.1081,
-      "RANGE": 0.8649,
-      "VOLATILE": 0.027
+      "TREND": 0.0435,
+      "RANGE": 0.942,
+      "VOLATILE": 0.0145
     },
     "VOLATILE": {
       "TREND": 0.3333,
