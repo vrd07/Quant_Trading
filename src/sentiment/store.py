@@ -7,6 +7,7 @@ consumer treats "no score" as neutral, never as a signal.
 """
 from __future__ import annotations
 
+import csv
 import json
 import os
 import tempfile
@@ -18,6 +19,14 @@ from .gss import GSSResult
 
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _SENTIMENT_DIR = _PROJECT_ROOT / "data" / "sentiment"
+
+# Append-only history — one row per engine cycle. This is the dataset the future
+# GSS backtest reads to test whether the score actually predicts XAUUSD moves.
+_HISTORY_FIELDS = [
+    "timestamp", "price", "price_source", "gss_total", "regime",
+    "fundamental", "technical", "institutional", "retail", "news",
+    "missing", "recommendation",
+]
 
 
 def _path_for(symbol: str) -> Path:
@@ -44,6 +53,41 @@ def write_gss(symbol: str, result: GSSResult, source_detail: Optional[Dict[str, 
         os.replace(tmp, dest)
     except Exception:
         # Persisting a sentiment score must never break the caller.
+        pass
+
+
+def append_gss_history(symbol: str, snapshot: Dict[str, Any]) -> None:
+    """Append one row of the rich snapshot to data/sentiment/gss_history_{symbol}.csv.
+
+    Append-only and header-on-create, so it accumulates across runs and is safe
+    to read while the engine is writing. Never raises into the caller.
+    """
+    try:
+        _SENTIMENT_DIR.mkdir(parents=True, exist_ok=True)
+        path = _SENTIMENT_DIR / f"gss_history_{symbol}.csv"
+        gss = snapshot.get("gss", {}) or {}
+        bd = gss.get("breakdown", {}) or {}
+        row = {
+            "timestamp": snapshot.get("generated_at", ""),
+            "price": snapshot.get("price", ""),
+            "price_source": snapshot.get("price_source", ""),
+            "gss_total": gss.get("total_score", ""),
+            "regime": gss.get("regime", ""),
+            "fundamental": bd.get("fundamental", ""),
+            "technical": bd.get("technical", ""),
+            "institutional": bd.get("institutional", ""),
+            "retail": bd.get("retail", ""),
+            "news": bd.get("news", ""),
+            "missing": "|".join(snapshot.get("missing_components", []) or []),
+            "recommendation": (snapshot.get("recommendation", {}) or {}).get("action", ""),
+        }
+        write_header = not path.exists()
+        with open(path, "a", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=_HISTORY_FIELDS)
+            if write_header:
+                w.writeheader()
+            w.writerow(row)
+    except Exception:
         pass
 
 
