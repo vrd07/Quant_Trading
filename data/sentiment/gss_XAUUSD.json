@@ -1,26 +1,25 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-02T13:35:10.597931+00:00",
-  "gss_total": 41.43,
+  "generated_at": "2026-06-02T15:45:16.602807+00:00",
+  "gss_total": 41.33,
   "regime": "Neutral / Chop",
   "breakdown": {
-    "fundamental": 21.43,
+    "fundamental": 18.0,
     "technical": 7.5,
-    "institutional": 0.0,
+    "institutional": 5.0,
     "retail": 7.5,
-    "news": 5.0
+    "news": 3.33
   },
   "missing": [
-    "retail",
-    "news"
+    "retail"
   ],
   "source_detail": {
     "feeds": {
       "technical": "LIVE (local 5m)",
       "fundamental": "LIVE (FRED)",
-      "institutional": "LIVE (CFTC COT)",
-      "retail": "TODO (Myfxbook)",
-      "news": "TODO (Alpha Vantage)"
+      "institutional": "LIVE (COT+ETF)",
+      "retail": "OFF (login/outlook failed)",
+      "news": "LIVE (Alpha Vantage)"
     }
   }
 }
