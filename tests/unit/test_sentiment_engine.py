@@ -28,18 +28,49 @@ def test_build_snapshot_contract():
     assert len(snap["price_levels"]) == 6
 
 
-def test_missing_feeds_are_flagged_not_faked():
-    """Unbuilt feeds must be MISSING (neutral), not faked LIVE.
+def test_live_missing_invariant_is_consistent():
+    """A component is LIVE iff it is NOT in missing_components, and a missing one
+    carries the neutral midpoint — never a faked directional value.
 
-    retail (Myfxbook) and news (Alpha Vantage) are still stubs that always
-    return None, so they must always show as missing regardless of network.
+    All five feeds are implemented now, so which are live depends on creds/network;
+    this checks the contract holds regardless of what is reachable.
     """
     from scripts.run_sentiment_engine import build_snapshot
+    from src.sentiment.gss import _NEUTRAL
     snap = build_snapshot("XAUUSD")
-    assert not snap["components"]["retail"]["live"]
-    assert not snap["components"]["news"]["live"]
-    assert "retail" in snap["missing_components"]
-    assert "news" in snap["missing_components"]
+    for name, c in snap["components"].items():
+        assert c["live"] == (name not in snap["missing_components"])
+        if not c["live"]:
+            assert c["score"] == round(_NEUTRAL[name], 2)
+
+
+def test_gss_history_appends_with_header():
+    """append_gss_history writes a header once, then one row per call (no network)."""
+    import csv as _csv
+    from src.sentiment import store
+    sym = "TESTSYM_HIST"
+    path = store._SENTIMENT_DIR / f"gss_history_{sym}.csv"
+    if path.exists():
+        path.unlink()
+    snap = {
+        "generated_at": "2026-06-02T00:00:00+00:00", "price": 4500.0,
+        "price_source": "mt5_live",
+        "gss": {"total_score": 40.0, "regime": "Neutral / Chop",
+                "breakdown": {"fundamental": 21.4, "technical": 7.5,
+                              "institutional": 0.0, "retail": 7.5, "news": 3.3}},
+        "missing_components": ["retail"], "recommendation": {"action": "FLAT / chop"},
+    }
+    try:
+        store.append_gss_history(sym, snap)
+        store.append_gss_history(sym, snap)
+        rows = list(_csv.DictReader(open(path, encoding="utf-8")))
+        assert len(rows) == 2                       # header written once
+        assert rows[0]["gss_total"] == "40.0"
+        assert rows[0]["missing"] == "retail"
+        assert set(store._HISTORY_FIELDS) <= set(rows[0].keys())
+    finally:
+        if path.exists():
+            path.unlink()
 
 
 @pytest.mark.skipif(
