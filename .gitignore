@@ -153,3 +153,6 @@ test_min_stops.py
 
 # Sentiment engine API keys (real keys — never commit)
 config/sentiment.env
+
+# Sentiment engine runtime data (scores + history)
+data/sentiment/
