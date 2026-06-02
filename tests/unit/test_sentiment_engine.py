@@ -29,13 +29,17 @@ def test_build_snapshot_contract():
 
 
 def test_missing_feeds_are_flagged_not_faked():
-    """Without API keys, non-technical feeds must be MISSING (neutral), not LIVE."""
+    """Unbuilt feeds must be MISSING (neutral), not faked LIVE.
+
+    retail (Myfxbook) and news (Alpha Vantage) are still stubs that always
+    return None, so they must always show as missing regardless of network.
+    """
     from scripts.run_sentiment_engine import build_snapshot
     snap = build_snapshot("XAUUSD")
-    # Institutional/retail/news have no feed yet → must be marked missing.
-    assert not snap["components"]["institutional"]["live"]
+    assert not snap["components"]["retail"]["live"]
     assert not snap["components"]["news"]["live"]
-    assert "institutional" in snap["missing_components"]
+    assert "retail" in snap["missing_components"]
+    assert "news" in snap["missing_components"]
 
 
 @pytest.mark.skipif(
