@@ -75,26 +75,25 @@ class RiskProcessor:
         tp = None
 
         if strategy_name == 'kalman_regime':
-            # SL stays exactly as the user configured (sl_atr_multiplier × ATR).
-            # TP is NOT a fixed ATR multiple anymore — it is set to whatever R:R
-            # the risk engine wants for this confidence tier, then floored by
-            # `risk.kalman_min_tp_rr` so the reward ALWAYS strictly exceeds the
-            # risk (TP distance > SL distance ⇒ we always book net-positive R).
-            # tp_atr_multiplier is intentionally ignored here.
+            # SL = sl_atr_multiplier × ATR (as configured).
+            # TP = tp_atr_multiplier × ATR — the configured ATR multiple is the
+            # primary TP driver so the backtest grid's tp_atr_multiplier sweep is
+            # meaningful. `risk.kalman_min_tp_rr` is a HARD FLOOR on the realized
+            # R:R: if the configured TP would land tighter than min_tp_rr × SL,
+            # widen it so reward never falls below the floor. With the floor ≥ 1
+            # the reward always at least matches the risk.
             atr = Decimal(str(signal.metadata.get('atr', 0)))
             sl_mult = Decimal(str(strat_cfg.get('sl_atr_multiplier', 2.5)))
+            tp_mult = Decimal(str(strat_cfg.get('tp_atr_multiplier', 4.0)))
 
             sl_dist = sl_mult * atr
             sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
 
-            _, desired_rr = self._rr_tier(signal.strength)
-            # Hard invariant: TP must beat SL. Floor the risk-engine R:R above 1.
             min_tp_rr = Decimal(str(
                 (self.config.get('risk', {}) or {}).get('kalman_min_tp_rr', 2.0)
             ))
-            tp_rr = max(desired_rr, min_tp_rr)
-
-            tp_dist = sl_dist * tp_rr
+            # Configured ATR-based TP, floored by the minimum R:R safety net.
+            tp_dist = max(tp_mult * atr, sl_dist * min_tp_rr)
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
         elif strategy_name == 'momentum_scalp':
