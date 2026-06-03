@@ -77,7 +77,7 @@ All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orches
 
 | # | Strategy | File | Combo role (post-gate) | Summary |
 |---|----------|------|------------------------|---------|
-| 1 | **KalmanRegime** | `kalman_regime_strategy.py` | **Solo (allowlist)** | v3 (2026-06): two-state local-linear-trend Kalman (level+velocity, ATR-adaptive Q/R). Velocity drives TREND entries, level-deviation drives RANGE fades. 15m bars. |
+| 1 | **KalmanRegime** | `kalman_regime_strategy.py` | **Solo (allowlist)** | v3 (2026-06): two-state local-trend Kalman (level+velocity, ATR-adaptive Q/R) used as a fair-value anchor for **LONG-ONLY deep-dip mean reversion** — buy when price ≥ `dip_entry_atr` ATR below the level, inside a higher-TF uptrend. 15m bars. Validated dip2.5/sl3.0/tp3.0 PF~1.3 IS+OOS. |
 | 2 | **Breakout** | `breakout_strategy.py` | **KILL** | Donchian channel breakout with multi-timeframe confirmation |
 | 3 | **MeanReversion** | `mean_reversion_strategy.py` | **KILL** | OU z-score entries at extremes (|z| > 2.0) |
 | 4 | **Momentum** | `momentum_strategy.py` | Filter-only (COMBO A confirm, COMBO C leg) | Short-term ROC with ADX confirmation |
