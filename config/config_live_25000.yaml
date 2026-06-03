@@ -293,30 +293,50 @@ strategies:
   # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
   kalman_regime:
     enabled: true
-    timeframe: 15m                  # v3 (2026-06): LONG-ONLY deep-dip mean reversion
-    # ── 2-state local-trend Kalman (level + velocity); ATR-adaptive Q/R ──
-    process_scale: 0.001
-    measurement_scale: 1.0
-    kalman_window: 300              # tail fed to the recursive filter (it converges fast)
+    timeframe: 15m
+    long_only: false                # Two-sided: SELL re-enabled with confidence-gated sizing
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    rv_window: 20
+    rv_ma_window: 100
+    zscore_window: 20
+    # v3 Loosen (2026-04-19): backtest shows 2× trades, 2× absolute return at
+    # same PF/Sharpe. User accepts the 2.4× larger max-DD because account-level
+    # max-loss is enforced outside this strategy. Raw config for reference:
+    #   entry_threshold 2.0→1.5, trend_adx_min 20→17, kalman_confirm_bars 2→1,
+    #   min_signal_strength 0.50→0.35, cooldown_bars 2→1.
+    entry_threshold: 2.0            # 2026-05-05: v3-loose REVERTED (was 1.5) — testing v2 entry quality
+    trend_adx_min: 17               # v3 loose: 20 -> 17 (KEPT pending isolation test)
+    kalman_confirm_bars: 2          # 2026-05-05: v3-loose REVERTED (was 1)
+    min_signal_strength: 0.50       # 2026-05-05: v3-loose REVERTED (was 0.35) — BUY-side gate
+    min_signal_strength_sell: 0.75  # 2026-05-05: SELL-specific tighter gate — trade log showed SELL WR 14.6% vs BUY 33.9% (gold has bullish drift)
+    cooldown_bars: 2                # 2026-05-05: v3-loose REVERTED (was 1)
     atr_period: 14
-    # ── Deep-dip entry: BUY when price is >= dip_entry_atr ATR BELOW the level ──
-    dip_entry_atr: 2.5             # validated edge (IS plateau + OOS PF 1.34)
-    dip_strength_scale: 3.0
-    max_falling_vel: null          # optional: skip dips still free-falling (vel/ATR)
-    # ── HTF uptrend gate: only buy dips inside a higher-TF uptrend ──
-    require_htf_uptrend: true
-    htf_resample_to: 4h
-    htf_ema_period: 50
-    # ── Stops (consumed by RiskProcessor). Wide SL is ESSENTIAL for dip-buying ──
-    sl_atr_multiplier: 3.0         # 3.0xATR — lets the dip deepen before reverting
-    tp_atr_multiplier: 3.0         # 3.0xATR (1:1 RR; ~60-65% win drives the edge)
-    # ── Gating ──
-    min_signal_strength: 0.0       # dip_entry_atr is the real gate
-    cooldown_bars: 2               # 2x15m = 30m minimum between entries
-    session_filter_enabled: true
-    allowed_sessions: [[0,23]]
-    high_confidence_threshold: 90.0
+    sl_atr_multiplier: 3.0          # 2026-05-06: 1.5/2.5 → 3.0 — 2-D SL×TP sweep on $10k showed (3.0, 4.0) is winrate sweet spot (WR 47.6%, PF 1.32)
+    tp_atr_multiplier: 4.0          # 2026-05-06: 8.0 → 4.0 — XAU 15m trends rarely reach 8×ATR; tighter TP captures more wins without giving back via stops
     news_filter: true
+    # Confidence gate: signals with conf >= threshold may stack up to risk.max_positions;
+    # signals below threshold are limited to 1 open kalman_regime position at a time.
+    high_confidence_threshold: 90.0
+    # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
+    session_filter_enabled: true
+    allowed_sessions: [[3,4],[20,23]]   # 2026-05-06: data-driven 6-hour mask. Trade log on 2186-trade run showed only these hours have positive Kalman expectancy (h3:+$468, h4:+$885, h20:+$372, h21:+$889, h22:+$311, h23:+$177). 24h widening exposed Kalman to its bleed hours (h9/13/14 = -$1.5k each).
+    ema_confirm_enabled: false
+    macd_confirmation: false
+    kalman_accel_enabled: false
+    stoch_confirm_enabled: false
+    range_rsi_buy: 42
+    range_rsi_sell: 65              # 2026-05-05: 58 → 65 — require RSI deeper in overbought before shorting (BUY side stays at 42)
+
+    # 2026-05-06: HTF directional gate for SELL only.
+    # Trade-log evidence (1146 SELL trades, WR 14.9%, -$15k) shows even high-strength
+    # SELL signals lose 85% of the time on XAU during a sustained bull window.
+    # Gate: SELL only fires when 1H close < 1H EMA(50) — confirmed bearish HTF trend.
+    # BUY-side untouched.
+    htf_sell_filter_enabled: true
+    htf_sell_resample_to: 1h
+    htf_sell_ema_period: 50
+
   # Mini Medallion v2: +31% return, PF 1.59, DD 4.3% (backtest Jan 2025–Mar 2026)
   # v2 changes: long-only, session filter, lower threshold, higher RR, ADX filter
   mini_medallion:
