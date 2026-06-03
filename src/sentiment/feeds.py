@@ -247,25 +247,29 @@ def _retail_once(email: str, password: str) -> Optional[float]:
                      f"&password={urllib.parse.quote(password)}")
         if not login or login.get("error") or not login.get("session"):
             return None
+        # Myfxbook returns the session token ALREADY url-encoded (%2F, %3D ...).
+        # Re-quoting it double-encodes the token and the next call fails with
+        # "Invalid session" — pass it through raw.
         session = login["session"]
-        out = call(f"{_MYFXBOOK}/get-community-outlook-by-country.json"
-                   f"?session={urllib.parse.quote(session)}&symbol=XAUUSD")
+        out = call(f"{_MYFXBOOK}/get-community-outlook.json?session={session}")
         if not out or out.get("error"):
             return None
-        countries = out.get("countries", []) or []
-        long_vol = sum(float(c.get("longVolume", 0) or 0) for c in countries)
-        short_vol = sum(float(c.get("shortVolume", 0) or 0) for c in countries)
-        if long_vol + short_vol > 0:
-            return round(long_vol / (long_vol + short_vol) * 100, 1)
-        long_pos = sum(float(c.get("longPositions", 0) or 0) for c in countries)
-        short_pos = sum(float(c.get("shortPositions", 0) or 0) for c in countries)
-        if long_pos + short_pos > 0:
-            return round(long_pos / (long_pos + short_pos) * 100, 1)
+        for sym in out.get("symbols", []) or []:
+            if sym.get("name") != "XAUUSD":
+                continue
+            # longPercentage is Myfxbook's headline number (matches the site).
+            lp = sym.get("longPercentage")
+            if lp is not None:
+                return round(float(lp), 1)
+            long_vol = float(sym.get("longVolume", 0) or 0)
+            short_vol = float(sym.get("shortVolume", 0) or 0)
+            if long_vol + short_vol > 0:
+                return round(long_vol / (long_vol + short_vol) * 100, 1)
         return None
     finally:
         if session:
             try:
-                call(f"{_MYFXBOOK}/logout.json?session={urllib.parse.quote(session)}")
+                call(f"{_MYFXBOOK}/logout.json?session={session}")
             except Exception:
                 pass
 
@@ -273,12 +277,11 @@ def _retail_once(email: str, password: str) -> Optional[float]:
 def fetch_retail_long_pct(retries: int = 2) -> Optional[float]:
     """Retail % LONG on XAUUSD from Myfxbook Community Outlook (CONTRARIAN input).
 
-    Needs MYFXBOOK_EMAIL / MYFXBOOK_PASSWORD. Uses the by-country endpoint (the
-    plain get-community-outlook returns "Invalid session" for most accounts — a
-    documented Myfxbook restriction) and aggregates long/short across countries.
-    Long% is by volume (matches Myfxbook's headline), falling back to position
-    counts. Retries a couple of times because the session check is flaky, then
-    returns None → neutral retail sub-score (never blocks the engine).
+    Needs MYFXBOOK_EMAIL / MYFXBOOK_PASSWORD. Reads the community-outlook
+    endpoint and takes XAUUSD's longPercentage (the site's headline number),
+    falling back to the long/short volume ratio. Retries a couple of times
+    because the session check is flaky, then returns None → neutral retail
+    sub-score (never blocks the engine).
     """
     email = _env("MYFXBOOK_EMAIL")
     password = _env("MYFXBOOK_PASSWORD")
