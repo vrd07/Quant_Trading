@@ -1,50 +1,48 @@
 strategy: kalman_regime
 file: src/strategies/kalman_regime_strategy.py
-description: v3 two-state local-linear-trend Kalman (velocity=trend, level-deviation=range). 15m XAUUSD.
+description: v3 long-only deep-dip mean reversion off a 2-state Kalman fair-value level. 15m XAUUSD.
 notes: |
-  v3 rewrite (2026-06). The signal core is a 2-state (level+velocity) Kalman with
-  ATR-adaptive Q/R. Tier 1 sweeps the filter responsiveness (process_scale) and the
-  entry thresholds that gate trend vs range trades — these move PF most. Tier 2 sweeps
-  the ATR stop/target multiples + cooldown (tp_atr_multiplier is LIVE: it drives the
-  RiskProcessor TP, floored by risk.kalman_min_tp_rr). Tier 3 checks the directional
-  gates (long_only, HTF SELL filter, session) — gold's bullish drift means SELLs are
-  the dominant loss source, so long_only / htf_sell are the highest-leverage filters.
+  v3 rewrite (2026-06). Signal research (IC + quintile forward-return study, IS+OOS)
+  showed the Kalman's only robust XAU 15m edge is LONG-ONLY deep-dip reversion: buy
+  when price is >= dip_entry_atr ATR BELOW the filtered level, inside a higher-TF
+  uptrend. Wide stops are essential (dip can deepen before reverting) — tight SL
+  collapses OOS. Tier 1 sweeps the entry/filter shape (dip threshold, HTF gate, kalman
+  responsiveness); tier 2 sweeps the ATR stops + cooldown (tp_atr_multiplier is LIVE,
+  floored by risk.kalman_min_tp_rr). Best validated cell: dip2.5 / sl3.0 / tp3.0
+  (~PF 1.3 IS, 1.34 OOS, ~60 trades/yr) — modest and low-frequency.
 
 anchor:
   process_scale: 0.001
   measurement_scale: 1.0
-  regime_vel_atr: 0.05
-  trend_vel_atr: 0.05
-  trend_adx_min: 20
-  range_entry_atr: 1.0
-  sl_atr_multiplier: 2.0
-  tp_atr_multiplier: 4.0
-  cooldown_bars: 4
-  long_only: false
+  dip_entry_atr: 2.5
+  dip_strength_scale: 3.0
+  require_htf_uptrend: true
+  htf_resample_to: 4h
+  htf_ema_period: 50
+  sl_atr_multiplier: 3.0
+  tp_atr_multiplier: 3.0
+  cooldown_bars: 2
   high_confidence_threshold: 90.0
 
 tier1_entry:
-  process_scale: [0.0003, 0.001, 0.003, 0.01]   # 4 — filter responsiveness (Q/R)
-  trend_vel_atr: [0.03, 0.05, 0.08, 0.12]        # 4 — trend-entry slope threshold
-  regime_vel_atr: [0.03, 0.05, 0.08]             # 3 — trend/range split
-  trend_adx_min: [15, 20, 25]                    # 3
-  # combos = 4*4*3*3 = 144
+  dip_entry_atr: [2.0, 2.3, 2.5, 2.8, 3.0]      # 5 — oversold trigger depth
+  process_scale: [0.0005, 0.001, 0.002]          # 3 — filter responsiveness (Q/R)
+  htf_ema_period: [30, 50, 100]                  # 3 — HTF uptrend gate sensitivity
+  # combos = 5*3*3 = 45
 
 tier2_risk:
-  sl_atr_multiplier: [1.0, 1.5, 2.0, 2.5, 3.0]
-  tp_atr_multiplier: [3.0, 4.0, 6.0, 8.0, 10.0]   # LIVE: drives kalman TP, floored by risk.kalman_min_tp_rr
-  cooldown_bars: [2, 4, 6, 10, 16]                # 16 = 4h on 15m
-  range_entry_atr: [0.75, 1.0, 1.5, 2.0]
-  # one-dim sweep total = 5 + 5 + 5 + 4 = 19 runs
+  sl_atr_multiplier: [2.5, 3.0, 3.5, 4.0]         # wide stops essential
+  tp_atr_multiplier: [2.5, 3.0, 3.5, 4.0]         # LIVE: drives TP, floored by risk.kalman_min_tp_rr
+  cooldown_bars: [1, 2, 4, 6]
+  # one-dim sweep total = 4 + 4 + 4 = 12 runs
 
 tier3_filters:
-  long_only: [false, true]
-  htf_sell_filter_enabled: [false, true]
+  require_htf_uptrend: [true, false]
+  htf_resample_to: ['1h', '4h']
   session_filter_enabled: [true, false]
-  regime_preset: [trend_only, trend_volatile, all]
-  # combos = 2*2*2*3 = 24
+  # combos = 2*2*2 = 8
 
 max_combos:
-  tier1: 72
-  tier2: 20
-  tier3: 24
+  tier1: 45
+  tier2: 15
+  tier3: 8
