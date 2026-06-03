@@ -671,6 +671,25 @@ class Indicators:
         return kf.filter_series(series)
 
     @staticmethod
+    def local_trend_kalman(
+        close: pd.Series,
+        atr: pd.Series,
+        process_scale: float = 1e-3,
+        measurement_scale: float = 1.0,
+    ) -> pd.DataFrame:
+        """
+        Two-state (level + velocity) local-linear-trend Kalman filter.
+
+        Returns a DataFrame with columns ``level``, ``velocity`` and ``innov_z``
+        aligned to ``close.index``. ATR scales the process/measurement noise so
+        the filter is scale-invariant across gold's price range. See
+        ``src.indicators.kalman.LocalTrendKalman`` for the full model.
+        """
+        from src.indicators.kalman import LocalTrendKalman
+        kf = LocalTrendKalman(process_scale=process_scale, measurement_scale=measurement_scale)
+        return kf.filter_frame(close, atr)
+
+    @staticmethod
     def realized_vol(close: pd.Series, window: int = 20) -> pd.Series:
         """
         Rolling realized volatility from log returns.
