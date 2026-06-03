@@ -1,47 +1,50 @@
 strategy: kalman_regime
 file: src/strategies/kalman_regime_strategy.py
-description: Kalman trend-follow + OU mean-reversion two-regime alpha. Highest-weight strategy in TREND.
+description: v3 two-state local-linear-trend Kalman (velocity=trend, level-deviation=range). 15m XAUUSD.
 notes: |
-  v3 loose tuning (2026-04-19) doubled trades + return at same PF/Sharpe with 2.4x DD.
-  Tier 1 leans on entry_threshold + min_signal_strength because backtests show
-  those swing PF most. Tier 2 tp_atr_multiplier is wide (3..12) because v2 found
-  big-trend capture lives at 8x; need to confirm not a regime-of-2024 artifact.
-  Two-sided (long_only=false) is anchor; tier 3 will check if long-only beats it.
+  v3 rewrite (2026-06). The signal core is a 2-state (level+velocity) Kalman with
+  ATR-adaptive Q/R. Tier 1 sweeps the filter responsiveness (process_scale) and the
+  entry thresholds that gate trend vs range trades — these move PF most. Tier 2 sweeps
+  the ATR stop/target multiples + cooldown (tp_atr_multiplier is LIVE: it drives the
+  RiskProcessor TP, floored by risk.kalman_min_tp_rr). Tier 3 checks the directional
+  gates (long_only, HTF SELL filter, session) — gold's bullish drift means SELLs are
+  the dominant loss source, so long_only / htf_sell are the highest-leverage filters.
 
 anchor:
-  entry_threshold: 1.5
-  trend_adx_min: 17
-  min_signal_strength: 0.35
-  kalman_confirm_bars: 1
-  cooldown_bars: 1
-  sl_atr_multiplier: 1.5
-  tp_atr_multiplier: 8.0
-  zscore_window: 20
+  process_scale: 0.001
+  measurement_scale: 1.0
+  regime_vel_atr: 0.05
+  trend_vel_atr: 0.05
+  trend_adx_min: 20
+  range_entry_atr: 1.0
+  sl_atr_multiplier: 2.0
+  tp_atr_multiplier: 4.0
+  cooldown_bars: 4
   long_only: false
   high_confidence_threshold: 90.0
 
 tier1_entry:
-  entry_threshold: [1.0, 1.5, 2.0, 2.5]      # 4
-  trend_adx_min: [15, 17, 20, 25]            # 4
-  min_signal_strength: [0.25, 0.35, 0.50, 0.65]  # 4
-  kalman_confirm_bars: [1, 2, 3]             # 3
-  # combos = 4*4*4*3 = 192
+  process_scale: [0.0003, 0.001, 0.003, 0.01]   # 4 — filter responsiveness (Q/R)
+  trend_vel_atr: [0.03, 0.05, 0.08, 0.12]        # 4 — trend-entry slope threshold
+  regime_vel_atr: [0.03, 0.05, 0.08]             # 3 — trend/range split
+  trend_adx_min: [15, 20, 25]                    # 3
+  # combos = 4*4*3*3 = 144
 
 tier2_risk:
   sl_atr_multiplier: [1.0, 1.5, 2.0, 2.5, 3.0]
-  tp_atr_multiplier: [3.0, 5.0, 8.0, 10.0, 12.0]
-  cooldown_bars: [1, 2, 3, 4, 6]
-  # one-dim sweep total = 5 + 5 + 5 = 15 runs
+  tp_atr_multiplier: [3.0, 4.0, 6.0, 8.0, 10.0]   # LIVE: drives kalman TP, floored by risk.kalman_min_tp_rr
+  cooldown_bars: [2, 4, 6, 10, 16]                # 16 = 4h on 15m
+  range_entry_atr: [0.75, 1.0, 1.5, 2.0]
+  # one-dim sweep total = 5 + 5 + 5 + 4 = 19 runs
 
 tier3_filters:
   long_only: [false, true]
-  ema_confirm_enabled: [false, true]
-  macd_confirmation: [false, true]
+  htf_sell_filter_enabled: [false, true]
   session_filter_enabled: [true, false]
   regime_preset: [trend_only, trend_volatile, all]
-  # combos = 2*2*2*2*3 = 48
+  # combos = 2*2*2*3 = 24
 
 max_combos:
-  tier1: 200
+  tier1: 72
   tier2: 20
-  tier3: 50
+  tier3: 24
