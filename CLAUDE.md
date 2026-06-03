@@ -77,7 +77,7 @@ All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orches
 
 | # | Strategy | File | Combo role (post-gate) | Summary |
 |---|----------|------|------------------------|---------|
-| 1 | **KalmanRegime** | `kalman_regime_strategy.py` | **Solo (allowlist)** | v3 (2026-06): two-state local-trend Kalman (level+velocity, ATR-adaptive Q/R) used as a fair-value anchor for **LONG-ONLY deep-dip mean reversion** — buy when price ≥ `dip_entry_atr` ATR below the level, inside a higher-TF uptrend. 15m bars. Validated dip2.5/sl3.0/tp3.0 PF~1.3 IS+OOS. |
+| 1 | **KalmanRegime** | `kalman_regime_strategy.py` | **Solo (allowlist)** | **Reverted 2026-06-04 to v2** (commit 25ce0cd, 2026-05-06 tuning): two-sided trend/range regime-switching Kalman. TREND mode rides direction when close diverges from the Kalman line (ADX gate); RANGE mode fades OU z-score extremes. SELL-side gated by HTF 1H-EMA(50) filter + tighter RSI/strength to curb gold's bullish-drift bleed; 6-hour session mask `[[3,4],[20,23]]`. 15m bars, sl3.0/tp4.0. Chosen over v3 deep-dip after 6mo backtest (v2 PF 1.53 / +117% vs v3 PF 0.93 / −1%, risk-bypassed). ⚠️ v2's −22% DD breaches live caps when uncapped — see [[project_kalman_v2_revert]]. |
 | 2 | **Breakout** | `breakout_strategy.py` | **KILL** | Donchian channel breakout with multi-timeframe confirmation |
 | 3 | **MeanReversion** | `mean_reversion_strategy.py` | **KILL** | OU z-score entries at extremes (|z| > 2.0) |
 | 4 | **Momentum** | `momentum_strategy.py` | Filter-only (COMBO A confirm, COMBO C leg) | Short-term ROC with ADX confirmation |
