@@ -71,8 +71,15 @@ class SentimentMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("XAUUSD — Market Sentiment (GSS)")
-        self.root.geometry("1040x960")
-        self.root.minsize(900, 800)
+        # Size + center to the actual screen instead of a fixed 1040x960 so the
+        # window fits any resolution. ui_scale shrinks fonts / rows / wrap
+        # widths proportionally on small screens.
+        # design_h covers the full natural content height (~1035px of panels +
+        # banner + footer) so large screens show everything without scrolling;
+        # smaller screens shrink fonts and scroll the remainder.
+        self.ui_scale = self._fit_to_screen(
+            design_w=1040, design_h=1200, min_w=820, min_h=560,
+        )
         self.root.configure(bg=BG)
         try:
             self.root.attributes("-topmost", bool(topmost))
@@ -83,6 +90,34 @@ class SentimentMonitorApp:
         self._build()
         self.root.after(50, self._tick)
 
+    def _fit_to_screen(self, design_w: int, design_h: int,
+                       min_w: int, min_h: int, margin: float = 0.92) -> float:
+        """Size + center the window to the real screen so it fits any
+        resolution. Shrinks point-based fonts (via Tk scaling, set BEFORE
+        widgets are built) and returns a ui_scale factor callers use to shrink
+        row heights / wrap widths on small screens. Never upscales past design.
+        """
+        root = self.root
+        try:
+            sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        except Exception:
+            sw, sh = design_w, design_h
+        win_w = max(320, min(design_w, int(sw * margin)))
+        win_h = max(320, min(design_h, int(sh * margin)))
+        scale = min(1.0, win_w / design_w, win_h / design_h)
+        if scale < 0.995:
+            # Relative to the platform's current scaling so we respect DPI.
+            try:
+                cur = float(root.tk.call("tk", "scaling"))
+                root.tk.call("tk", "scaling", max(0.5, cur * scale))
+            except Exception:
+                pass
+        x = max(0, (sw - win_w) // 2)
+        y = max(0, (sh - win_h) // 3)  # bias toward the top third
+        root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+        root.minsize(min(min_w, win_w), min(min_h, win_h))
+        return scale
+
     def _style(self) -> None:
         st = ttk.Style(self.root)
         try:
@@ -90,7 +125,8 @@ class SentimentMonitorApp:
         except tk.TclError:
             pass
         st.configure("Mono.Treeview", background=BG_PANEL_2, fieldbackground=BG_PANEL_2,
-                     foreground=TEXT, rowheight=22, borderwidth=0, font=("Menlo", 10))
+                     foreground=TEXT, rowheight=max(15, int(22 * self.ui_scale)),
+                     borderwidth=0, font=("Menlo", 10))
         st.configure("Mono.Treeview.Heading", background=BORDER, foreground=GOLD,
                      font=("Menlo", 10, "bold"))
         st.map("Mono.Treeview", background=[("selected", BORDER)],
@@ -100,10 +136,60 @@ class SentimentMonitorApp:
     def _build(self) -> None:
         self._build_banner()
 
-        body = tk.Frame(self.root, bg=BG, padx=12, pady=6)
-        body.pack(fill=tk.BOTH, expand=True)
+        # Footer is pinned to the bottom (packed first so it's always reserved),
+        # the panels live in a vertically scrollable region in between. This is
+        # what makes the window fit ANY resolution: the content's natural height
+        # exceeds short screens, so without scrolling the bottom panels clip.
+        footer = tk.Frame(self.root, bg=BG_PANEL_2, padx=10, pady=4)
+        footer.pack(side=tk.BOTTOM, fill=tk.X)
+        self.footer = tk.Label(footer, text="", bg=BG_PANEL_2, fg=TEXT_DIM,
+                               font=("Menlo", 9), anchor="w")
+        self.footer.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        mid = tk.Frame(self.root, bg=BG)
+        mid.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+        canvas = tk.Canvas(mid, bg=BG, highlightthickness=0, bd=0)
+        vbar = ttk.Scrollbar(mid, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vbar.set)
+        vbar.pack(side=tk.RIGHT, fill=tk.Y)
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self._body_canvas = canvas
+
+        body = tk.Frame(canvas, bg=BG, padx=12, pady=6)
+        body_win = canvas.create_window((0, 0), window=body, anchor="nw")
         body.grid_columnconfigure(0, weight=1, uniform="c")
         body.grid_columnconfigure(1, weight=1, uniform="c")
+
+        def _on_body_cfg(_e):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_cfg(e):
+            canvas.itemconfig(body_win, width=e.width)
+
+        body.bind("<Configure>", _on_body_cfg)
+        canvas.bind("<Configure>", _on_canvas_cfg)
+
+        def _wheel(event):
+            if getattr(event, "num", None) == 4:
+                delta = -1
+            elif getattr(event, "num", None) == 5:
+                delta = 1
+            else:
+                delta = -1 if event.delta > 0 else 1
+            canvas.yview_scroll(delta, "units")
+
+        def _bind_wheel(_e):
+            canvas.bind_all("<MouseWheel>", _wheel)
+            canvas.bind_all("<Button-4>", _wheel)
+            canvas.bind_all("<Button-5>", _wheel)
+
+        def _unbind_wheel(_e):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+
+        canvas.bind("<Enter>", _bind_wheel)
+        canvas.bind("<Leave>", _unbind_wheel)
 
         comp = self._panel(body, "GSS COMPONENT BREAKDOWN")
         comp.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
@@ -132,12 +218,6 @@ class SentimentMonitorApp:
         levels = self._panel(body, "KEY 2026 PRICE LEVELS (market_sentiment.md §8)")
         levels.grid(row=4, column=0, columnspan=2, sticky="nsew")
         self._build_levels(levels)
-
-        footer = tk.Frame(self.root, bg=BG_PANEL_2, padx=10, pady=4)
-        footer.pack(side=tk.BOTTOM, fill=tk.X)
-        self.footer = tk.Label(footer, text="", bg=BG_PANEL_2, fg=TEXT_DIM,
-                               font=("Menlo", 9), anchor="w")
-        self.footer.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
     def _build_banner(self) -> None:
         top = tk.Frame(self.root, bg=BG, pady=10, padx=14)
@@ -252,7 +332,8 @@ class SentimentMonitorApp:
         self.ai_levels.pack(fill=tk.X, pady=(4, 0))
         self.ai_rationale = tk.Label(body, text="run scripts/ai_trade_decision.py",
                                      bg=BG_PANEL, fg=TEXT_FAINT, font=("Menlo", 9, "italic"),
-                                     anchor="w", justify="left", wraplength=940)
+                                     anchor="w", justify="left",
+                                     wraplength=int(940 * self.ui_scale))
         self.ai_rationale.pack(fill=tk.X, pady=(2, 0))
 
         sep = tk.Frame(body, bg=BORDER, height=1)
@@ -272,7 +353,7 @@ class SentimentMonitorApp:
                                         height=6, style="Mono.Treeview")
         for c, h, w in zip(cols, ("Level", "Type", "Price is"), (420, 120, 120)):
             self.tree_levels.heading(c, text=h)
-            self.tree_levels.column(c, width=w, anchor="w")
+            self.tree_levels.column(c, width=int(w * self.ui_scale), anchor="w")
         self.tree_levels.pack(fill=tk.BOTH, expand=True)
         self.tree_levels.tag_configure("critical", foreground=RED)
         self.tree_levels.tag_configure("resistance", foreground=ORANGE)

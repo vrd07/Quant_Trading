@@ -131,8 +131,12 @@ class LiveMonitorApp:
 
         self.root = tk.Tk()
         self.root.title("Quant Bot — Live Monitor")
-        self.root.geometry("1320x1100")
-        self.root.minsize(1120, 880)
+        # Size + center to the actual screen instead of a fixed 1320x1100 so the
+        # window fits any resolution (small laptops → 4K). ui_scale is used below
+        # to shrink fonts / row heights / wrap widths proportionally.
+        self.ui_scale = self._fit_to_screen(
+            design_w=1320, design_h=1100, min_w=1000, min_h=600,
+        )
         self.root.configure(bg=BG)
         try:
             self.root.attributes("-topmost", bool(topmost))
@@ -147,6 +151,35 @@ class LiveMonitorApp:
         self._missed_reads = 0
 
         self.root.after(50, self._tick)
+
+    # ── screen fit ─────────────────────────────────────────────────────────
+    def _fit_to_screen(self, design_w: int, design_h: int,
+                       min_w: int, min_h: int, margin: float = 0.92) -> float:
+        """Size + center the window to the real screen so it fits any
+        resolution. Shrinks point-based fonts (via Tk scaling, set BEFORE
+        widgets are built) and returns a ui_scale factor callers use to shrink
+        row heights / wrap widths on small screens. Never upscales past design.
+        """
+        root = self.root
+        try:
+            sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
+        except Exception:
+            sw, sh = design_w, design_h
+        win_w = max(320, min(design_w, int(sw * margin)))
+        win_h = max(320, min(design_h, int(sh * margin)))
+        scale = min(1.0, win_w / design_w, win_h / design_h)
+        if scale < 0.995:
+            # Relative to the platform's current scaling so we respect DPI.
+            try:
+                cur = float(root.tk.call("tk", "scaling"))
+                root.tk.call("tk", "scaling", max(0.5, cur * scale))
+            except Exception:
+                pass
+        x = max(0, (sw - win_w) // 2)
+        y = max(0, (sh - win_h) // 3)  # bias toward the top third
+        root.geometry(f"{win_w}x{win_h}+{x}+{y}")
+        root.minsize(min(min_w, win_w), min(min_h, win_h))
+        return scale
 
     # ── style ──────────────────────────────────────────────────────────────
     def _configure_style(self) -> None:
@@ -171,7 +204,7 @@ class LiveMonitorApp:
                         background=BG_PANEL_2,
                         fieldbackground=BG_PANEL_2,
                         foreground=TEXT,
-                        rowheight=22,
+                        rowheight=max(15, int(22 * self.ui_scale)),
                         borderwidth=0,
                         font=("Menlo", 10))
         style.configure("Mono.Treeview.Heading",
@@ -203,13 +236,14 @@ class LiveMonitorApp:
         body.pack(fill=tk.BOTH, expand=True)
         body.grid_columnconfigure(0, weight=1, uniform="cols")
         body.grid_columnconfigure(1, weight=1, uniform="cols")
+        s = self.ui_scale
         body.grid_rowconfigure(0, weight=0)   # account (fixed)
         body.grid_rowconfigure(1, weight=0)   # sessions | news  (fixed)
-        body.grid_rowconfigure(2, weight=2, minsize=180)  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
+        body.grid_rowconfigure(2, weight=2, minsize=int(180 * s))  # symbols | signals — pinned so MARKET & SYMBOLS tree stays visible
         body.grid_rowconfigure(3, weight=0)   # performance | positions (small, fixed)
-        body.grid_rowconfigure(4, weight=0, minsize=75)   # value area (compact strip, scrollable)
-        body.grid_rowconfigure(5, weight=4, minsize=260)  # journal — guaranteed min height
-        body.grid_rowconfigure(6, weight=0, minsize=95)   # errors — guaranteed min height
+        body.grid_rowconfigure(4, weight=0, minsize=int(75 * s))   # value area (compact strip, scrollable)
+        body.grid_rowconfigure(5, weight=4, minsize=int(260 * s))  # journal — guaranteed min height
+        body.grid_rowconfigure(6, weight=0, minsize=int(95 * s))   # errors — guaranteed min height
 
         # Row 0: account snapshot (spans both cols)
         self.account_panel = self._make_panel(body, "ACCOUNT & RISK")
@@ -322,7 +356,7 @@ class LiveMonitorApp:
         self.quote_label = tk.Label(
             center, text="", bg=BG, fg=YELLOW,
             font=("Menlo", 10, "italic"), anchor="center", justify="center",
-            wraplength=600,
+            wraplength=int(600 * self.ui_scale),
         )
         self.quote_label.pack(anchor="center", pady=(2, 0))
         self.quote_author_label = tk.Label(
