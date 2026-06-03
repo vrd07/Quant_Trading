@@ -314,16 +314,18 @@ class TestKalmanRegimeStrategy:
         from src.strategies.kalman_regime_strategy import KalmanRegimeStrategy
         config = {
             'enabled': True,
-            'kalman_q': 1e-5,
-            'kalman_r': 0.01,
-            'rv_window': 20,
-            'rv_ma_window': 100,
-            'zscore_window': 20,
-            'entry_threshold': 2.0,
+            # v3 two-state Kalman params
+            'process_scale': 1e-3,
+            'measurement_scale': 1.0,
             'atr_period': 14,
-            'sl_atr_multiplier': 2.5,
-            'tp_atr_multiplier': 2.0,
-            'trend_adx_min': 5,   # Very low for synthetic test data
+            'regime_vel_atr': 0.05,
+            'trend_vel_atr': 0.03,
+            'range_entry_atr': 1.0,
+            'sl_atr_multiplier': 2.0,
+            'tp_atr_multiplier': 4.0,
+            'trend_adx_min': 5,        # Very low for synthetic test data
+            'min_signal_strength': 0.0,  # don't gate synthetic signals on strength
+            'cooldown_bars': 0,
         }
         config.update(overrides)
         return KalmanRegimeStrategy(symbol=symbol, config=config)
@@ -356,7 +358,8 @@ class TestKalmanRegimeStrategy:
         if signal is not None:
             assert signal.side == OrderSide.BUY
             assert 'atr' in signal.metadata
-            assert 'kalman' in signal.metadata
+            assert 'level' in signal.metadata
+            assert 'velocity' in signal.metadata
             assert signal.metadata.get('mode') in ('trend', 'range')
 
     def test_trend_mode_sell_signal(self, symbol):
