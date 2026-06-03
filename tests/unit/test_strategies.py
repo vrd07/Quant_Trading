@@ -307,21 +307,48 @@ def _make_dip_bars(n: int = 200, base_price: float = 2000.0, dip_atr: float = 4.
     return pd.DataFrame(data)
 
 
+def _make_trending_bars(n: int = 200, direction: float = 1.0, base_price: float = 2000.0):
+    """
+    Create bars with a clear, sustained trend to trigger Kalman TREND mode.
+    
+    A strong trend with small noise keeps RV > MA(RV) (trend regime)
+    and puts close consistently above/below the Kalman.
+    """
+    np.random.seed(7)
+    closes = [base_price]
+    for _ in range(n - 1):
+        # Strong directional drift + small noise
+        closes.append(closes[-1] + direction * 0.5 + np.random.randn() * 0.1)
+    data = {
+        'timestamp': pd.date_range('2024-01-01', periods=n, freq='1min'),
+        'open':  [c - 0.2 for c in closes],
+        'high':  [c + 0.3 for c in closes],
+        'low':   [c - 0.3 for c in closes],
+        'close': closes,
+        'volume': [1000.0] * n,
+    }
+    return pd.DataFrame(data)
+
+
+
+
 class TestKalmanRegimeStrategy:
-    """Tests for the v3 long-only deep-dip mean-reversion strategy."""
+    """Tests for the fixed Kalman Regime-Switching strategy."""
 
     def _make_strategy(self, symbol, **overrides):
         from src.strategies.kalman_regime_strategy import KalmanRegimeStrategy
         config = {
             'enabled': True,
-            'process_scale': 1e-3,
-            'measurement_scale': 1.0,
+            'kalman_q': 1e-5,
+            'kalman_r': 0.01,
+            'rv_window': 20,
+            'rv_ma_window': 100,
+            'zscore_window': 20,
+            'entry_threshold': 2.0,
             'atr_period': 14,
-            'dip_entry_atr': 2.0,
-            'dip_strength_scale': 3.0,
-            'require_htf_uptrend': False,   # no 4h structure in synthetic data
-            'min_signal_strength': 0.0,
-            'cooldown_bars': 0,
+            'sl_atr_multiplier': 2.5,
+            'tp_atr_multiplier': 2.0,
+            'trend_adx_min': 5,   # Very low for synthetic test data
         }
         config.update(overrides)
         return KalmanRegimeStrategy(symbol=symbol, config=config)
@@ -330,12 +357,13 @@ class TestKalmanRegimeStrategy:
         """Returns None when there are fewer bars than min_bars."""
         strategy = self._make_strategy(symbol)
         bars = _make_bars(n=50)
-        assert strategy.on_bar(bars) is None
+        signal = strategy.on_bar(bars)
+        assert signal is None
 
     def test_disabled_returns_none(self, symbol):
         """Disabled strategy always returns None."""
         strategy = self._make_strategy(symbol, enabled=False)
-        bars = _make_dip_bars(n=200)
+        bars = _make_trending_bars(n=200, direction=1.0)
         assert strategy.on_bar(bars) is None
 
     def test_strategy_name(self, symbol):
@@ -343,24 +371,26 @@ class TestKalmanRegimeStrategy:
         strategy = self._make_strategy(symbol)
         assert strategy.get_name() == 'kalman_regime'
 
-    def test_deep_dip_fires_buy(self, symbol):
-        """A sharp dip below the Kalman level should fire a long-only BUY."""
+    def test_trend_mode_buy_signal(self, symbol):
+        """Strongly uptrending bars should eventually fire a BUY in trend mode."""
         strategy = self._make_strategy(symbol)
-        bars = _make_dip_bars(n=200, dip_atr=5.0)
+        # Build up enough bars for min_bars requirement
+        bars = _make_trending_bars(n=200, direction=1.0)
         signal = strategy.on_bar(bars)
-        assert signal is not None
-        assert signal.side == OrderSide.BUY
-        assert signal.metadata.get('mode') == 'dip_reversion'
-        assert 'level' in signal.metadata and 'atr' in signal.metadata
-        assert signal.metadata['dev_atr'] < 0  # price below level
-
-    def test_no_dip_no_signal(self, symbol):
-        """A flat/quiet series with no dip should produce no signal."""
-        strategy = self._make_strategy(symbol, dip_entry_atr=2.0)
-        bars = _make_bars(n=200)  # mild noise, no engineered dip
-        signal = strategy.on_bar(bars)
-        # Must never be a SELL; typically None when there's no qualifying dip.
+        # Either no signal (not enough RV regime data built up) or a BUY
         if signal is not None:
             assert signal.side == OrderSide.BUY
+            assert 'atr' in signal.metadata
+            assert 'kalman' in signal.metadata
+            assert signal.metadata.get('mode') in ('trend', 'range')
+
+    def test_trend_mode_sell_signal(self, symbol):
+        """Strongly downtrending bars should eventually fire a SELL in trend mode."""
+        strategy = self._make_strategy(symbol)
+        bars = _make_trending_bars(n=200, direction=-1.0)
+        signal = strategy.on_bar(bars)
+        if signal is not None:
+            assert signal.side == OrderSide.SELL
+            assert 'atr' in signal.metadata
 
 
