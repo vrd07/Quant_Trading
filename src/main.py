@@ -268,7 +268,7 @@ class TradingSystem:
             # 3b. Preload historical bars from yfinance (eliminates 22+ min startup delay)
             self.logger.info("   Preloading historical bars...")
             try:
-                preload_results = self.data_engine.preload_historical_bars(bars_count=4000)
+                preload_results = self.data_engine.preload_historical_bars(bars_count=6000)
                 for sym, count in preload_results.items():
                     self.logger.info(f"   ✓ {sym}: {count} bars preloaded")
             except Exception as e:
