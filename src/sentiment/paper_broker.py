@@ -53,7 +53,8 @@ def _save_state(state: Dict[str, Any]) -> None:
 
 def _log_trade(row: Dict[str, Any]) -> None:
     fields = ["closed_at", "opened_at", "side", "entry", "exit", "stop_loss",
-              "take_profit", "r_multiple", "pnl_usd", "exit_reason", "gss_at_entry"]
+              "take_profit", "r_multiple", "pnl_usd", "exit_reason", "gss_at_entry",
+              "regime_at_entry", "confidence"]
     try:
         _DIR.mkdir(parents=True, exist_ok=True)
         header = not _TRADES.exists()
@@ -114,6 +115,7 @@ def update(snapshot: Dict[str, Any], decision: Optional[Dict[str, Any]],
                 "entry": entry, "exit": exit_price, "stop_loss": stop,
                 "take_profit": tp, "r_multiple": r, "pnl_usd": pnl,
                 "exit_reason": exit_reason, "gss_at_entry": pos.get("gss"),
+                "regime_at_entry": pos.get("regime"), "confidence": pos.get("confidence"),
             })
             state["position"] = None
             if notify:
@@ -143,6 +145,8 @@ def update(snapshot: Dict[str, Any], decision: Optional[Dict[str, Any]],
                     "stop_loss": round(stop, 2), "take_profit": round(tp, 2),
                     "size_pct": size, "opened_at": now,
                     "gss": (snapshot.get("gss", {}) or {}).get("total_score"),
+                    "regime": (snapshot.get("gss", {}) or {}).get("regime"),
+                    "confidence": (decision.get("confidence") or "").upper(),
                 }
                 if notify:
                     risk = abs(price - stop)
