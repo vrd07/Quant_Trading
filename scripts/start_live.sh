@@ -208,6 +208,13 @@ SENTIMENT_LOG="logs/sentiment_engine.log"
 SENTIMENT_MON_LOG="logs/sentiment_monitor.log"
 echo "  ➜ Launching market sentiment engine (XAUUSD GSS, 15-min loop,"
 echo "    intraday AI decisions on opportunity — advisory, never auto-executes)..."
+# Reap any running sentiment engine first — like the Telegram scheduler below,
+# a leftover looper races the shared state file and multiplies the rate-limited
+# feed calls (FRED/Myfxbook/Alpha Vantage). Keep exactly one: each start_live
+# run cleanly replaces the previous engine, so you never kill it by hand.
+if pkill -f "run_sentiment_engine.py --loop" 2>/dev/null; then
+    echo "    (reaped previous sentiment engine before relaunch)"
+fi
 nohup python3 scripts/run_sentiment_engine.py --loop 900 --decisions auto \
     >"$SENTIMENT_LOG" 2>&1 &
 SENTIMENT_PID=$!
@@ -218,6 +225,9 @@ if [ -z "${FRED_API_KEY:-}" ]; then
 fi
 if python3 -c "import tkinter" >/dev/null 2>&1; then
     echo "  ➜ Launching market sentiment pop-up..."
+    if pkill -f "sentiment_monitor.py" 2>/dev/null; then
+        echo "    (reaped previous sentiment pop-up)"
+    fi
     nohup python3 scripts/sentiment_monitor.py --refresh 2000 \
         >"$SENTIMENT_MON_LOG" 2>&1 &
     SENTIMENT_MON_PID=$!
