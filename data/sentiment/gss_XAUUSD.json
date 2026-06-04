@@ -1,13 +1,13 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-04T06:59:24.718756+00:00",
-  "gss_total": 40.83,
+  "generated_at": "2026-06-04T10:44:45.657338+00:00",
+  "gss_total": 35.83,
   "regime": "Neutral / Chop",
   "breakdown": {
     "fundamental": 20.0,
     "technical": 7.5,
     "institutional": 0.0,
-    "retail": 10.0,
+    "retail": 5.0,
     "news": 3.33
   },
   "missing": [],
