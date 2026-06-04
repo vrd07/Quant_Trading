@@ -90,7 +90,7 @@ class DataEngine:
                     timeframe=tf
                 )
     
-    def preload_historical_bars(self, bars_count: int = 2000) -> Dict[str, int]:
+    def preload_historical_bars(self, bars_count: int = 4000) -> Dict[str, int]:
         """
         Preload historical bars on startup.
 
@@ -98,12 +98,15 @@ class DataEngine:
         then fall back to yfinance. We don't trust a single external dep
         for the critical startup path.
 
-        bars_count=2000 is required for kalman_regime:
-          min_bars = rv_ma_window(100) + rv_window(20) + 10 = 130 * 15m bars
-          130 15m bars × 15 min/bar = 1950 1m bars minimum.
+        bars_count=4000 is required for kalman_regime (v2, HTF SELL filter on):
+          min_bars = max(130, (htf_sell_ema_period(50) + 10) * 4) = 240 * 15m bars
+          240 15m bars × 15 min/bar = 3600 1m bars minimum (4000 for margin).
+        The HTF 1H-EMA(50) SELL gate dominates the warmup: 50 1H bars = 200 15m
+        bars, so the older 2000-bar default (~133 15m bars) left v2 unable to
+        arm for ~26h after every restart.
 
         Args:
-            bars_count: Number of 1m bars to preload (default 2000)
+            bars_count: Number of 1m bars to preload (default 4000)
 
         Returns:
             Dict of {symbol: bars_loaded}
