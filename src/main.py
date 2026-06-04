@@ -261,7 +261,11 @@ class TradingSystem:
             self.data_engine = DataEngine(
                 connector=self.connector,
                 symbols=symbols,
-                timeframes=timeframes
+                timeframes=timeframes,
+                # Must be >= the preload count below (6000) or the 1m store
+                # silently trims the oldest bars, shrinking the resampled 15m
+                # history kalman_regime arms on. 6000 1m -> ~400 15m bars.
+                bar_buffer_size=6000,
             )
             self.logger.info("✓ Data engine ready")
             
