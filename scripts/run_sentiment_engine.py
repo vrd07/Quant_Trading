@@ -100,7 +100,10 @@ def _live_price(symbol: str = "XAUUSD") -> Optional[Dict[str, float]]:
 def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
     now = datetime.now(timezone.utc)
 
-    tech = compute_technical(symbol)
+    # Pull the live MT5 price first so the technical leg can anchor its close /
+    # trend / BB read to NOW instead of the weekly-refreshed 5m CSV's last bar.
+    live = _live_price(symbol)
+    tech = compute_technical(symbol, live_price=(live or {}).get("mid"))
     fund = fetch_fundamental()
     fund_pts = score_fundamental(
         fed_policy=fund.fed_policy,
@@ -130,7 +133,6 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
     result = compute_gss(components)
 
     structure = tech.get("structure", {})
-    live = _live_price(symbol)
     price = live["mid"] if live else structure.get("price")
 
     # Risk flags (market_sentiment.md §5.1) — derived from what we actually know.
@@ -196,7 +198,10 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
         "recommendation": _recommendation(result.total, flags),
         "missing_components": result.missing,
         "feeds": {
-            "technical": "LIVE (local 5m)",
+            "technical": (
+                ("LIVE (5m+MT5 anchor)" if tech.get("anchored_live")
+                 else "STALE (local 5m only — bot offline)")
+                if tech["points"] is not None else "OFF (no 5m data)"),
             "fundamental": "LIVE (FRED)" if os.environ.get("FRED_API_KEY") else "OFF (set FRED_API_KEY)",
             "institutional": (
                 f"LIVE (COT{'+ETF' if etf_flow is not None else ''})"
