@@ -2,6 +2,9 @@
 import pytest
 
 from src.sentiment.gss import (
+    MAX_INSTITUTIONAL,
+    MAX_NEWS,
+    MAX_TECHNICAL,
     MAX_TOTAL,
     GSSComponents,
     compute_gss,
@@ -75,3 +78,36 @@ def test_component_scores_stay_within_ceilings():
                                 macd_bullish=True, bb_state="upper_walk") <= 25
     assert 0 <= score_institutional(cot_net_long_wow_pct=12, etf_flow_3d="inflow") <= 20
     assert 0 <= score_news(news_sentiment_avg=0.5, geo_shock_48h=True) <= 10
+
+
+def test_falling_dollar_scores_bullish_without_a_level():
+    """Fix #1: dollar DIRECTION must count even when the absolute DXY level is
+    unknown (FRED only gives the broad-dollar trend, not the ICE level)."""
+    falling = score_fundamental(fed_policy="neutral", dxy_falling=True, dxy_level=None)
+    rising = score_fundamental(fed_policy="neutral", dxy_falling=False, dxy_level=None)
+    assert falling is not None and rising is not None
+    assert falling > rising
+    # known-only-direction must still produce a score (old guard returned None)
+    assert score_fundamental(dxy_falling=True) is not None
+
+
+def test_live_neutral_equals_missing_neutral_midpoint():
+    """Fix #2: a live-but-neutral reading sits at the component midpoint, never
+    below it (calm news used to score 3.33 vs a missing feed's 5.0)."""
+    assert score_news(news_sentiment_avg=0.0) == pytest.approx(MAX_NEWS / 2)
+    assert score_institutional(cot_net_long_wow_pct=0.0,
+                               etf_flow_3d="flat") == pytest.approx(MAX_INSTITUTIONAL / 2)
+    assert score_technical(trend="chop", rsi_14=35, macd_bullish=None,
+                           bb_state="inside") == pytest.approx(MAX_TECHNICAL / 2)
+
+
+def test_elevated_real_yields_are_penalized_not_neutral():
+    """Fix #3: 2%+ real yields are gold-negative, and direction matters there."""
+    elevated = score_fundamental(fed_policy="neutral", real_yield_10y=2.2,
+                                 real_yield_falling=False)
+    normal = score_fundamental(fed_policy="neutral", real_yield_10y=1.6,
+                               real_yield_falling=False)
+    assert elevated < normal
+    falling = score_fundamental(fed_policy="neutral", real_yield_10y=2.2,
+                                real_yield_falling=True)
+    assert falling > elevated  # falling real yields are less bearish for gold

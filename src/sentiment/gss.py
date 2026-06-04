@@ -37,9 +37,31 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
+def _centered(raw: float, neg_extent: float, pos_extent: float, max_pts: float) -> float:
+    """Map a signed raw sub-total onto [0, max_pts] with raw=0 pinned to the
+    component's NEUTRAL midpoint (max_pts/2).
+
+    This replaces the old ``(raw + offset) / span`` maps. Because some sub-signals
+    are one-directional (a fiscal crisis or a geo-shock can only ADD — their
+    absence is the normal, neutral state) the raw range is asymmetric, and the
+    old linear map pushed an all-neutral *live* reading BELOW the missing-data
+    neutral (calm news scored 3.33 while a *missing* news feed scored 5.0).
+    Centering on raw=0 makes "live but neutral" equal "no data": a neutral input
+    never drags the total, while the full [0, max] range is still reached at the
+    (asymmetric) bearish/bullish extents.
+    """
+    half = max_pts / 2.0
+    if raw >= 0:
+        pts = half + (raw / pos_extent) * half if pos_extent > 0 else half
+    else:
+        pts = half + (raw / neg_extent) * half if neg_extent > 0 else half
+    return _clamp(pts, 0, max_pts)
+
+
 # ── per-component sub-scorers (market_sentiment.md §4.2) ─────────────────────
-# Each returns points in [0, component_max]. Inputs are pre-classified signals,
-# kept simple and explicit so the mapping is auditable against the spec.
+# Each returns points in [0, component_max]. Sub-signals are centered on 0 =
+# neutral; _centered() maps the signed sum so a neutral reading lands on the
+# midpoint and the mapping is auditable against the spec.
 
 def score_fundamental(
     fed_policy: Optional[str] = None,        # "dovish" | "neutral" | "hawkish"
@@ -51,30 +73,47 @@ def score_fundamental(
     fiscal_stress: Optional[bool] = None,    # debt-ceiling / shutdown active
 ) -> Optional[float]:
     """30-pt Fundamental Bias. Returns None if nothing is known (→ neutral)."""
-    if all(x is None for x in (fed_policy, real_yield_10y, dxy_level, cpi_yoy, fiscal_stress)):
+    if all(x is None for x in (fed_policy, real_yield_10y, dxy_level, dxy_falling,
+                               cpi_yoy, fiscal_stress)):
         return None
-    # FedScore (-10..+10) → shifted to 0..max contribution handled by sum/clamp.
-    fed = {"dovish": 10, "neutral": 5, "hawkish": -10}.get((fed_policy or "").lower(), 0)
+    fed = {"dovish": 10, "neutral": 0, "hawkish": -10}.get((fed_policy or "").lower(), 0)
+
+    # Real 10y yield: lower = better for gold. 2%+ is historically ELEVATED and
+    # gold-negative (not a neutral dead zone); direction nudges ±2.
     if real_yield_10y is None:
         yld = 0
-    elif real_yield_10y < 1.5:
-        yld = 10 if real_yield_falling else 5
-    elif real_yield_10y <= 2.0:
-        yld = 5
-    elif real_yield_10y > 2.5:
-        yld = -10
     else:
-        yld = 0
-    if dxy_level is None:
+        if real_yield_10y < 1.0:
+            yld = 10
+        elif real_yield_10y < 1.5:
+            yld = 5
+        elif real_yield_10y < 2.0:
+            yld = 0
+        elif real_yield_10y <= 2.5:
+            yld = -5
+        else:
+            yld = -10
+        if real_yield_falling is True:
+            yld += 2
+        elif real_yield_falling is False:
+            yld -= 2
+        yld = _clamp(yld, -10, 10)
+
+    # Dollar: DIRECTION is the primary signal — FRED gives the broad-dollar trend,
+    # not the ICE DXY level (see feeds.fetch_fundamental), so a falling dollar
+    # must score gold-bullish even when the absolute level is unknown. An explicit
+    # DXY_LEVEL (env override) refines the extremes.
+    if dxy_level is None and dxy_falling is None:
         dxy = 0
-    elif dxy_level < 100:
-        dxy = 10 if dxy_falling else 5
-    elif dxy_level <= 103:
-        dxy = 5
-    elif dxy_level > 105:
-        dxy = -10
     else:
-        dxy = 0
+        dxy = 5 if dxy_falling is True else (-5 if dxy_falling is False else 0)
+        if dxy_level is not None:
+            if dxy_level < 100:
+                dxy += 5
+            elif dxy_level > 105:
+                dxy -= 5
+        dxy = _clamp(dxy, -10, 10)
+
     if cpi_yoy is None:
         infl = 0
     elif cpi_yoy > 3:
@@ -83,12 +122,10 @@ def score_fundamental(
         infl = 0
     else:
         infl = -5
-    # FiscalScore (§4.2 A): +5 during a debt-ceiling / shutdown episode.
-    fiscal = 5 if fiscal_stress else 0
-    raw = fed + yld + dxy + infl + fiscal  # range [-35, +40]
-    # Map raw [-35, +40] onto [0, 30] linearly (neutral 0 → 14).
-    pts = (raw + 35) / 75.0 * MAX_FUNDAMENTAL
-    return _clamp(pts, 0, MAX_FUNDAMENTAL)
+    fiscal = 5 if fiscal_stress else 0          # one-directional catalyst (§4.2 A)
+
+    raw = fed + yld + dxy + infl + fiscal        # neg_extent 35, pos_extent 40
+    return _centered(raw, 35, 40, MAX_FUNDAMENTAL)
 
 
 def score_technical(
@@ -114,9 +151,8 @@ def score_technical(
         mom = -5
     macd = 0 if macd_bullish is None else (5 if macd_bullish else -5)
     bb = {"upper_walk": 5, "inside": 0, "lower_breach": -5}.get((bb_state or "").lower(), 0)
-    raw = tr + mom + macd + bb  # roughly -20..+30
-    pts = (raw + 20) / 50.0 * MAX_TECHNICAL
-    return _clamp(pts, 0, MAX_TECHNICAL)
+    raw = tr + mom + macd + bb                   # neg_extent 25, pos_extent 30
+    return _centered(raw, 25, 30, MAX_TECHNICAL)
 
 
 def score_institutional(
@@ -126,20 +162,24 @@ def score_institutional(
     """20-pt Institutional Sentiment. Returns None if nothing is known."""
     if cot_net_long_wow_pct is None and etf_flow_3d is None:
         return None
-    if cot_net_long_wow_pct is None:
-        cot = 10  # neutral midpoint of 0..20
-    elif cot_net_long_wow_pct > 10:
-        cot = 20
-    elif cot_net_long_wow_pct >= 5:
-        cot = 15
-    elif cot_net_long_wow_pct > 0:
+    c = cot_net_long_wow_pct
+    if c is None:
+        cot = 0                        # unknown COT = neutral, not a direction
+    elif c > 10:
         cot = 10
-    elif cot_net_long_wow_pct == 0:
-        cot = 5
-    else:
+    elif c >= 5:
+        cot = 6
+    elif c > 0:
+        cot = 3
+    elif c == 0:
         cot = 0
+    elif c >= -5:
+        cot = -6
+    else:
+        cot = -10
     etf = {"inflow": 5, "flat": 0, "outflow": -5}.get((etf_flow_3d or "").lower(), 0)
-    return _clamp(cot + etf, 0, MAX_INSTITUTIONAL)
+    raw = cot + etf                              # neg_extent 15, pos_extent 15
+    return _centered(raw, 15, 15, MAX_INSTITUTIONAL)
 
 
 def score_retail(retail_long_pct: Optional[float] = None) -> Optional[float]:
@@ -157,8 +197,7 @@ def score_retail(retail_long_pct: Optional[float] = None) -> Optional[float]:
         raw = 10
     else:
         raw = 15
-    # Map [-15, +15] → [0, 15].
-    return _clamp((raw + 15) / 30.0 * MAX_RETAIL, 0, MAX_RETAIL)
+    return _centered(raw, 15, 15, MAX_RETAIL)
 
 
 def score_news(
@@ -176,9 +215,9 @@ def score_news(
         ns = -5
     else:
         ns = 0
-    geo = 5 if geo_shock_48h else 0
-    raw = ns + geo  # -5..+10
-    return _clamp((raw + 5) / 15.0 * MAX_NEWS, 0, MAX_NEWS)
+    geo = 5 if geo_shock_48h else 0             # one-directional catalyst
+    raw = ns + geo                              # neg_extent 5, pos_extent 10
+    return _centered(raw, 5, 10, MAX_NEWS)
 
 
 # ── composite ────────────────────────────────────────────────────────────────
