@@ -338,7 +338,7 @@ strategies:
     high_confidence_threshold: 90.0
     # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
     session_filter_enabled: true
-    allowed_sessions: [[3,4],[20,23]]   # 2026-05-06: data-driven 6-hour mask. Trade log on 2186-trade run showed only these hours have positive Kalman expectancy (h3:+$468, h4:+$885, h20:+$372, h21:+$889, h22:+$311, h23:+$177). 24h widening exposed Kalman to its bleed hours (h9/13/14 = -$1.5k each).
+    allowed_sessions: [[1,4],[7,8],[10,12],[15,23]]   # 2026-06-04 (user): Asia 01-05, London 07-09 & 10-13 (skip h9), overlap+NY 15-24 (skip overlap bleeds h13/h14) - UTC. Restores Kalman's documented profitable NY evening h20-23 (h21 +$889); excludes the 3 bleed hours h9/h13/h14.
     ema_confirm_enabled: false
     macd_confirmation: false
     kalman_accel_enabled: false
