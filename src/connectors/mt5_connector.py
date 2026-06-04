@@ -445,7 +445,8 @@ class MT5Connector:
             logger.error("Error getting closed positions: %s", e, exc_info=True)
             return []
     
-    def get_bars(self, symbol: str, timeframe: str = "M1", count: int = 500) -> List[Dict]:
+    def get_bars(self, symbol: str, timeframe: str = "M1", count: int = 500,
+                 timeout: int = 5, retry_on_timeout: bool = False) -> List[Dict]:
         """
         Fetch historical bars from MT5 via CopyRates (geohot: own your stack).
 
@@ -453,6 +454,8 @@ class MT5Connector:
             symbol: Instrument ticker
             timeframe: MT5 timeframe (M1/M5/M15/H1/H4/D1)
             count: Number of bars
+            timeout: Seconds to wait for the EA (bump for bulk preloads).
+            retry_on_timeout: Retry the EA once before giving up (bulk preloads).
 
         Returns:
             List of {time, open, high, low, close, volume} dicts
@@ -460,7 +463,8 @@ class MT5Connector:
         mapped = self._symbol_map.get(symbol, symbol)
         logger.debug("Requesting %d %s bars for %s", count, timeframe, mapped)
         try:
-            response = self.client.get_bars(symbol=mapped, timeframe=timeframe, count=count)
+            response = self.client.get_bars(symbol=mapped, timeframe=timeframe, count=count,
+                                            timeout=timeout, retry_on_timeout=retry_on_timeout)
             if response.get("status") == "ERROR":
                 # Broker may use a suffixed name (e.g. XAUUSD.pro). Discover via
                 # status quotes and retry once — preload runs before any tick
@@ -469,7 +473,8 @@ class MT5Connector:
                     discovered = self._discover_broker_symbol(symbol)
                     if discovered and discovered != symbol:
                         logger.info("Retrying GET_BARS with discovered symbol: %s -> %s", symbol, discovered)
-                        response = self.client.get_bars(symbol=discovered, timeframe=timeframe, count=count)
+                        response = self.client.get_bars(symbol=discovered, timeframe=timeframe, count=count,
+                                                        timeout=timeout, retry_on_timeout=retry_on_timeout)
                         if response.get("status") != "ERROR":
                             return response.get("bars", [])
                 logger.warning("GET_BARS failed: %s", response.get("message"))

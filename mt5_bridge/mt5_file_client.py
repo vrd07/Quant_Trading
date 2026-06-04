@@ -303,7 +303,8 @@ class MT5FileClient:
             "minutes": str(minutes)
         })
 
-    def get_bars(self, symbol, timeframe="M1", count=500):
+    def get_bars(self, symbol, timeframe="M1", count=500, timeout=5,
+                 retry_on_timeout=False):
         """
         Fetch historical bars via CopyRates (geohot: own your stack).
 
@@ -311,6 +312,12 @@ class MT5FileClient:
             symbol: Instrument ticker (e.g. "XAUUSD")
             timeframe: MT5 timeframe string (M1/M5/M15/H1/H4/D1)
             count: Number of bars to fetch (max 5000)
+            timeout: Seconds to wait for the EA. The default 5s is fine for
+                small real-time requests but a bulk preload (thousands of bars
+                the EA serialises to a file) needs longer right after a cold
+                connect — pass a generous value there.
+            retry_on_timeout: Retry once before giving up. Bulk preloads should
+                set this; losing the race silently degrades to the tiny cache.
 
         Returns:
             dict with 'bars' list of {time, open, high, low, close, volume}
@@ -320,7 +327,7 @@ class MT5FileClient:
             "symbol": symbol,
             "timeframe": timeframe,
             "count": str(count)
-        })
+        }, timeout=timeout, retry_on_timeout=retry_on_timeout)
 
 
 def test_file_bridge():

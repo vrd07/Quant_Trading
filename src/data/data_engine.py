@@ -158,8 +158,14 @@ class DataEngine:
         Own the stack — no yfinance, no external deps.
         """
         try:
+            # Bulk preload: the EA serialises thousands of bars to a file, which
+            # the default 5s real-time timeout loses right after a cold connect
+            # (observed 2026-06-04: GET_BARS timed out → fell back to a 2191-bar
+            # cache → kalman starved at 147/240). Give it room and retry once so
+            # we keep FRESH MT5 data instead of degrading to a stale cache.
             bars_data = self.connector.get_bars(
-                symbol=symbol_ticker, timeframe="M1", count=bars_count
+                symbol=symbol_ticker, timeframe="M1", count=bars_count,
+                timeout=30, retry_on_timeout=True,
             )
             if not bars_data:
                 return 0
