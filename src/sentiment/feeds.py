@@ -17,14 +17,17 @@ one at a time, each behind its own backtest, rather than wiring all eight APIs.
 from __future__ import annotations
 
 import http.cookiejar
+import io
 import json
 import os
 import time
+import zipfile
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, List, Optional
+from xml.etree import ElementTree as ET
 
 
 @dataclass
@@ -301,16 +304,111 @@ def fetch_retail_long_pct(retries: int = 2) -> Optional[float]:
 
 _AV_DAILY = "https://www.alphavantage.co/query"
 
+# ── ETF flow: REAL creations/redemptions, price proxy only as fallback ───────
+# State Street publishes GLD's actual daily holdings — the physical gold backing
+# the shares — as an XLSX historical file. Column I, "Total Ounces of Gold in
+# the Trust", RISES when authorized participants create shares (gold flows IN)
+# and FALLS when they redeem (gold OUT). That is the genuine institutional flow;
+# the Alpha-Vantage GLD-price read further below is only a proxy, used when the
+# holdings file is unreachable. History runs to 2004, so this leg is backtestable.
+_GLD_HIST_URL = ("https://api.spdrgoldshares.com/api/v1/historical-archive"
+                 "?product=gld&exchange=NYSE&lang=en")
+_XL_NS = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_ETF_FLOW_BAND = 0.3   # ±% over 3 sessions to call a flow non-flat (backtest-tunable)
+
+
+def _get_bytes(url: str, timeout: int = 30) -> Optional[bytes]:
+    """GET raw bytes with a browser UA. None on any error (fail-safe)."""
+    try:
+        req = urllib.request.Request(url, headers=_UA)
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.read()
+    except Exception:
+        return None
+
+
+def _parse_gld_ounces_series(xlsx: bytes) -> List[float]:
+    """Oldest→newest 'Total Ounces of Gold in the Trust' (col I) from the SPDR
+    historical XLSX. The header and 'US Holiday' rows carry a shared string in
+    col I instead of a number and are skipped. Pure and fail-safe: returns [] on
+    any parse error, so it is unit-testable against a synthetic workbook and can
+    never throw into the trade loop."""
+    try:
+        zf = zipfile.ZipFile(io.BytesIO(xlsx))
+        # The data table is the larger of the two worksheets (the other is a
+        # disclaimer/cover sheet); numeric cells are inline, so shared strings
+        # aren't needed — a string-typed col-I cell just marks a non-data row.
+        sheets = [n for n in zf.namelist()
+                  if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
+        if not sheets:
+            return []
+        root = ET.fromstring(max((zf.read(n) for n in sheets), key=len))
+        out: List[float] = []
+        for row in root.iter(f"{_XL_NS}row"):
+            for c in row.findall(f"{_XL_NS}c"):
+                if c.get("r", "").rstrip("0123456789") != "I":   # column I only
+                    continue
+                if c.get("t") == "s":            # header / 'US Holiday' → skip row
+                    break
+                v = c.find(f"{_XL_NS}v")
+                if v is not None:
+                    try:
+                        out.append(float(v.text))
+                    except (TypeError, ValueError):
+                        pass
+                break
+        return out
+    except Exception:
+        return []
+
+
+def _flow_label(series: List[float]) -> Optional[str]:
+    """3-session % change of a holdings series → 'inflow'|'flat'|'outflow'.
+    None if the series is too short or the baseline is zero."""
+    if len(series) < 4 or series[-4] == 0:
+        return None
+    chg = (series[-1] - series[-4]) / series[-4] * 100
+    if chg > _ETF_FLOW_BAND:
+        return "inflow"
+    if chg < -_ETF_FLOW_BAND:
+        return "outflow"
+    return "flat"
+
+
+def _fetch_gld_tonnes_flow_raw() -> Optional[str]:
+    """Real GLD 3-session creation/redemption flow from State Street holdings."""
+    return _flow_label(_parse_gld_ounces_series(_get_bytes(_GLD_HIST_URL) or b""))
+
+
+def _fetch_etf_flow_pair() -> Optional[dict]:
+    """Prefer the real holdings flow; fall back to the GLD-price proxy only when
+    the State Street file is unreachable. Returns {'flow':..., 'source':...} or
+    None so the caller (and the dashboard) can tell real from proxy."""
+    real = _fetch_gld_tonnes_flow_raw()
+    if real is not None:
+        return {"flow": real, "source": "tonnes"}
+    proxy = _fetch_etf_flow_raw()
+    if proxy is not None:
+        return {"flow": proxy, "source": "proxy"}
+    return None
+
 
 def fetch_etf_flow_3d() -> Optional[str]:
-    """GLD 3-day flow proxy → 'inflow' | 'flat' | 'outflow' (cached 12h).
+    """GLD 3-day flow → 'inflow' | 'flat' | 'outflow' (cached 12h).
 
-    True GLD fund flows (tonnes in trust) have no clean free API, so we proxy
-    with the 3-day GLD price trend via Alpha Vantage TIME_SERIES_DAILY: ETF
-    money chases price. A proxy, not actual creations/redemptions — labeled as
-    such. None on rate-limit/error → neutral ETF sub-score.
+    REAL creations/redemptions from State Street's published tonnes-in-trust, not
+    a price echo; the Alpha-Vantage GLD-price proxy is used only if the holdings
+    file is unreachable. None on total failure → neutral ETF sub-score.
     """
-    return _cached("av_gld_flow", 12 * 3600, _fetch_etf_flow_raw)
+    pair = _cached("etf_flow", 12 * 3600, _fetch_etf_flow_pair)
+    return pair.get("flow") if pair else None
+
+
+def fetch_etf_flow_source() -> Optional[str]:
+    """Which sub-feed currently backs fetch_etf_flow_3d: 'tonnes' (real holdings)
+    | 'proxy' (GLD price) | None. Reads the shared 12h cache — no extra network."""
+    pair = _cached("etf_flow", 12 * 3600, _fetch_etf_flow_pair)
+    return pair.get("source") if pair else None
 
 
 def _fetch_etf_flow_raw() -> Optional[str]:
