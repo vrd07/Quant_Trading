@@ -40,6 +40,7 @@ from src.sentiment import GSSComponents, compute_gss                       # noq
 from src.sentiment.feeds import (                                          # noqa: E402
     fetch_cot_net_long_wow_pct,
     fetch_etf_flow_3d,
+    fetch_etf_flow_source,
     fetch_fundamental,
     fetch_news_sentiment,
     fetch_retail_long_pct,
@@ -116,6 +117,7 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
     )
     cot = fetch_cot_net_long_wow_pct()
     etf_flow = fetch_etf_flow_3d()
+    etf_source = fetch_etf_flow_source()   # 'tonnes' (real) | 'proxy' | None
     inst_pts = (score_institutional(cot_net_long_wow_pct=cot, etf_flow_3d=etf_flow)
                 if (cot is not None or etf_flow is not None) else None)
     retail_long = fetch_retail_long_pct()
@@ -204,7 +206,7 @@ def build_snapshot(symbol: str = "XAUUSD") -> Dict[str, Any]:
                 if tech["points"] is not None else "OFF (no 5m data)"),
             "fundamental": "LIVE (FRED)" if os.environ.get("FRED_API_KEY") else "OFF (set FRED_API_KEY)",
             "institutional": (
-                f"LIVE (COT{'+ETF' if etf_flow is not None else ''})"
+                f"LIVE (COT{f'+ETF {etf_source}' if etf_flow is not None else ''})"
                 if (cot is not None or etf_flow is not None) else "OFF (CFTC unreachable)"),
             "retail": "LIVE (Myfxbook)" if retail_long is not None else (
                 "OFF (set MYFXBOOK_*)" if not os.environ.get("MYFXBOOK_EMAIL") else "OFF (login/outlook failed)"),
