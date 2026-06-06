@@ -1,7 +1,7 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-06T00:00:03.553604+00:00",
-  "valid_until": "2026-06-07T00:00:03.553604+00:00",
+  "generated_at": "2026-06-06T19:00:07.623764+00:00",
+  "valid_until": "2026-06-07T19:00:07.623764+00:00",
   "regime": "RANGE",
   "confidence": 0.7296,
   "classifier": "RandomForest+Markov (n=335 samples)",
@@ -47,7 +47,7 @@
     "continuation_breakout": 0.3
   },
   "performance_scores": {
-    "kalman_regime": -0.0121
+    "kalman_regime": 0.0107
   },
   "regime_probabilities": {
     "TREND": 0.1501,
