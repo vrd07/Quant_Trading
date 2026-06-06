@@ -1,10 +1,10 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-04T20:46:56.276273+00:00",
-  "valid_until": "2026-06-05T20:46:56.276273+00:00",
+  "generated_at": "2026-06-06T00:00:03.553604+00:00",
+  "valid_until": "2026-06-07T00:00:03.553604+00:00",
   "regime": "RANGE",
-  "confidence": 0.9203,
-  "classifier": "RandomForest+Markov (n=334 samples)",
+  "confidence": 0.7296,
+  "classifier": "RandomForest+Markov (n=335 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
@@ -21,15 +21,15 @@
     "continuation_breakout": false
   },
   "diagnostics": {
-    "adx_14": 22.338512,
-    "atr_pct": 0.020161,
-    "bb_width_ratio": 0.768421,
-    "close_ema20_pct": -0.010177,
-    "momentum_1d": 0.010655,
-    "momentum_5d": -0.019334,
-    "range_atr_ratio": 0.806074,
-    "vol_ratio": 0.800954,
-    "park_vol_zscore": -0.792709
+    "adx_14": 24.510955,
+    "atr_pct": 0.021583,
+    "bb_width_ratio": 0.892808,
+    "close_ema20_pct": -0.045166,
+    "momentum_1d": -0.032039,
+    "momentum_5d": -0.055155,
+    "range_atr_ratio": 1.732151,
+    "vol_ratio": 2.160589,
+    "park_vol_zscore": 0.831307
   },
   "strategy_weights": {
     "breakout": 0.6,
@@ -50,19 +50,19 @@
     "kalman_regime": -0.0121
   },
   "regime_probabilities": {
-    "TREND": 0.0777,
-    "RANGE": 0.9203,
-    "VOLATILE": 0.002
+    "TREND": 0.1501,
+    "RANGE": 0.7296,
+    "VOLATILE": 0.1203
   },
   "transition_matrix": {
     "TREND": {
-      "TREND": 0.2,
-      "RANGE": 0.6571,
-      "VOLATILE": 0.1429
+      "TREND": 0.1944,
+      "RANGE": 0.6667,
+      "VOLATILE": 0.1389
     },
     "RANGE": {
-      "TREND": 0.0867,
-      "RANGE": 0.9067,
+      "TREND": 0.09,
+      "RANGE": 0.9033,
       "VOLATILE": 0.0067
     },
     "VOLATILE": {
