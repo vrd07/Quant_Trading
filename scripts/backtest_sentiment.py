@@ -32,6 +32,7 @@ import argparse
 import datetime as dt
 import io
 import json
+import math
 import os
 import sys
 import urllib.parse
@@ -260,6 +261,30 @@ def sign(x):
     return (x > 0) - (x < 0)
 
 
+def realized_vol(closes: List[float]) -> Optional[float]:
+    """Annualized % stdev of daily log-returns over a close path."""
+    if len(closes) < 3:
+        return None
+    rets = [math.log(closes[i] / closes[i - 1])
+            for i in range(1, len(closes)) if closes[i - 1] > 0]
+    if len(rets) < 2:
+        return None
+    m = sum(rets) / len(rets)
+    var = sum((r - m) ** 2 for r in rets) / (len(rets) - 1)
+    return var ** 0.5 * (252 ** 0.5) * 100
+
+
+def max_drawdown(closes: List[float]) -> Optional[float]:
+    """Largest peak-to-trough decline over the path, as a positive %."""
+    if len(closes) < 2:
+        return None
+    peak, mdd = closes[0], 0.0
+    for c in closes:
+        peak = max(peak, c)
+        mdd = max(mdd, (peak - c) / peak * 100)
+    return mdd
+
+
 # ── main ─────────────────────────────────────────────────────────────────────
 def build_tech_indicators(spdr) -> pd.DataFrame:
     """Causal EMA/RSI/MACD/BB on the full GLD daily close series, computed once."""
@@ -277,7 +302,7 @@ def build_tech_indicators(spdr) -> pd.DataFrame:
     })
 
 
-def run(years: float, horizons_w: List[int]):
+def run(years: float, horizons_w: List[int], target: str = "both"):
     spdr = load_spdr()
     cot = load_cot(weeks=int(years * 53) + 8)   # enough weekly rows for the window
     cutoff = dt.date.today() - dt.timedelta(days=int(years * 365))
@@ -305,13 +330,23 @@ def run(years: float, horizons_w: List[int]):
             "technical": technical_asof(tech_ind, entry_d),
             "fundamental": fundamental_asof(fred, entry_d) if has_fund else None,
         }
-        fwd = {}
+        fwd, fvol, fmaxdd = {}, {}, {}
         for h in horizons_w:
             xi = idx_on_or_after(px, entry_d + dt.timedelta(days=7 * h))
-            fwd[h] = (px[xi][1] / entry_p - 1.0) * 100 if xi is not None else None
-        samples.append({"date": date, "entry_d": entry_d, "legs": legs, "fwd": fwd})
+            if xi is None:
+                fwd[h] = fvol[h] = fmaxdd[h] = None
+                continue
+            fwd[h] = (px[xi][1] / entry_p - 1.0) * 100
+            win = [c for _d, c in px[ei:xi + 1]]          # entry → horizon (forward)
+            fvol[h], fmaxdd[h] = realized_vol(win), max_drawdown(win)
+        recent = [c for _d, c in px[max(0, ei - 20):ei + 1]]  # trailing 20d, known at entry
+        samples.append({"date": date, "entry_d": entry_d, "legs": legs, "fwd": fwd,
+                        "fvol": fvol, "fmaxdd": fmaxdd, "recent_vol": realized_vol(recent)})
 
-    _report(samples, horizons_w, years, cutoff, has_fund)
+    if target in ("direction", "both"):
+        _report(samples, horizons_w, years, cutoff, has_fund)
+    if target in ("risk", "both"):
+        _report_risk(samples, horizons_w, years, cutoff)
 
 
 def _report(samples, horizons_w, years, cutoff, has_fund):
@@ -402,9 +437,61 @@ def _report(samples, horizons_w, years, cutoff, has_fund):
     print("here. Earned weights are a TEMPLATE: validate walk-forward before shipping.")
 
 
+def _report_risk(samples, horizons_w, years, cutoff):
+    """Does sentiment predict forward RISK (vol / drawdown) rather than direction?
+    'ext' = |score−neutral| (conviction) vs forward realized vol.
+    'bear' = (neutral−score) (bearishness) vs forward max drawdown.
+    Baseline = recent 20d realized vol → forward vol (vol clustering, the bar to beat)."""
+    print("=" * 78)
+    print(f"GSS RISK-PREDICTION BACKTEST — last {years:g}y ({cutoff} → today)   "
+          f"{len(samples)} weekly samples")
+    print("  target = forward REALIZED VOL & MAX DRAWDOWN of GLD (NOT direction)")
+    print("  IC = Spearman(signal, forward risk); overlapping windows → noise floor optimistic")
+    print("=" * 78)
+    legs = ["fundamental", "technical", "institutional"]
+    midp = {leg: LEG_MAX[leg] / 2.0 for leg in legs}
+    comp_mid = sum(midp.values())
+    for h in horizons_w:
+        rows = [s for s in samples
+                if s["fvol"].get(h) is not None and s["fmaxdd"].get(h) is not None]
+        if not rows:
+            continue
+        vols = [s["fvol"][h] for s in rows]
+        dds = [s["fmaxdd"][h] for s in rows]
+        nf = 1.0 / max(len(rows), 1) ** 0.5
+        print(f"\n── horizon {h}w ──  fwd vol mean {sum(vols)/len(vols):.1f}% · "
+              f"fwd maxDD mean {sum(dds)/len(dds):.2f}%  (n={len(rows)}, noise≈±{nf:.3f})")
+        base = spearman([s["recent_vol"] for s in rows], vols)
+        print(f"   BASELINE recent-20d-vol → fwd-vol IC: "
+              f"{base if base is not None else float('nan')}   ← the bar to beat")
+        print(f"   {'signal':<24}{'IC→vol(ext)':>12}{'IC→maxDD(bear)':>15}")
+        for leg in legs:
+            r = [s for s in rows if s["legs"][leg] is not None]
+            if not r:
+                print(f"   {leg:<24}{'—':>12}{'—':>15}")
+                continue
+            icv = spearman([abs(s["legs"][leg] - midp[leg]) for s in r],
+                           [s["fvol"][h] for s in r])
+            icd = spearman([midp[leg] - s["legs"][leg] for s in r],
+                           [s["fmaxdd"][h] for s in r])
+            print(f"   {leg:<24}{(icv if icv is not None else float('nan')):>12}"
+                  f"{(icd if icd is not None else float('nan')):>15}")
+        rc = [s for s in rows if all(s["legs"][leg] is not None for leg in legs)]
+        if rc:
+            icv = spearman([abs(sum(s["legs"][leg] for leg in legs) - comp_mid) for s in rc],
+                           [s["fvol"][h] for s in rc])
+            icd = spearman([comp_mid - sum(s["legs"][leg] for leg in legs) for s in rc],
+                           [s["fmaxdd"][h] for s in rc])
+            print(f"   {'COMPOSITE':<24}{(icv if icv is not None else float('nan')):>12}"
+                  f"{(icd if icd is not None else float('nan')):>15}")
+    print("\nAny |IC| inside the noise floor = no risk-prediction edge. Sentiment is only")
+    print("useful as a risk overlay if IC→vol/maxDD clearly beats the recent-vol baseline.")
+
+
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--years", type=float, default=2.0)
     ap.add_argument("--horizons", default="1,2,4")
+    ap.add_argument("--target", choices=("direction", "risk", "both"), default="both")
     a = ap.parse_args()
-    run(a.years, [int(x) for x in a.horizons.split(",")])
+    run(a.years, [int(x) for x in a.horizons.split(",")], a.target)
