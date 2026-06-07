@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.quanttrading.sentiment-content</string>
+
+    <!-- Run venv python DIRECTLY (not via /bin/bash): bash has no Full Disk
+         Access and can't read scripts under ~/Documents. Matches the other jobs. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/varadbandekar/Documents/Quant_trading/venv/bin/python</string>
+        <string>/Users/varadbandekar/Documents/Quant_trading/scripts/daily_content_run.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/varadbandekar/Documents/Quant_trading</string>
+
+    <!-- launchd uses a minimal PATH; add Homebrew so tools resolve. -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    </dict>
+
+    <!-- Every day at 07:30 local — fresh post material waiting before you post. -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>30</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>/Users/varadbandekar/Library/Logs/quanttrading/sentiment-content.out.log</string>
+    <key>StandardErrorPath</key>
+    <string>/Users/varadbandekar/Library/Logs/quanttrading/sentiment-content.err.log</string>
+</dict>
+</plist>
