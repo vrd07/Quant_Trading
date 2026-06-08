@@ -188,7 +188,7 @@ strategies:
   #    continuation_breakout — also disabled below.
   confluence_gate:
     enabled: true
-    window_minutes: 25            # ≈ 5 × 5m bars; covers TF skew between legs
+    window_minutes: 120           # 2026-06-08: widened 25->120; legs fire bars/hours apart, 25m never aligned (0 combo fires ever)
     sniper_lot_multiplier: 1.5    # COMBO C oversize
     sniper_cooldown_minutes: 60   # Prevent duplicate sniper emits on consecutive ticks
   signal_cooldown_minutes: 5
