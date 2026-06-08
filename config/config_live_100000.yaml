@@ -1,0 +1,699 @@
+# Live Trading Environment Configuration — Goat Funded Trader
+# $100,000 Account Size  (scaled 2× from config_live_50000.yaml)
+# Rules: Daily max loss < $600, risk per trade $80, daily profit target $600
+# Risk per trade: $80 (0.08%) — 0.08 lot XAUUSD × 100 pip stop = $80
+# Target profit:  $200–$240 per trade (RR 2.5–3.0, set at 2.5 = $200)
+# News Trading: Restricted (±5 min around high-impact news)
+# Overnight & Weekend Holding: Allowed
+#
+# Active strategies (backtested on XAUUSD 5m Jan 2025 → Mar 2026):
+#   Momentum:       +4.9%, PF 1.10, DD 4.85% — primary
+#   Kalman Regime:  +10.1%, PF 1.08, DD 7.4% — secondary (30-bar cooldown)
+#   Mini Medallion: +0.82%, PF 1.03, DD 2.9% — diversifier
+
+environment: live
+
+account:
+  initial_balance: 100000.0
+  currency: USD
+  leverage: 100  # Default (FX). Symbol-specific leverage handled below.
+
+symbols:
+  XAUUSD:
+    enabled: true
+    pip_value: 0.01
+    min_lot: 0.08             # 2× the 50K floor (scaled to $100k)
+    max_lot: 0.24             # v2: scaled up for $600/day target — 3x base position
+    lot_step: 0.01
+    value_per_lot: 100
+    commission_per_lot: 0.0
+    leverage: 30              # Metals 1:30
+    min_stops_distance: 1.0   # 100 pips min distance for Gold
+    max_spread: 3.5           # 35 pips max spread threshold
+
+
+  BTCUSD:
+    enabled: false
+    pip_value: 0.1
+    min_lot: 0.08
+    max_lot: 0.08             # Increased for 100K margin
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 2               # Crypto 1:2
+    min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
+    max_spread: 15.0          # $15.00 max spread threshold
+
+
+  ETHUSD:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.08
+    max_lot: 0.08             # Scaled for 100K margin
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 5               # Crypto 1:5
+    min_stops_distance: 1.0   # $1.00 min distance for Ethereum
+    max_spread: 3.0           # $3.00 max spread threshold
+
+
+  EURUSD:
+    enabled: false
+    pip_value: 0.00001
+    min_lot: 0.01
+    max_lot: 0.04
+    lot_step: 0.01
+    value_per_lot: 100000
+    commission_per_lot: 0.0
+    leverage: 100             # FX 1:100
+    min_stops_distance: 0.00050 # 5 pip min distance
+    max_spread: 0.00030       # 3 pips max spread threshold
+
+
+  US30:
+    enabled: false
+    pip_value: 1.0
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1
+    commission_per_lot: 0.0
+    leverage: 20              # Indices 1:20
+    max_spread: 5.0           # 5 points max spread threshold
+
+  USOIL:
+    enabled: false
+    pip_value: 0.01
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1000
+    commission_per_lot: 0.0
+    leverage: 10              # Energies 1:10
+    max_spread: 0.05          # 5 cents max spread threshold
+
+risk:
+  # $100,000 Account Risk Parameters
+  max_drawdown_pct: 0.07          # 7% Max Overall/Trailing Drawdown ($7000)
+  max_daily_loss_pct: 0.006       # 0.6% Max Daily Loss ($600)
+
+  # $80 risk per trade = 0.08% of $100,000
+  # Basis: 0.08 lot XAUUSD × 100 pip stop × $10/pip/lot = $80
+  risk_per_trade_pct: 0.0024      # v2: 0.24% = ~$240 per trade (3x for $600/day target)
+
+  # Fixed per-trade take-profit target in USD (set via runtime_setup).
+  # 0 = disabled → strategies keep their own ATR/structure TP. When > 0,
+  # execution_engine rewrites every trade's TP to bank exactly this much.
+  take_profit_usd: 0
+
+  # Per-strategy risk override (added 2026-05-06).
+  # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
+  # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
+  # needs ~5% of balance per trade to express its edge; clipping it back to
+  # the operator cap silently rejects the high-vol kalman trades.
+  # Other strategies still follow the global cap.
+  strategy_risk_overrides:
+    kalman_regime:
+      risk_per_trade_usd: 5000
+
+  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
+  absolute_max_loss_usd: 595      # Daily loss limit — hard cap below $600
+  max_drawdown_usd: 7000          # Overall drawdown limit ($100k × 7%)
+  max_daily_profit_usd: 600       # Stop trading for the day once $600 profit hit
+  daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
+                                      # would push daily loss past 85% of $595 = $505.75
+                                      # Gives $89 buffer for slippage / concurrent fills
+
+  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here
+  # so TP distance always exceeds SL distance (never a sub-1R target).
+  kalman_min_tp_rr: 1.0
+
+  # ── Confidence-based reversal / flip (2026-05-27) ────────────────
+  # An opposite-direction signal with higher confidence than an open bot
+  # position closes the weaker trade and takes the stronger one at once,
+  # bypassing the directional lock + reversal buffer.
+  confidence_flip:
+    enabled: true
+    min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
+
+  max_positions: 2
+  max_daily_trades: 15                # Reduced from 50 — audit: 21 trades/day × $700 daily StdDev ≫ $595 limit
+  max_exposure_per_symbol_pct: 5.0
+  max_daily_wins: 8               # Stop trading once 8 wins hit
+
+  position_sizing:
+    method: fixed                 # GFT account — fixed lot, no martingale/dynamic scaling
+    fixed_lots:
+      XAUUSD: 0.40                # v3: 0.40 lot × ~100 pip stop × $10/pip = ~$400 risk (targets $1000/day)
+      ETHUSD: 0.08                # exchange-min-scaled for 100K margin
+      EURUSD: 0.01                # 0.01 lot — conservative fixed size for FX
+      default: 0.01               # Fallback for any other symbol
+  circuit_breaker:
+    enabled: true
+    max_consecutive_losses: 3      # Tightened from 5 — audit: max 16 consecutive losses seen
+    cooldown_minutes: 30           # Doubled from 15 — let volatility subside before re-entering
+    loss_pause_consecutive: 2      # Tightened from 3 — pause earlier to preserve daily loss budget
+    loss_pause_minutes: 30         # Doubled from 15 — match cooldown duration
+
+  # News/high-loss blackout — suppresses ALL orders during these UTC hours.
+  trading_windows:
+    enabled: true
+    blocked_hours_utc: []
+
+  # Per-trade + daily cap enforcement for manual MT5 clicks.
+  manual_guard:
+    enabled: true
+    daily_loss_cap_usd: 240            # ~40% of absolute_max_loss_usd
+    size_multiplier: 0.5
+    max_risk_per_trade_usd: 120        # half of risk_per_trade_usd ($240) — conservative on big account
+    auto_close_violations: false
+    directional_lock: true             # Block bot signals opposite to manual trades
+
+  trailing_stop:
+    enabled: true
+    breakeven_atr_mult: 1.2        # Move SL to breakeven at +1.2× risk distance (was 0.5 — too tight, normal noise stopped out trades)
+    lock_atr_mult: 2.0             # Move SL to partial lock at +2.0× risk distance (was 1.5)
+    lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
+    # time_stop_minutes removed — was 45 min, killed 30-59% of trades before TP could be reached
+    ml_exhaustion_factor: 0.8      # (ML ONLY) If exhaustion pipeline generates predicted pips, tight_lock 80% of it immediately when reached
+
+
+  # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
+  # (enforced by trading_hours sessions below)
+
+strategies:
+
+  # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
+  #    COMBO A (TREND): sbr + fib + momentum
+  #    COMBO B (RANGE): vwap + asia_range_fade + smc_ob
+  #    COMBO C (any):   smc_ob + fib + momentum → sniper (1.5× sized)
+  #    Solo allow: kalman_regime. Filter-only: momentum, asia_range_fade,
+  #    smc_ob, fibonacci_retracement. Kill list: breakout, mean_reversion,
+  #    supply_demand, descending_channel_breakout, mini_medallion,
+  #    continuation_breakout — also disabled below.
+  confluence_gate:
+    enabled: true
+    window_minutes: 25            # ≈ 5 × 5m bars; covers TF skew between legs
+    sniper_lot_multiplier: 1.5    # COMBO C oversize
+    sniper_cooldown_minutes: 60   # Prevent duplicate sniper emits on consecutive ticks
+  signal_cooldown_minutes: 5
+  primary_timeframe: 1m
+  min_bars_required: 5              # Reduced from 10 so 5m strategies activate faster
+
+  regime_filter:
+    enabled: true
+    adx_period: 14
+    adx_trend_threshold: 25
+    adx_range_threshold: 20
+    atr_period: 14
+    atr_ma_period: 20
+    use_hurst: true
+    hurst_period: 100
+    hurst_trend_threshold: 0.55
+    hurst_range_threshold: 0.45
+
+  breakout:
+    enabled: false    # disabled 2026-05-13 (kill list)    timeframe: 5m
+    donchian_period: 12             # v3: shorter channel (60 min) — faster breakout detection
+    rr_ratio: 3.0                   # v3: wider TP — gold trends well, capture more per winner
+    only_in_regime: TREND
+    atr_stop_multiplier: 2.0        # v3: back to 2.0 — 1.5 was too tight, stops hit too early
+    adx_min_threshold: 20           # v3: back to 20 — quality over quantity
+    min_body_atr_ratio: 0.30        # v3: back to 0.30 — ensures quality breakout bars
+    volume_confirmation: false
+    rsi_overbought: 78              # v3: widened from 75 — let strong trends run
+    rsi_oversold: 22                # v3: widened from 25
+    atr_spike_mult: 1.8             # v3: relaxed from 1.5 — gold is volatile, allow more
+    cooldown_bars: 2                # v3: reduced from 4 — more trade frequency
+    # v3 filters: data-driven from 353-trade backtest analysis
+    bb_squeeze_enabled: true        # Only breakout after consolidation
+    bb_squeeze_period: 20
+    bb_squeeze_percentile: 70       # v3: relaxed from 60 — less restrictive entry
+    bb_squeeze_lookback: 50
+    htf_trend_enabled: true         # 1H EMA(21) trend must align with breakout direction
+    htf_ema_period: 21
+    session_filter_enabled: true    # Only trade during high-WR sessions
+    allowed_sessions: [[4,4],[7,8],[22,22]]  # v3: ONLY profitable hours — London pre (4), prime (7-8), late NY (22)
+    close_position_pct: 0.35        # v3: relaxed from 0.30 — fewer false rejections
+    macd_confirmation: true         # MACD histogram must confirm direction
+    ema_confirm_enabled: true       # v3: EMA fast/slow crossover alignment — improved WR to 33.5%
+    ema_fast_period: 9
+    ema_slow_period: 21
+
+  mean_reversion:
+    enabled: false              # -1.63%, PF 0.40, 15% WR — no edge on gold
+    zscore_lookback: 20
+    entry_threshold: 2.0
+    exit_threshold: 0.5
+    stop_threshold: 3.0
+    rr_ratio: 2.5
+    only_in_regime: RANGE
+    mtf_confirmation: false
+
+  vwap:
+    enabled: true               # v5: VWAP band-touch + MACD crossover (2026-05-09)
+    timeframe: 15m
+    # VWAP band gate
+    band_std_mult: 2.0          # v5: 2σ — genuine extremes; 1.5σ fired too often on trend bars
+    atr_period: 14
+    # MACD crossover trigger (mirrors TradingView defaults)
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    macd_arm_window: 3          # v5: 3 bars = 45 min max wait on 15m (was 5 = 75 min)
+    # H1 EMA trend gate (v2) — prevents selling into bull / buying into bear
+    htf_trend_gate: true
+    h1_ema_bars: 200            # H1 EMA(50) ≈ 200 × 15m bars
+    # Kill zones — enabled in live, disable via kill_zones_enabled: false for backtest
+    kill_zones_enabled: true
+    # Risk management — 1:2 RR is hard-coded; only SL multiplier is configurable
+    stop_atr_mult: 1.5
+    max_hold_minutes: 60
+    # Session filter: allowed_hours for live deployment (not used in all-sessions backtest)
+    allowed_hours: [2, 11, 15, 19]   # v4 data-driven net-positive UTC hours
+
+
+  # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
+  # Momentum v3: Session-filtered, wider SL, optimized for $500/day target
+  # Data-driven: profitable hours [1,3,4,5,7,8,10,16,17,22], losers [12,14,15,18,19] cut
+  # Wider SL (2.0 ATR) reduces false stop-outs (was 75% SL hit rate)
+  # Lower RR (2.0) improves TP hit rate; larger lots (0.20) scale dollar returns
+  momentum:
+    enabled: true
+    timeframe: 5m
+    rsi_period: 14
+    ema_period: 20
+    rr_ratio: 2.0             # v3: lowered from 2.5 — improves TP hit rate
+    atr_stop_multiplier: 2.0  # v3: widened from 1.5 — reduces false SL hits (was 75% SL rate)
+    rsi_bull_threshold: 53       # v3: slightly tighter — higher conviction entries
+    rsi_bear_threshold: 47       # v3: slightly tighter
+    rsi_overbought: 78
+    rsi_oversold: 22
+    adx_min_threshold: 22       # v3: raised from 20 — stronger trend confirmation
+    volume_confirmation: false
+    macd_fast: 12
+    macd_slow: 26
+    macd_signal: 9
+    ema_fast: 9
+    ema_mid: 21
+    ema_slow: 30
+    rsi_slope_bars: 3
+    min_signal_strength: 0.60   # v3: raised from 0.50 — quality over quantity
+    min_signal_strength_sell: 0.65  # v3: raised from 0.60
+    only_in_regime: TREND
+    # v3: session filter — only trade data-proven profitable hours
+    session_filter_enabled: true
+    allowed_hours: [1, 3, 4, 5, 7, 8, 10, 16, 17, 22]
+
+  # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
+  # Kalman v2: pure Kalman + session filter on 15m — data-driven optimization
+  # v1 best hours: 20 (39% WR, $19/trade), 21 (32% WR, $36/trade), 4 (32%, $7), 3-6 profitable
+  # EMA/MACD filters HURT WR in best hours — removed. Session filter + Kalman purity wins.
+  kalman_regime:
+    enabled: true
+    timeframe: 15m
+    long_only: false                # Two-sided: SELL re-enabled with confidence-gated sizing
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    rv_window: 20
+    rv_ma_window: 100
+    zscore_window: 20
+    # v3 Loosen (2026-04-19): backtest shows 2× trades, 2× absolute return at
+    # same PF/Sharpe. User accepts the 2.4× larger max-DD because account-level
+    # max-loss is enforced outside this strategy. Raw config for reference:
+    #   entry_threshold 2.0→1.5, trend_adx_min 20→17, kalman_confirm_bars 2→1,
+    #   min_signal_strength 0.50→0.35, cooldown_bars 2→1.
+    entry_threshold: 2.0            # 2026-05-05: v3-loose REVERTED (was 1.5) — testing v2 entry quality
+    trend_adx_min: 17               # v3 loose: 20 -> 17 (KEPT pending isolation test)
+    kalman_confirm_bars: 2          # 2026-05-05: v3-loose REVERTED (was 1)
+    min_signal_strength: 0.50       # 2026-05-05: v3-loose REVERTED (was 0.35) — BUY-side gate
+    min_signal_strength_sell: 0.75  # 2026-05-05: SELL-specific tighter gate — trade log showed SELL WR 14.6% vs BUY 33.9% (gold has bullish drift)
+    cooldown_bars: 2                # 2026-05-05: v3-loose REVERTED (was 1)
+    atr_period: 14
+    sl_atr_multiplier: 3.0          # 2026-05-06: 1.5/2.5 → 3.0 — 2-D SL×TP sweep on $10k showed (3.0, 4.0) is winrate sweet spot (WR 47.6%, PF 1.32)
+    tp_atr_multiplier: 4.0          # 2026-05-06: 8.0 → 4.0 — XAU 15m trends rarely reach 8×ATR; tighter TP captures more wins without giving back via stops
+    news_filter: true
+    # Confidence gate: signals with conf >= threshold may stack up to risk.max_positions;
+    # signals below threshold are limited to 1 open kalman_regime position at a time.
+    high_confidence_threshold: 90.0
+    # Session filter widened to ≥ 7 trading hours/day (was 8 split across 4 windows).
+    session_filter_enabled: true
+    allowed_sessions: [[1,4],[7,8],[10,12],[15,23]]   # 2026-06-04 (user): Asia 01-05, London 07-09 & 10-13 (skip h9), overlap+NY 15-24 (skip overlap bleeds h13/h14) - UTC. Restores Kalman's documented profitable NY evening h20-23 (h21 +$889); excludes the 3 bleed hours h9/h13/h14.
+    ema_confirm_enabled: false
+    macd_confirmation: false
+    kalman_accel_enabled: false
+    stoch_confirm_enabled: false
+    range_rsi_buy: 42
+    range_rsi_sell: 65              # 2026-05-05: 58 → 65 — require RSI deeper in overbought before shorting (BUY side stays at 42)
+
+    # 2026-05-06: HTF directional gate for SELL only.
+    # Trade-log evidence (1146 SELL trades, WR 14.9%, -$15k) shows even high-strength
+    # SELL signals lose 85% of the time on XAU during a sustained bull window.
+    # Gate: SELL only fires when 1H close < 1H EMA(50) — confirmed bearish HTF trend.
+    # BUY-side untouched.
+    htf_sell_filter_enabled: true
+    htf_sell_resample_to: 1h
+    htf_sell_ema_period: 50
+
+  # ── TERTIARY STRATEGY ─────────────────────────────────────────────────────
+  # Mini Medallion v2: Optimized from backtest analysis
+  # v1 audit: -$5,449, PF 0.84, 26.9% WR — SELL side lost -$8.3K, BUY made +$3.1K
+  # v2 changes: long-only, session filter (profitable hours only), lower threshold,
+  #   higher RR, ADX filter, rebalanced weights
+  mini_medallion:
+    enabled: false                   # v5: backtest-validated tuning — 51% WR, PF 1.31, 6.9% annualized    # disabled 2026-05-13 (kill list)    timeframe: 15m
+    score_threshold: 3.5            # v5: stronger conviction gate
+    cooldown_bars: 10
+    risk_atr_multiplier: 2.2        # v5: widened SL — tight stops were noise-tagged (77% SL rate)
+    rr_ratio: 1.2                   # v5: realistic TP on 5m (was 3.0 → never filled)
+    long_only: true                 # Gold upward bias
+    session_filter_enabled: true
+    allowed_hours: [5, 7, 8]        # v5: per-hour backtest — only these 3 hours are net-positive
+    adx_min_threshold: 22
+    min_signal_strength: 0.0        # v5: strength had no predictive power
+    weights:
+      mean_reversion: 1.0
+      momentum_burst: 1.2
+      volatility_expansion: 1.3
+      order_flow: 1.1
+      liquidity_sweep: 1.5
+      market_regime: 1.2
+      volatility_regime: 0.6
+      # SMC signals — computed + logged to metadata; weight 0 means no score influence.
+      # Backtest before opting in via positive weight.
+      bos: 0.0
+      choch: 0.0
+      fvg: 0.0
+
+
+  # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
+  # Trades confirmed retests of broken Donchian channel structure.
+  # Unlike donchian_breakout (trades initial break), SBR waits for
+  # the higher-probability retest confirmation phase.
+  # Backtest (50K, Jan 2025–Mar 2026): +0.79%, PF 1.03, DD 4.07%, 708 trades
+  sbr:
+    enabled: true
+    timeframe: 15m
+    lookback_period: 20           # Donchian channel period for structure detection
+    retest_tolerance_atr: 0.4     # Tighter retest zone (was 0.5)
+    min_rejection_ratio: 0.55     # Slightly relaxed to catch more valid retests
+    retest_window_bars: 20        # Tighter window (was 30) — stale breaks fail
+    adx_min_threshold: 22         # Slightly higher ADX floor
+    adx_max_threshold: 55         # Cap ADX — overheated trends whipsaw
+    rsi_overbought: 70            # Tighter RSI bands
+    rsi_oversold: 30
+    atr_stop_multiplier: 1.8      # Widened from 1.2 — gives retest room to wick past broken level
+    rr_ratio: 2.0                 # Lowered from 2.5 — improves TP hit rate
+    cooldown_bars: 8              # Fast re-entry in quality sessions
+    long_only: false
+    only_in_regime: TREND
+    # v2 filters
+    ema_trend_period: 50          # 50-EMA trend alignment required
+    min_strength: 0.65            # Moderate strength gate
+    session_hours: [5, 6, 7, 13, 16, 17, 22]  # High-WR hours: London open, NY afternoon, late session
+
+  # ── SUPPLY & DEMAND ZONE STRATEGY ─────────────────────────────────────────
+  # Trades confirmed retests of algorithmically-detected S&D zones.
+  # Zone = consolidation base immediately before a strong impulse move (>= 2.5× ATR body).
+  # Entry fires when price returns to the base zone with a rejection candle.
+  #
+  # Disabled by default — backtest on XAUUSD 5m before enabling live.
+  # To backtest: python scripts/run_backtest.py --strategy supply_demand
+  supply_demand:
+    enabled: false              # Backtest 2yr: PF 1.07, DD -8.56%, 34.7% WR — no tunable edge on XAUUSD. Fold-in to mini_medallion also hurt composite.
+    timeframe: 5m
+    # Zone formation — loosened to surface more setups on 5m XAUUSD
+    min_impulse_atr_mult: 1.6   # Was 2.5 — 1.6× ATR body is still a decisive move
+    zone_lookback_bars: 4       # Tighter base → cleaner retests
+    zone_max_age_bars: 80       # Freshness matters; stale zones lose edge
+    max_active_zones: 5         # More zones in memory = more retest chances
+    # Entry confirmation — relaxed but still quality-gated
+    zone_touch_tolerance_atr: 0.5   # Wider touch tolerance (was 0.3)
+    min_rejection_ratio: 0.40       # Was 0.55 — 40% wick still a credible rejection
+    adx_min_threshold: 14           # Was 18
+    rsi_overbought: 78
+    rsi_oversold: 22
+    ema_trend_period: 34            # Faster trend filter (was 50)
+    long_only: false
+    session_hours: [4, 5, 6, 7, 8, 9, 12, 13, 14, 15, 16, 17, 18, 19, 22]  # London + full NY
+    cooldown_bars: 4                # Was 10 — allow faster re-entry
+
+  # ── ASIA RANGE FADE ───────────────────────────────────────────────────────
+  # Fills UTC 09–13 (14:30–18:30 IST) dead window. Backtest 2025-01→2026-03:
+  # 214 trades, WR 45.3%, PF 1.31, DD 1.6%, expectancy $1.31/trade on $10k.
+  asia_range_fade:
+    enabled: true
+    timeframe: 15m
+    session_hours: [9, 10, 11, 12, 13]
+    lookback_bars: 20
+    adx_max: 28.0
+    bb_period: 20
+    bb_width_window: 200
+    bb_width_percentile: 0.60
+    rsi_period: 14
+    rsi_oversold: 35.0
+    rsi_overbought: 65.0
+    atr_period: 14
+    atr_stop_multiplier: 1.5
+    rr_ratio: 1.5
+    cooldown_bars: 12
+    long_only: false
+    respect_ml_trend: true
+
+  # ── DESCENDING CHANNEL BREAKOUT (DCB) ──────────────────────────────
+  # Detects descending channels via linear regression, identifies
+  # structure shifts (higher-low formations), and trades confirmed
+  # breakouts or trendline rejections with defined R:R.
+  # Disabled by default — backtest before enabling live.
+  descending_channel_breakout:
+    enabled: false    # disabled 2026-05-13 (kill list)    timeframe: 5m
+    channel_lookback: 100
+    swing_period: 10
+    min_hl_count: 2
+    channel_slope_max: -0.0003
+    breakout_atr_buffer: 0.20
+    demand_zone_atr_mult: 1.5
+    rejection_min_ratio: 0.50
+    adx_min_threshold: 26
+    adx_max_threshold: 55
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    atr_period: 14
+    atr_stop_multiplier: 1.5
+    rr_ratio: 2.0
+    cooldown_bars: 3
+    long_only: false
+    only_in_regime: TREND
+    min_strength: 0.45
+    session_hours: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]
+    min_body_atr_ratio: 0.25
+    require_correction_phase: false
+    long_ema_period: 200
+
+  # -- SMC ORDER BLOCK (OB) STRATEGY ------------------------------------------
+  # Your manual edge coded as a 5-phase state machine:
+  #   Phase 1: Bearish impulse from swing high -> OB zone formed
+  #   Phase 2: Price re-enters OB zone
+  #   Phase 3: Liquidity sweep (wick below OB low + close above it) <- KEY FILTER
+  #   Phase 4: First buying candle appears after sweep
+  #   Phase 5: Next candle breaks first buy candle's HIGH -> ENTRY
+  #   SL = first buy candle low | TP = OB high + sellers' SL cluster (liquidity premium)
+  # Disabled by default -- run backtest first, then enable if PF > 1.3
+  smc_ob:
+    enabled: true
+    timeframe: 5m
+    long_only: true
+    swing_lookback: 5
+    min_impulse_atr_mult: 0.5     # Looser impulse -> 5x more setups
+    ob_max_age_bars: 120
+    ob_touch_tolerance_atr: 1.0
+    cooldown_bars: 3
+    adx_min_threshold: 26          # Lower floor -> more trades
+    use_ema_trend_filter: true
+    ema_trend_period: 50
+    liquidity_premium_mult: 15.0
+    min_liquidity_premium_mult: 8.0
+    max_sl_atr: 4.0
+    min_sl_atr: 0.05
+    # FVG confluence: lifts win rate 8.6% -> 16.7% on long_only
+    require_fvg_confluence: true
+    fvg_ob_proximity_atr: 2.0
+    fvg_max_age_bars: 50
+    # PDF Module 5/6: Rejection-wick quality on sweep candle.
+    # Wick on sweep side must be >= this fraction of candle range.
+    min_rejection_wick_ratio: 0.40
+    # PDF Module 2: Equal-highs/lows liquidity-target cluster.
+    # When true, sweep must take out a cluster of equal swing pivots.
+    # Off by default -- enable after backtesting on your pair/TF.
+    require_equal_pivots: true
+    equal_pivot_epsilon_atr: 0.15
+    equal_pivot_min_count: 2
+    equal_pivot_lookback: 60
+    equal_pivot_proximity_atr: 1.5
+    # PDF Module 6: Entry break candle must close in the strong zone.
+    # BUY: close in top 40% of range. SELL: close in bottom 40%.
+    require_strong_close: true
+    strong_close_threshold: 0.40
+    # PDF Module 5 (killzones): session_hours already supported above.
+    # For strict killzone enforcement, set:
+    #   session_hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]
+
+  # ── FIBONACCI RETRACEMENT GOLDEN ZONE ──────────────────────────────
+  # Trades pullbacks into the 50%–61.8% Fibonacci retracement zone.
+  # Disabled by default — backtest before enabling live.
+  # big_trend tuned config (Apr 2026 sweep):
+  # PF 1.75, WR 36.8%, DD 9.2%, 152 trades / 6mo on XAUUSD 5m — best risk-adjusted
+  fibonacci_retracement:
+    enabled: true
+    timeframe: 5m
+    swing_lookback: 5
+    min_swing_atr_mult: 3.5          # was 2.0 — only BIG swings
+    swing_max_age_bars: 100
+    golden_zone_upper: 0.618
+    golden_zone_lower: 0.50
+    min_rejection_ratio: 0.55        # was 0.50
+    adx_min_threshold: 26            # was 20 — skip weak trends
+    adx_max_threshold: 70            # was 55 — allow strong trends
+    rsi_overbought: 75
+    rsi_oversold: 25
+    ema_trend_period: 50
+    atr_stop_multiplier: 1.5
+    rr_ratio: 2.5
+    cooldown_bars: 10                # was 8
+    long_only: false
+    only_in_regime: TREND
+    min_strength: 0.0
+    session_hours: null
+
+  # ── CONTINUATION BREAKOUT (Wyckoff stair-step) ───────────────────────
+  # Two-leg breakout: tight range → impulse → re-accumulation → continuation.
+  # State-machine: detects accumulation range → fast move (impulse) →
+  # re-accumulation cluster → fires on second breakout in same direction.
+  # Disabled by default — backtest before enabling live.
+  continuation_breakout:
+    enabled: false    # disabled 2026-05-13 (kill list)    timeframe: 5m
+    donchian_period: 20
+    lookback_window: 60
+    min_consolidation_bars: 5
+    max_consolidation_bars: 25
+    impulse_max_age_bars: 40
+    impulse_body_atr: 1.2          # impulse bar body >= 1.2 × ATR
+    continuation_body_atr: 0.5     # entry bar body >= 0.5 × ATR
+    consolidation_max_height_atr: 2.0  # re-accumulation height <= 2 × ATR
+    adx_min_threshold: 26
+    rsi_overbought: 78
+    rsi_oversold: 22
+    ema_trend_period: 50
+    use_ema_filter: true
+    long_only: false
+    cooldown_bars: 6
+    session_hours: null            # null = all hours
+    atr_stop_multiplier: 1.0       # SL = cluster boundary ± 1.0 × ATR buffer
+    rr_ratio: 2.0                  # TP = 2 × risk
+
+trading_hours:
+  # Friday cutoff disabled for 24/7 crypto/weekend trading
+  # friday_cutoff_utc: "19:00"
+
+  sessions:
+    # ── ASIA (Tokyo/Sydney) 00:00–07:00 UTC — low vol, range-fade alpha ──────
+    - name: asia
+      start: "00:00"
+      end: "07:00"
+      enabled: true
+      lot_size_multiplier: 0.7
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+
+    # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
+    - name: london
+      start: "07:00"
+      end: "12:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+
+    # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
+    - name: overlap
+      start: "12:00"
+      end: "16:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+
+    # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
+    - name: new_york
+      start: "16:00"
+      end: "22:00"
+      enabled: true
+      lot_size_multiplier: 1.0
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+
+    # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
+    - name: late_ny
+      start: "22:00"
+      end: "23:59"
+      enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
+      lot_size_multiplier: 0.5
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+
+  news_filter:
+    enabled: true
+    csv_path: news/2026-06-08_news.csv
+    # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
+    # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
+    # both currencies into the CSV; the loader filters to this list.
+    currency:
+      - USD
+      - EUR
+    impacts:
+      - high
+      - red
+    buffer_min: 5
+    timezone: Asia/Kolkata
+
+monitoring:
+  log_level: INFO
+  state_save_interval_sec: 10
+  enable_console_logging: true
+
+  alerts:
+    kill_switch: true
+    daily_loss_pct: 0.005       # Alert at 0.5% daily loss ($500)
+
+data:
+  timeframes:
+    - 1m
+    - 5m
+    - 15m
+    - 1h
+  history_bars: 1000
+  tick_buffer_size: 5000
+
+portfolio:
+  reconciliation_interval_sec: 30
+
+file_bridge:
+  enabled: true
+  # ── MT5 data directory ──────────────────────────────────────────────────────
+  #
+  # WINDOWS 11 USERS:
+  #   Option A (recommended — works with ANY username including spaces):
+  #     Comment out BOTH data_dir lines below. The bot will auto-detect the
+  #     correct path using Windows' %APPDATA% environment variable.
+  #
+  #   Option B (manual — only needed if auto-detect fails):
+  #     Uncomment the line below and replace <YourWindowsUsername> with yours.
+  #     If your username has spaces (e.g. "Shubham Ghodke"), include them as-is:
+  #     data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  #
+  # macOS (MT5 under Wine — active by default):
+  # data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  check_interval_ms: 100
+
+shutdown:
+  close_all_positions: true
+  save_state: true

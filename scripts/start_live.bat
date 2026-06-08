@@ -73,9 +73,10 @@ echo   3) $5,000
 echo   4) $10,000
 echo   5) $25,000
 echo   6) $50,000
+echo   7) $100,000
 echo.
 set "ACCOUNT_CHOICE="
-set /p "ACCOUNT_CHOICE=  Enter choice [0-6] (default: 0): "
+set /p "ACCOUNT_CHOICE=  Enter choice [0-7] (default: 0): "
 
 if "!ACCOUNT_CHOICE!"=="" set "ACCOUNT_CHOICE=0"
 if "!ACCOUNT_CHOICE!"=="0" set "CONFIG=!ACTIVE_CONFIG!"
@@ -85,6 +86,7 @@ if "!ACCOUNT_CHOICE!"=="3" set "CONFIG=config\config_live_5000.yaml"
 if "!ACCOUNT_CHOICE!"=="4" set "CONFIG=config\config_live_10000.yaml"
 if "!ACCOUNT_CHOICE!"=="5" set "CONFIG=config\config_live_25000.yaml"
 if "!ACCOUNT_CHOICE!"=="6" set "CONFIG=config\config_live_50000.yaml"
+if "!ACCOUNT_CHOICE!"=="7" set "CONFIG=config\config_live_100000.yaml"
 
 if "!CONFIG!"=="" (
     echo   Invalid choice. Using ACTIVE_CONFIG ^(!ACTIVE_CONFIG!^).

@@ -65,8 +65,9 @@ else
     echo "  4) \$10,000"
     echo "  5) \$25,000"
     echo "  6) \$50,000"
+    echo "  7) \$100,000"
     echo ""
-    printf "  Enter choice [0-6] (default: 0): "
+    printf "  Enter choice [0-7] (default: 0): "
     read -r ACCOUNT_CHOICE
 
     case "${ACCOUNT_CHOICE:-0}" in
@@ -77,6 +78,7 @@ else
         4) CONFIG="config/config_live_10000.yaml" ;;
         5) CONFIG="config/config_live_25000.yaml" ;;
         6) CONFIG="config/config_live_50000.yaml" ;;
+        7) CONFIG="config/config_live_100000.yaml" ;;
         *)
             echo "  Invalid choice. Using ACTIVE_CONFIG ($ACTIVE_CONFIG)."
             CONFIG="$ACTIVE_CONFIG"
