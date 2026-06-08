@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSDS",
-  "generated_at": "2026-06-06T19:00:07.419866+00:00",
-  "valid_until": "2026-06-07T19:00:07.419866+00:00",
+  "generated_at": "2026-06-08T04:11:28.674258+00:00",
+  "valid_until": "2026-06-09T04:11:28.674258+00:00",
   "regime": "RANGE",
   "confidence": 0.52,
   "classifier": "rule-based (no data)",
