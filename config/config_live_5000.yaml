@@ -99,6 +99,11 @@ risk:
   # Basis: 0.02 lot XAUUSD × 75 pip stop × $10/pip/lot = $15
   risk_per_trade_pct: 0.003       # 0.30% = $15 per trade
 
+  # Fixed per-trade take-profit target in USD (set via runtime_setup).
+  # 0 = disabled → strategies keep their own ATR/structure TP. When > 0,
+  # execution_engine rewrites every trade's TP to bank exactly this much.
+  take_profit_usd: 0
+
   # Per-strategy risk override.
   # kalman_regime sizes off its own per-trade $ cap. Cut 250→50 on 2026-05-30:
   # at the $250-DD / $150-daily budget a $250 cap (clamped to ~$120 at max_lot)

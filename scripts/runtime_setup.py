@@ -3,10 +3,11 @@ Interactive runtime setup. Prompts the user for:
   1. Which symbols to trade + broker ticker (e.g. XAUUSD.x, GOLDm)
   2. Lot size per selected symbol
   3. Max loss per trade (USD) — shows the implied stop-loss in pips per symbol
-  4. Max daily loss (USD)
-  5. Max total drawdown (USD)
-  6. Max daily profit (USD)
-  7. Max concurrent positions
+  4. Max take profit per trade (USD) — fixed $ profit target, 0 to disable
+  5. Max daily loss (USD)
+  6. Max total drawdown (USD)
+  7. Max daily profit (USD)
+  8. Max concurrent positions
 
 Writes the chosen values to config/runtime_overrides.yaml, which is merged
 on top of the selected config by src/main.py at startup.
@@ -192,8 +193,38 @@ def main() -> int:
             print(f"    {tkr:12s} {user_lot} lots -> ~{pips:.0f} pip stop for ${max_loss_trade:.2f}")
     print()
 
+    # ── Max take profit per trade ──
+    print("--- Step 3: Max take profit per trade (fixed $ target) ---")
+    print("  Sets a fixed dollar profit target on EVERY trade — the bot rewrites")
+    print("  each trade's take-profit to the price that banks this much USD,")
+    print("  regardless of which strategy fired. Enter 0 to disable and let each")
+    print("  strategy keep its own ATR/structure-based TP.")
+    default_tp_usd = round(float(config["risk"].get("take_profit_usd", 0) or 0), 2)
+    take_profit_usd = _prompt_float(
+        "  Max take profit per trade (USD, 0 to disable)",
+        default=default_tp_usd,
+        minimum=0.0,
+    )
+    if take_profit_usd > 0:
+        print()
+        print("  Implied take-profit distance (using YOUR lot size per symbol):")
+        for tkr, scfg in selected.items():
+            user_lot = float(scfg["_user_lot"])
+            pip_usd = _usd_per_pip(scfg, user_lot)
+            if pip_usd > 0:
+                pips = take_profit_usd / pip_usd
+                print(f"    {tkr:12s} {user_lot} lots -> ~{pips:.0f} pip TP for ${take_profit_usd:.2f}")
+        if take_profit_usd <= max_loss_trade:
+            print(
+                f"  [note] TP ${take_profit_usd:.2f} <= max loss ${max_loss_trade:.2f}"
+                f" per trade — reward-to-risk is below 1:1."
+            )
+    else:
+        print("  => Per-trade take-profit target disabled (strategy TP used)")
+    print()
+
     # ── Max daily loss ──
-    print("--- Step 3: Max daily loss ---")
+    print("--- Step 4: Max daily loss ---")
     default_daily_usd = round(
         float(config["risk"].get("absolute_max_loss_usd", balance * 0.02)), 2
     )
@@ -207,7 +238,7 @@ def main() -> int:
     print()
 
     # ── Max total drawdown ──
-    print("--- Step 4: Max total drawdown ---")
+    print("--- Step 5: Max total drawdown ---")
     default_dd_pct = float(config["risk"].get("max_drawdown_pct", 0.07) or 0.07)
     default_dd_usd = round(balance * default_dd_pct, 2)
     max_drawdown_usd = _prompt_float(
@@ -222,7 +253,7 @@ def main() -> int:
     print()
 
     # ── Max daily profit ──
-    print("--- Step 5: Max daily profit (stop trading once hit) ---")
+    print("--- Step 6: Max daily profit (stop trading once hit) ---")
     default_profit_usd = round(
         float(config["risk"].get("max_daily_profit_usd", balance * 0.01)), 2
     )
@@ -239,7 +270,7 @@ def main() -> int:
     print()
 
     # ── Max concurrent positions ──
-    print("--- Step 6: Max concurrent positions ---")
+    print("--- Step 7: Max concurrent positions ---")
     default_max_positions = int(config["risk"].get("max_positions", 1) or 1)
     max_positions = _prompt_int(
         "  Max open positions at once",
@@ -250,7 +281,7 @@ def main() -> int:
     print()
 
     # ── Directional lock (The5ers no-hedge rule) ──
-    print("--- Step 7: Directional lock (no hedging) ---")
+    print("--- Step 8: Directional lock (no hedging) ---")
     print("  When ON, the bot refuses a SELL while a BUY is open (and vice-versa),")
     print("  so you never hold opposing positions. Turn OFF to allow both directions")
     print("  open at once (hedging) up to your max-positions limit.")
@@ -274,6 +305,7 @@ def main() -> int:
         "risk": {
             "risk_per_trade_pct": risk_per_trade_pct,
             "risk_per_trade_usd": max_loss_trade,
+            "take_profit_usd": take_profit_usd,
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
             "max_drawdown_pct": dd_pct,
@@ -292,6 +324,7 @@ def main() -> int:
     print(f"   Saved overrides -> {OVERRIDE_PATH}")
     print(f"   Symbols         : {', '.join(selected.keys())}")
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
+    print(f"   Max TP/trade    : ${take_profit_usd:.2f}" + (" (disabled)" if take_profit_usd == 0 else ""))
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print(f"   Max drawdown    : ${max_drawdown_usd:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))

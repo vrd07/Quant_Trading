@@ -1,19 +1,19 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-08T16:29:00.155305+00:00",
-  "gss_total": 50.71,
+  "generated_at": "2026-06-08T16:59:11.575583+00:00",
+  "gss_total": 55.71,
   "regime": "Moderate Bullish",
   "breakdown": {
     "fundamental": 19.88,
     "technical": 7.5,
     "institutional": 13.33,
-    "retail": 5.0,
+    "retail": 10.0,
     "news": 5.0
   },
   "missing": [],
   "source_detail": {
     "feeds": {
-      "technical": "LIVE (5m+MT5 anchor)",
+      "technical": "STALE (local 5m only \u2014 bot offline)",
       "fundamental": "LIVE (FRED)",
       "institutional": "LIVE (COT+ETF tonnes)",
       "retail": "LIVE (Myfxbook)",

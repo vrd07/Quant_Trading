@@ -316,6 +316,52 @@ class ExecutionEngine:
                     lot=float(position_size),
                 )
 
+            # ── Budget TP: fixed "take profit per trade" target ───────────────
+            # Mirror of Budget SL above. When the user sets a per-trade TP budget
+            # in runtime_setup, rewrite the strategy's structural TP so every
+            # trade targets exactly `take_profit_usd`, regardless of which
+            # strategy fired. Disabled (0) → leave the strategy/ATR TP untouched.
+            _tp_usd = Decimal(str(_risk_cfg.get('take_profit_usd', 0) or 0))
+            if (_tp_usd > 0
+                    and position_size > 0
+                    and signal.symbol.value_per_lot > 0
+                    and signal.entry_price):
+                budget_tp_dist = _tp_usd / (position_size * signal.symbol.value_per_lot)
+
+                min_stops = getattr(signal.symbol, 'min_stops_distance', Decimal('0')) or Decimal('0')
+                buffered_min = min_stops * Decimal('1.05') if min_stops > 0 else Decimal('0')
+                if buffered_min > 0 and budget_tp_dist < buffered_min:
+                    # Target too tight for the broker's min stop distance — push
+                    # the TP out to the broker floor rather than skip the trade
+                    # (a wider TP only ever helps us).
+                    self.logger.warning(
+                        "[BudgetTP] Required TP < broker min — widening to broker floor",
+                        strategy=signal.strategy_name,
+                        symbol=signal.symbol.ticker,
+                        required_dist=float(budget_tp_dist),
+                        broker_min=float(buffered_min),
+                        take_profit_usd=float(_tp_usd),
+                        lot=float(position_size),
+                    )
+                    budget_tp_dist = buffered_min
+
+                entry_d = Decimal(str(signal.entry_price))
+                old_tp = signal.take_profit
+                signal.take_profit = (
+                    entry_d + budget_tp_dist if signal.side == OrderSide.BUY
+                    else entry_d - budget_tp_dist
+                )
+                self.logger.info(
+                    "[BudgetTP] TP rewritten to exact profit target",
+                    strategy=signal.strategy_name,
+                    symbol=signal.symbol.ticker,
+                    old_tp=float(old_tp) if old_tp else None,
+                    new_tp=float(signal.take_profit),
+                    tp_distance=float(budget_tp_dist),
+                    take_profit_usd=float(_tp_usd),
+                    lot=float(position_size),
+                )
+
             # 2. Create order from signal
             order = Order(
                 symbol=signal.symbol,
