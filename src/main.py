@@ -2179,20 +2179,22 @@ def main():
         print("  4) $10,000")
         print("  5) $25,000")
         print("  6) $50,000")
+        print("  7) $100,000")
         print("=" * 60)
         try:
-            choice = input("  Enter choice (1-6) [Default: 3]: ").strip()
+            choice = input("  Enter choice (1-7) [Default: 3]: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\n  Aborted.")
             return
-            
+
         choice_map = {
             "1": "config/config_live_100.yaml",
             "2": "config/config_live_1000.yaml",
             "3": "config/config_live_5000.yaml",
             "4": "config/config_live_10000.yaml",
             "5": "config/config_live_25000.yaml",
-            "6": "config/config_live_50000.yaml"
+            "6": "config/config_live_50000.yaml",
+            "7": "config/config_live_100000.yaml"
         }
         config_file = choice_map.get(choice, _active_config())
         
