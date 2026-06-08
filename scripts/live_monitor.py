@@ -231,9 +231,43 @@ class LiveMonitorApp:
         self.error_banner_label.pack(fill=tk.X)
         self.error_banner.pack_forget()
 
-        # Main body: 2-column grid
-        body = tk.Frame(self.root, bg=BG, padx=12, pady=6)
-        body.pack(fill=tk.BOTH, expand=True)
+        # Main body: 2-column grid, wrapped in a scrollable canvas so the
+        # whole dashboard can scroll on screens too short to show every panel.
+        # When the content is shorter than the viewport the inner frame is
+        # stretched to fill it (so the grid weights still distribute space);
+        # when it's taller, the page scrolls.
+        body_wrap = tk.Frame(self.root, bg=BG)
+        body_wrap.pack(fill=tk.BOTH, expand=True)
+
+        self.body_canvas = tk.Canvas(body_wrap, bg=BG,
+                                     highlightthickness=0, bd=0)
+        body_scroll = ttk.Scrollbar(body_wrap, orient="vertical",
+                                    command=self.body_canvas.yview)
+        self.body_canvas.configure(yscrollcommand=body_scroll.set)
+        body_scroll.pack(side=tk.RIGHT, fill=tk.Y)
+        self.body_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        body = tk.Frame(self.body_canvas, bg=BG, padx=12, pady=6)
+        self._body_window = self.body_canvas.create_window(
+            (0, 0), window=body, anchor="nw",
+        )
+
+        def _on_body_configure(_e):
+            self.body_canvas.configure(
+                scrollregion=self.body_canvas.bbox("all"),
+            )
+
+        def _on_body_canvas_resize(e):
+            # Match inner width to the canvas; stretch inner height to fill the
+            # viewport when content is shorter so grid weights still apply.
+            req_h = body.winfo_reqheight()
+            self.body_canvas.itemconfig(
+                self._body_window, width=e.width, height=max(req_h, e.height),
+            )
+
+        body.bind("<Configure>", _on_body_configure)
+        self.body_canvas.bind("<Configure>", _on_body_canvas_resize)
+
         body.grid_columnconfigure(0, weight=1, uniform="cols")
         body.grid_columnconfigure(1, weight=1, uniform="cols")
         s = self.ui_scale
@@ -305,6 +339,67 @@ class LiveMonitorApp:
         self.footer_right = tk.Label(footer, text="", bg=BG_PANEL_2, fg=TEXT_DIM,
                                      font=("Menlo", 9), anchor="e")
         self.footer_right.pack(side=tk.RIGHT)
+
+        self._setup_global_scroll()
+
+    # ── unified mouse-wheel scrolling ────────────────────────────────────────
+    def _setup_global_scroll(self) -> None:
+        """Single wheel handler for the whole window.
+
+        The dashboard is mostly covered by inner scroll regions (the news
+        cards canvas, the positions / journal / signals / liquidity trees).
+        On a wheel event we find the widget under the pointer, walk up to the
+        nearest scrollable ancestor, and scroll IT only if it actually
+        overflows; otherwise the wheel scrolls the whole page (body_canvas).
+        Treeview's own class wheel binding is removed so nothing double-scrolls.
+        """
+        # Widgets that own a vertical scroll region. Trees support yview /
+        # yview_scroll just like a Canvas, so they're handled uniformly.
+        self._scroll_widgets = [
+            self.news_canvas,
+            self.tree_positions, self.tree_liq,
+            self.tree_journal, self.tree_signals,
+            self.tree_symbols, self.tree_sessions,
+            self.tree_world, self.tree_errors,
+        ]
+
+        for seq in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            # Drop ttk's built-in tree wheel scroll so our handler is the only
+            # one that fires (no double-scroll over overflowing trees).
+            try:
+                self.root.unbind_class("Treeview", seq)
+            except Exception:
+                pass
+            self.root.bind_all(seq, self._on_global_wheel)
+
+    def _on_global_wheel(self, event) -> None:
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = -1 if event.delta > 0 else 1
+
+        target = self.body_canvas
+        try:
+            w = self.root.winfo_containing(event.x_root, event.y_root)
+        except Exception:
+            w = None
+        while w is not None:
+            if w in self._scroll_widgets:
+                try:
+                    top, bot = w.yview()
+                except Exception:
+                    top, bot = 0.0, 1.0
+                if not (top <= 0.0 and bot >= 1.0):  # actually overflows
+                    target = w
+                    break
+            w = getattr(w, "master", None)
+
+        try:
+            target.yview_scroll(delta, "units")
+        except Exception:
+            pass
 
     def _make_panel(self, parent, title: str) -> tk.Frame:
         panel = tk.Frame(parent, bg=BG_PANEL, highlightbackground=BORDER,
@@ -554,28 +649,9 @@ class LiveMonitorApp:
 
         self.news_cards_frame.bind("<Configure>", _on_frame_configure)
         self.news_canvas.bind("<Configure>", _on_canvas_configure)
-
-        def _on_mousewheel(event):
-            if getattr(event, "num", None) == 4:
-                delta = -1
-            elif getattr(event, "num", None) == 5:
-                delta = 1
-            else:
-                delta = -1 if event.delta > 0 else 1
-            self.news_canvas.yview_scroll(delta, "units")
-
-        def _bind_wheel(_e):
-            self.news_canvas.bind_all("<MouseWheel>", _on_mousewheel)
-            self.news_canvas.bind_all("<Button-4>", _on_mousewheel)
-            self.news_canvas.bind_all("<Button-5>", _on_mousewheel)
-
-        def _unbind_wheel(_e):
-            self.news_canvas.unbind_all("<MouseWheel>")
-            self.news_canvas.unbind_all("<Button-4>")
-            self.news_canvas.unbind_all("<Button-5>")
-
-        self.news_canvas.bind("<Enter>", _bind_wheel)
-        self.news_canvas.bind("<Leave>", _unbind_wheel)
+        # Wheel scrolling for this inner canvas is dispatched by the unified
+        # global handler (_setup_global_scroll) so it doesn't fight the
+        # page-level scroll over bind_all.
 
         self._news_card_pool: list = []
         self._news_empty_lbl = tk.Label(
