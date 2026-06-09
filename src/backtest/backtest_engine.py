@@ -366,6 +366,12 @@ class BacktestEngine:
                 return
             
             # 6. Create order
+            # trade_idx is the index the metrics-trade WILL get at add_trade
+            # below. We stamp it into the order now so the broker can carry it
+            # through to the close record, letting _generate_results reconcile
+            # by an exact unique key instead of fuzzy entry-price matching
+            # (which collapses distinct FX-scale trades onto one row).
+            trade_idx = len(self.metrics.trades)
             order = Order(
                 symbol=signal.symbol,
                 side=signal.side,
@@ -378,7 +384,8 @@ class BacktestEngine:
                     'signal_id': str(signal.signal_id),
                     'strategy': signal.strategy_name,
                     'regime': signal.regime.value if signal.regime else 'unknown',
-                    'strength': signal.strength
+                    'strength': signal.strength,
+                    'trade_idx': trade_idx,
                 }
             )
             
@@ -417,7 +424,6 @@ class BacktestEngine:
                 # the account-relative approximation.
                 vpl = signal.symbol.value_per_lot if signal.symbol else Decimal("1")
                 r_dollars = float(abs(fill_price - signal.stop_loss) * position_size * vpl)
-                trade_idx = len(self.metrics.trades)
                 self.metrics.add_trade({
                     'trade_idx': trade_idx,
                     'timestamp': str(current_bar.name),
@@ -484,6 +490,7 @@ class BacktestEngine:
             # Record closed trade
             self.broker.closed_trades.append({
                 'position_id': str(pos_id),
+                'trade_idx': position.metadata.get('trade_idx'),
                 'symbol': position.symbol.ticker if position.symbol else 'unknown',
                 'side': position.side.value,
                 'entry_price': float(position.entry_price),
@@ -511,17 +518,32 @@ class BacktestEngine:
         # Get closed trades from broker (includes P&L)
         closed_trades = self.broker.get_closed_trades()
         
-        # Match trades with metrics trades and update P&L
+        # Reconcile broker close records back onto the metrics-trade rows by
+        # the exact trade_idx threaded entry→close. The previous heuristic
+        # matched on entry_price within 0.01 absolute, which silently collapsed
+        # distinct FX-scale trades (EURUSD entries are routinely <0.01 apart)
+        # onto one row, leaving most trades stuck at pnl=0 and mislabeling the
+        # rest. Index lookup is O(1) and symbol-agnostic.
+        metrics_by_idx = {
+            mt['trade_idx']: mt
+            for mt in self.metrics.trades
+            if mt.get('trade_idx') is not None
+        }
         for trade in closed_trades:
             trade_pnl = trade.get('net_pnl', trade.get('pnl', 0))
-            # Update corresponding trade in metrics
-            for metric_trade in self.metrics.trades:
-                if (metric_trade.get('symbol') == trade.get('symbol') and 
-                    abs(metric_trade.get('entry_price', 0) - trade.get('entry_price', 0)) < 0.01):
-                    metric_trade['pnl'] = trade_pnl
-                    metric_trade['exit_price'] = trade.get('exit_price')
-                    metric_trade['exit_reason'] = trade.get('exit_reason')
-                    break
+            metric_trade = metrics_by_idx.get(trade.get('trade_idx'))
+            if metric_trade is None:
+                # Fallback: legacy/edge records without a trade_idx fall back to
+                # the old symbol + near-entry match so nothing is silently lost.
+                for mt in self.metrics.trades:
+                    if (mt.get('symbol') == trade.get('symbol') and
+                            abs(mt.get('entry_price', 0) - trade.get('entry_price', 0)) < 0.01):
+                        metric_trade = mt
+                        break
+            if metric_trade is not None:
+                metric_trade['pnl'] = trade_pnl
+                metric_trade['exit_price'] = trade.get('exit_price')
+                metric_trade['exit_reason'] = trade.get('exit_reason')
         
         # Get equity curve
         equity_curve = self.metrics.get_equity_curve()

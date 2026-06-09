@@ -1,7 +1,7 @@
 {
   "symbol": "ETHUSDS",
-  "generated_at": "2026-06-08T17:20:11.117643+00:00",
-  "valid_until": "2026-06-09T17:20:11.117643+00:00",
+  "generated_at": "2026-06-08T19:00:10.186378+00:00",
+  "valid_until": "2026-06-09T19:00:10.186378+00:00",
   "regime": "RANGE",
   "confidence": 0.52,
   "classifier": "rule-based (no data)",

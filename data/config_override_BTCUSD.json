@@ -1,7 +1,7 @@
 {
   "symbol": "BTCUSD",
-  "generated_at": "2026-06-08T17:20:08.762844+00:00",
-  "valid_until": "2026-06-09T17:20:08.762844+00:00",
+  "generated_at": "2026-06-08T19:00:05.892094+00:00",
+  "valid_until": "2026-06-09T19:00:05.892094+00:00",
   "regime": "RANGE",
   "confidence": 0.9694,
   "classifier": "RandomForest+Markov (n=68 samples)",

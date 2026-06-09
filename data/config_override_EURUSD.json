@@ -1,68 +1,72 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-06-08T17:20:11.119334+00:00",
-  "valid_until": "2026-06-09T17:20:11.119334+00:00",
-  "regime": "TREND",
-  "confidence": 0.55,
-  "classifier": "rule-based",
+  "generated_at": "2026-06-08T19:00:10.187082+00:00",
+  "valid_until": "2026-06-09T19:00:10.187082+00:00",
+  "regime": "RANGE",
+  "confidence": 0.4554,
+  "classifier": "RandomForest+Markov (n=57 samples)",
   "strategy_overrides": {
     "breakout": true,
     "momentum": true,
     "kalman_regime": true,
     "mean_reversion": false,
-    "vwap": false,
+    "vwap": true,
     "mini_medallion": true,
     "sbr": true,
     "supply_demand": false,
-    "asia_range_fade": false,
+    "asia_range_fade": true,
     "descending_channel_breakout": true,
     "smc_ob": true,
     "fibonacci_retracement": true,
     "continuation_breakout": true
   },
   "diagnostics": {
-    "adx_14": 37.980015,
-    "atr_pct": 0.005441,
-    "bb_width_ratio": 0.495283,
-    "close_ema20_pct": 0.001903,
-    "momentum_1d": -0.00363,
-    "momentum_5d": 0.004498,
-    "range_atr_ratio": 0.886401,
-    "vol_ratio": 3.763748,
-    "park_vol_zscore": -1.180516
+    "adx_14": 17.369026,
+    "atr_pct": 0.004321,
+    "bb_width_ratio": 0.805464,
+    "close_ema20_pct": -0.006275,
+    "momentum_1d": 0.001616,
+    "momentum_5d": -0.006927,
+    "range_atr_ratio": 1.092804,
+    "vol_ratio": 1.0,
+    "park_vol_zscore": 1.74359
   },
   "strategy_weights": {
-    "breakout": 0.85,
-    "momentum": 0.8,
-    "kalman_regime": 0.9,
+    "breakout": 0.6,
+    "momentum": 0.55,
+    "kalman_regime": 0.75,
     "mean_reversion": 0.0,
-    "vwap": 0.0,
-    "mini_medallion": 0.65,
-    "sbr": 0.8,
-    "supply_demand": 0.2,
-    "asia_range_fade": 0.15,
-    "descending_channel_breakout": 0.7,
-    "smc_ob": 0.7,
-    "fibonacci_retracement": 0.7,
-    "continuation_breakout": 0.75
+    "vwap": 0.45,
+    "mini_medallion": 0.6,
+    "sbr": 0.4,
+    "supply_demand": 0.25,
+    "asia_range_fade": 0.7,
+    "descending_channel_breakout": 0.3,
+    "smc_ob": 0.5,
+    "fibonacci_retracement": 0.5,
+    "continuation_breakout": 0.3
   },
   "performance_scores": {},
-  "regime_probabilities": {},
+  "regime_probabilities": {
+    "TREND": 0.2822,
+    "RANGE": 0.4554,
+    "VOLATILE": 0.2624
+  },
   "transition_matrix": {
     "TREND": {
+      "TREND": 0.2,
+      "RANGE": 0.4,
+      "VOLATILE": 0.4
+    },
+    "RANGE": {
+      "TREND": 0.0526,
+      "RANGE": 0.9298,
+      "VOLATILE": 0.0175
+    },
+    "VOLATILE": {
       "TREND": 0.25,
       "RANGE": 0.5,
       "VOLATILE": 0.25
-    },
-    "RANGE": {
-      "TREND": 0.0769,
-      "RANGE": 0.8846,
-      "VOLATILE": 0.0385
-    },
-    "VOLATILE": {
-      "TREND": 0.3333,
-      "RANGE": 0.3333,
-      "VOLATILE": 0.3333
     }
   }
 }

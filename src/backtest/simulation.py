@@ -123,7 +123,10 @@ class SimulatedBroker:
             take_profit=order.take_profit,
             metadata={
                 'order_id': str(order.order_id),
-                'strategy': order.metadata.get('strategy')
+                'strategy': order.metadata.get('strategy'),
+                # Carry the engine's metrics trade index so the close record
+                # can be reconciled back to the exact entry row.
+                'trade_idx': order.metadata.get('trade_idx'),
             }
         )
         
@@ -293,6 +296,7 @@ class SimulatedBroker:
         # Record trade
         self.closed_trades.append({
             'position_id': position_id,
+            'trade_idx': position.metadata.get('trade_idx'),
             'symbol': position.symbol.ticker,
             'side': position.side.value,
             'entry_price': float(position.entry_price),
