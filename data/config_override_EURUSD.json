@@ -1,9 +1,9 @@
 {
   "symbol": "EURUSD",
-  "generated_at": "2026-06-08T19:00:10.187082+00:00",
-  "valid_until": "2026-06-09T19:00:10.187082+00:00",
+  "generated_at": "2026-06-09T04:20:02.330916+00:00",
+  "valid_until": "2026-06-10T04:20:02.330916+00:00",
   "regime": "RANGE",
-  "confidence": 0.4554,
+  "confidence": 0.6143,
   "classifier": "RandomForest+Markov (n=57 samples)",
   "strategy_overrides": {
     "breakout": true,
@@ -15,10 +15,10 @@
     "sbr": true,
     "supply_demand": false,
     "asia_range_fade": true,
-    "descending_channel_breakout": true,
+    "descending_channel_breakout": false,
     "smc_ob": true,
     "fibonacci_retracement": true,
-    "continuation_breakout": true
+    "continuation_breakout": false
   },
   "diagnostics": {
     "adx_14": 17.369026,
@@ -48,9 +48,9 @@
   },
   "performance_scores": {},
   "regime_probabilities": {
-    "TREND": 0.2822,
-    "RANGE": 0.4554,
-    "VOLATILE": 0.2624
+    "TREND": 0.238,
+    "RANGE": 0.6143,
+    "VOLATILE": 0.1477
   },
   "transition_matrix": {
     "TREND": {
