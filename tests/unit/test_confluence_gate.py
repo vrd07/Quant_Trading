@@ -260,3 +260,54 @@ def test_disabled_gate_passes_solo_strategies_through():
     out = g.filter(SYMBOL, sigs, MarketRegime.TREND)
     # All non-kill-list signals pass through unchanged when gate disabled.
     assert {s.strategy_name for s in out} == {"kalman_regime", "sbr", "momentum"}
+
+
+# ── Exhaustion (momentum-divergence) modifier ──────────────────────────────────
+
+def test_exhaustion_off_by_default_leaves_strength_untouched():
+    g = _gate()  # no exhaustion_filter block → disabled
+    sig = _signal("kalman_regime", OrderSide.BUY)
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion="bearish")
+    assert len(out) == 1
+    assert out[0].strength == 0.7
+    assert "exhaustion_action" not in out[0].metadata
+
+
+def test_exhaustion_dampens_signal_fighting_divergence():
+    g = _gate(exhaustion_filter={"enabled": True, "boost": 1.1, "dampen": 0.8})
+    # BUY into bearish (up-move exhausting) → fights divergence → dampen.
+    sig = _signal("kalman_regime", OrderSide.BUY)
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion="bearish")
+    assert out[0].strength == pytest.approx(0.7 * 0.8)
+    assert out[0].metadata["exhaustion_action"] == "dampen"
+
+
+def test_exhaustion_boosts_signal_aligned_with_divergence():
+    g = _gate(exhaustion_filter={"enabled": True, "boost": 1.1, "dampen": 0.8})
+    # SELL into bearish (up-move exhausting) → reversal it backs → boost.
+    sig = _signal("kalman_regime", OrderSide.SELL)
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion="bearish")
+    assert out[0].strength == pytest.approx(0.7 * 1.1)
+    assert out[0].metadata["exhaustion_action"] == "boost"
+
+
+def test_exhaustion_boost_clamped_to_one():
+    g = _gate(exhaustion_filter={"enabled": True, "boost": 2.0})
+    sig = _signal("kalman_regime", OrderSide.BUY)
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion="bullish")
+    assert out[0].strength == 1.0
+
+
+def test_exhaustion_vetoes_dampened_below_floor():
+    g = _gate(exhaustion_filter={"enabled": True, "dampen": 0.5, "veto_below": 0.4})
+    sig = _signal("kalman_regime", OrderSide.BUY)  # 0.7 * 0.5 = 0.35 < 0.4 → veto
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion="bearish")
+    assert out == []
+
+
+def test_exhaustion_ignored_when_no_divergence():
+    g = _gate(exhaustion_filter={"enabled": True, "dampen": 0.8})
+    sig = _signal("kalman_regime", OrderSide.BUY)
+    out = g.filter(SYMBOL, [("kalman_regime", sig)], MarketRegime.TREND, exhaustion=None)
+    assert out[0].strength == 0.7
+    assert "exhaustion_action" not in out[0].metadata

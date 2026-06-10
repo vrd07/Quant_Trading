@@ -61,6 +61,9 @@ FILTER_ONLY: frozenset = frozenset({
     "smc_ob",
     "fibonacci_retracement",
 })
+# Strategies removed from the codebase 2026-06-10 (no backtested edge). Kept
+# here as a defensive net: if a stale config still names one, it is dropped
+# rather than crashing the registry lookup.
 KILL_LIST: frozenset = frozenset({
     "breakout",
     "mean_reversion",
@@ -99,6 +102,18 @@ class ConfluenceGate:
         self.window_minutes: float = float(config.get("window_minutes", 25.0))
         self.sniper_lot_multiplier: float = float(config.get("sniper_lot_multiplier", 1.5))
         self.sniper_cooldown_minutes: float = float(config.get("sniper_cooldown_minutes", 60.0))
+
+        # Exhaustion filter (§8 momentum divergence). Confidence modifier only:
+        # it never creates signals, only nudges the strength of ones the combo
+        # logic already approved. Defaults OFF — opt-in per config so it can be
+        # backtest-validated before touching live accounts.
+        ex = config.get("exhaustion_filter", {}) or {}
+        self.exhaustion_enabled: bool = bool(ex.get("enabled", False))
+        self.exhaustion_timeframe: str = str(ex.get("timeframe", "15m"))
+        self.exhaustion_boost: float = float(ex.get("boost", 1.10))
+        self.exhaustion_dampen: float = float(ex.get("dampen", 0.80))
+        # Drop a signal whose dampened strength falls below this floor. 0.0 = never veto.
+        self.exhaustion_veto_below: float = float(ex.get("veto_below", 0.0))
         # Per-symbol deque of (timestamp, name, side, entry_price). Bounded
         # to avoid unbounded growth; 64 events is far more than any window
         # could hold given typical bar cadence.
@@ -118,6 +133,7 @@ class ConfluenceGate:
         signals: Iterable[Tuple[str, Signal]],
         regime: Optional[MarketRegime] = None,
         now: Optional[datetime] = None,
+        exhaustion: Optional[str] = None,
     ) -> List[Signal]:
         """Filter raw signals down to combo-compliant executable signals.
 
@@ -129,6 +145,10 @@ class ConfluenceGate:
                 treated as "no regime info" — only sniper (any regime) and
                 solo allowlist (kalman) can fire.
             now: override clock for testing.
+            exhaustion: current momentum-divergence read for the symbol —
+                ``"bullish"`` (favors BUY), ``"bearish"`` (favors SELL), or
+                ``None``. Used only as a post-approval confidence modifier when
+                ``exhaustion_enabled``; never gates signals into existence.
 
         Returns:
             List of executable ``Signal`` objects. May be empty.
@@ -219,6 +239,13 @@ class ConfluenceGate:
                     symbol=symbol, strategy=name,
                     reason=("filter_only" if name in FILTER_ONLY else "no_combo_match"),
                 )
+
+        # 6. Exhaustion modifier — nudge the strength of already-approved
+        # signals based on momentum divergence. Boosts trades aligned with the
+        # exhaustion (a reversal it supports), dampens trades fighting it
+        # (entering into a move that is losing momentum). May veto the dampened.
+        if self.exhaustion_enabled and exhaustion in ("bullish", "bearish"):
+            output = self._apply_exhaustion(symbol, output, exhaustion)
 
         return output
 
@@ -354,6 +381,47 @@ class ConfluenceGate:
         snip.metadata["lot_size_multiplier"] = existing_mult * self.sniper_lot_multiplier
         snip.metadata["entry_source"] = "sniper:" + template.strategy_name
         return snip
+
+    def _apply_exhaustion(
+        self,
+        symbol: str,
+        output: List[Signal],
+        exhaustion: str,
+    ) -> List[Signal]:
+        """Scale approved-signal strength by momentum divergence; veto floor.
+
+        ``favored`` is the side the divergence supports — BUY for bullish
+        (down-move exhausting), SELL for bearish (up-move exhausting). A signal
+        on the favored side is a reversal the exhaustion backs → boost. A signal
+        on the opposite side is entering a move that is losing momentum →
+        dampen, and drop it entirely if it falls below ``veto_below``.
+        """
+        favored = OrderSide.BUY if exhaustion == "bullish" else OrderSide.SELL
+        kept: List[Signal] = []
+        for sig in output:
+            if sig.side is None:
+                kept.append(sig)
+                continue
+            if sig.side == favored:
+                sig.strength = min(1.0, float(sig.strength) * self.exhaustion_boost)
+                sig.metadata["exhaustion"] = exhaustion
+                sig.metadata["exhaustion_action"] = "boost"
+                kept.append(sig)
+            else:
+                new_strength = float(sig.strength) * self.exhaustion_dampen
+                if new_strength < self.exhaustion_veto_below:
+                    self._logger.info(
+                        f"[ConfluenceGate] exhaustion veto",
+                        symbol=symbol, strategy=sig.strategy_name,
+                        side=sig.side.value, divergence=exhaustion,
+                        strength=new_strength,
+                    )
+                    continue
+                sig.strength = new_strength
+                sig.metadata["exhaustion"] = exhaustion
+                sig.metadata["exhaustion_action"] = "dampen"
+                kept.append(sig)
+        return kept
 
     @staticmethod
     def _apply_combo_metadata(sig: Signal, combo: dict) -> None:

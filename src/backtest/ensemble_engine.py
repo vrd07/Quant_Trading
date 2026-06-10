@@ -223,7 +223,12 @@ class EnsembleBacktestEngine:
         # Pre-resample once per unique TF. Strategies hit the cache below at
         # each tick instead of resampling 1k+ times per backtest.
         self._bars_by_tf = {}
-        for tf in set(self._strategy_tfs.values()):
+        tfs_needed = set(self._strategy_tfs.values())
+        # Exhaustion filter scans its own TF (default 15m) — ensure it's cached
+        # too, even if no strategy uses that TF, so the gate sees real bars.
+        if self.confluence_gate.exhaustion_enabled:
+            tfs_needed.add(self.confluence_gate.exhaustion_timeframe)
+        for tf in tfs_needed:
             self._bars_by_tf[tf] = self._resample_bars(bars, src_tf_min, tf)
             log.info(f"  TF '{tf}': {len(self._bars_by_tf[tf])} bars after resample")
         self._src_tf_min = src_tf_min
@@ -319,11 +324,27 @@ class EnsembleBacktestEngine:
         if bar_ts.tzinfo is None:
             from datetime import timezone as _tz
             bar_ts = bar_ts.replace(tzinfo=_tz.utc)
+
+        # Momentum-divergence (§8 exhaustion) read — mirrors live main.py path
+        # so backtest validates the actual filter, not passthrough.
+        exhaustion = None
+        if self.confluence_gate.exhaustion_enabled:
+            from ..data.indicators import Indicators
+            ex_tf = self.confluence_gate.exhaustion_timeframe
+            ex_tf_bars = self._bars_by_tf.get(ex_tf)
+            if ex_tf_bars is not None and not ex_tf_bars.empty:
+                ex_view = self._view_at(ex_tf_bars, self._src_tf_min, ex_tf,
+                                        current_ts, self._max_window)
+                if len(ex_view) >= 60:
+                    div = Indicators.detect_divergence(ex_view)
+                    exhaustion = div.kind if div.kind != "none" else None
+
         executable = self.confluence_gate.filter(
             symbol=self.symbol.ticker,
             signals=signals,
             regime=regime,
             now=bar_ts,
+            exhaustion=exhaustion,
         )
         for signal in executable:
             self._execute(signal, signal.strategy_name, current_bar)

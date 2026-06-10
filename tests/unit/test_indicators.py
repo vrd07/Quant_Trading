@@ -275,3 +275,45 @@ def test_calculate_indicators_comprehensive():
         assert col in result.columns
         # Should have some non-NaN values
         assert not result[col].isna().all()
+
+
+def _div_frame(closes):
+    closes = np.array(closes, dtype=float)
+    return pd.DataFrame({
+        'open': closes,
+        'high': closes + 0.5,
+        'low': closes - 0.5,
+        'close': closes,
+        'volume': [1000.0] * len(closes),
+    })
+
+
+def test_detect_divergence_too_short_returns_none():
+    res = Indicators.detect_divergence(_div_frame([100, 101, 102]))
+    assert res.kind == "none"
+
+
+def test_detect_divergence_flat_market_returns_none():
+    flat = 100 + np.sin(np.linspace(0, 6, 80))
+    assert Indicators.detect_divergence(_div_frame(flat)).kind == "none"
+
+
+def test_detect_divergence_flags_bearish_on_weaker_second_high():
+    # Two up-thrusts: second prints a higher price high but weaker momentum.
+    legs = (
+        list(np.linspace(100, 105, 40))
+        + list(np.linspace(105, 108, 8))    # first thrust
+        + list(np.linspace(108, 106, 6))    # pullback
+        + list(np.linspace(106, 108.3, 8))  # higher high, slower
+        + list(np.linspace(108.3, 107, 6))
+    )
+    res = Indicators.detect_divergence(_div_frame(legs))
+    assert res.kind == "bearish"
+    assert res.price_delta > 0 and res.osc_delta < 0
+
+
+def test_detect_divergence_is_pure_does_not_mutate_input():
+    df = _div_frame(list(np.linspace(100, 110, 80)))
+    before = df.copy()
+    Indicators.detect_divergence(df)
+    pd.testing.assert_frame_equal(df, before)

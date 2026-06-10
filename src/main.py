@@ -388,11 +388,12 @@ class TradingSystem:
             self.confluence_gate = ConfluenceGate(gate_cfg)
             self._symbol_regimes: Dict[str, MarketRegime] = {}
             self.logger.info(
-                "✓ ConfluenceGate ready (enabled=%s window_min=%s sniper_mult=%s)"
+                "✓ ConfluenceGate ready (enabled=%s window_min=%s sniper_mult=%s exhaustion=%s)"
                 % (
                     self.confluence_gate.enabled,
                     self.confluence_gate.window_minutes,
                     self.confluence_gate.sniper_lot_multiplier,
+                    self.confluence_gate.exhaustion_enabled,
                 )
             )
 
@@ -856,10 +857,24 @@ class TradingSystem:
                 # kill-list strategies, and emits sniper signals (1.5×) when
                 # SMC+Fib+Momentum align. Passthrough when gate disabled.
                 current_regime = self._symbol_regimes.get(symbol_ticker, MarketRegime.UNKNOWN)
+
+                # Momentum-divergence (§8 exhaustion) read for the symbol. Opt-in
+                # via strategies.confluence_gate.exhaustion_filter; OFF by default.
+                exhaustion = None
+                if self.confluence_gate.exhaustion_enabled:
+                    from src.data.indicators import Indicators
+                    ex_bars = self.data_engine.get_bars(
+                        symbol_ticker, self.confluence_gate.exhaustion_timeframe
+                    )
+                    if len(ex_bars) >= 60:
+                        div = Indicators.detect_divergence(ex_bars)
+                        exhaustion = div.kind if div.kind != "none" else None
+
                 executable_signals = self.confluence_gate.filter(
                     symbol=symbol_ticker,
                     signals=all_signals,
                     regime=current_regime,
+                    exhaustion=exhaustion,
                 )
 
                 for signal in executable_signals:

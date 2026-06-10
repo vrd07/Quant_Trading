@@ -13,8 +13,16 @@ Returns:
 
 import pandas as pd
 import numpy as np
+from collections import namedtuple
 from typing import Tuple, Optional
 from decimal import Decimal
+
+
+# Result of a regular price↔momentum divergence scan.
+#   kind:        "bullish" | "bearish" | "none"
+#   price_delta: signed price difference between the two swing pivots
+#   osc_delta:   signed MACD-histogram difference between the two pivots
+DivergenceResult = namedtuple("DivergenceResult", ["kind", "price_delta", "osc_delta"])
 
 
 class Indicators:
@@ -806,6 +814,73 @@ class Indicators:
         upper, middle, lower = Indicators.bollinger_bands(df, period=period, num_std=num_std)
         width = (upper - lower) / middle
         return width
+
+    @staticmethod
+    def detect_divergence(
+        df: pd.DataFrame,
+        lookback: int = 60,
+        pivot_window: int = 3,
+        fast_period: int = 12,
+        slow_period: int = 26,
+        signal_period: int = 9,
+    ) -> DivergenceResult:
+        """Regular price↔momentum divergence using the MACD histogram.
+
+        This is the §8 *sentiment-exhaustion* signal: momentum failing to
+        confirm a fresh price extreme warns that the move is running out of
+        participants, not that a reversal is guaranteed.
+
+          Bearish — price prints a HIGHER swing-high while the histogram prints
+            a LOWER high. An up-move is losing momentum. Favors SELL / warns
+            against fresh BUYs.
+          Bullish — price prints a LOWER swing-low while the histogram prints a
+            HIGHER low. A down-move is losing momentum. Favors BUY.
+
+        Pure function — no I/O, no mutation of ``df``. Scans only the tail
+        ``lookback`` bars, so cost is O(lookback) regardless of history depth.
+
+        A swing pivot is a bar that is the strict local extreme within a
+        ±``pivot_window`` neighbourhood. We compare only the two most recent
+        pivots of each kind, and require the earlier pivot's histogram to sit on
+        the "right" side of zero (a real up-thrust for bearish, a real
+        down-thrust for bullish) so flat noise doesn't masquerade as divergence.
+
+        Returns ``DivergenceResult(kind, price_delta, osc_delta)`` with ``kind``
+        one of ``"bullish"``, ``"bearish"``, ``"none"``.
+        """
+        n = len(df)
+        if n < slow_period + signal_period + 2 * pivot_window + 4:
+            return DivergenceResult("none", 0.0, 0.0)
+
+        tail = df.iloc[-lookback:] if n > lookback else df
+        _, _, hist = Indicators.macd(tail, fast_period, slow_period, signal_period)
+        high = tail['high'].to_numpy(dtype=float)
+        low = tail['low'].to_numpy(dtype=float)
+        h = hist.to_numpy(dtype=float)
+        m = len(tail)
+        w = pivot_window
+
+        pivot_highs = []  # (idx, price, histogram)
+        pivot_lows = []
+        for i in range(w, m - w):
+            if high[i] == high[i - w:i + w + 1].max() and high[i] > high[i - 1]:
+                pivot_highs.append((i, high[i], h[i]))
+            if low[i] == low[i - w:i + w + 1].min() and low[i] < low[i - 1]:
+                pivot_lows.append((i, low[i], h[i]))
+
+        kind, price_delta, osc_delta, recency = "none", 0.0, 0.0, -1
+
+        if len(pivot_highs) >= 2:
+            (_, p1, o1), (i2, p2, o2) = pivot_highs[-2], pivot_highs[-1]
+            if p2 > p1 and o2 < o1 and o1 > 0 and i2 > recency:
+                kind, price_delta, osc_delta, recency = "bearish", p2 - p1, o2 - o1, i2
+
+        if len(pivot_lows) >= 2:
+            (_, q1, r1), (j2, q2, r2) = pivot_lows[-2], pivot_lows[-1]
+            if q2 < q1 and r2 > r1 and r1 < 0 and j2 > recency:
+                kind, price_delta, osc_delta, recency = "bullish", q2 - q1, r2 - r1, j2
+
+        return DivergenceResult(kind, float(price_delta), float(osc_delta))
 
 
 # Convenience function for getting multiple indicators at once

@@ -127,3 +127,25 @@ def test_signal_cooldown_zeroed_in_backtest(xauusd, synthetic_bars):
     assert cfg["strategies"]["signal_cooldown_minutes"] == 30
     # Internal config must show 0
     assert engine.full_config["strategies"]["signal_cooldown_minutes"] == 0
+
+
+def test_exhaustion_filter_path_runs_in_backtest(xauusd, synthetic_bars):
+    """With exhaustion_filter enabled, the engine must resample the divergence
+    TF and run the detect_divergence → gate path each step without raising —
+    i.e. the backtest validates the actual filter, not passthrough."""
+    cfg = _minimal_config()
+    cfg["strategies"]["confluence_gate"] = {
+        "enabled": True,
+        "exhaustion_filter": {"enabled": True, "timeframe": "15m"},
+    }
+    engine = EnsembleBacktestEngine(
+        symbol=xauusd,
+        full_config=cfg,
+        initial_capital=Decimal("10000"),
+        slippage_model="strict",
+    )
+    assert engine.confluence_gate.exhaustion_enabled is True
+    result = engine.run(synthetic_bars, min_history=50, max_window=500)
+    # The divergence TF must have been pre-resampled even though no strategy uses it.
+    assert "15m" in engine._bars_by_tf
+    assert result.aggregate is not None
