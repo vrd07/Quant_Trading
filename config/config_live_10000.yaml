@@ -197,6 +197,12 @@ strategies:
     window_minutes: 120           # 2026-06-08: widened 25->120; legs fire bars/hours apart, 25m never aligned (0 combo fires ever)
     sniper_lot_multiplier: 1.5    # COMBO C oversize
     sniper_cooldown_minutes: 60   # Prevent duplicate sniper emits on consecutive ticks
+    exhaustion_filter:
+      enabled: false             # §8 momentum divergence; OFF until backtest.md-validated
+      timeframe: 15m             # TF for the price/MACD divergence scan (matches kalman)
+      boost: 1.10                # x strength when a signal aligns with the divergence
+      dampen: 0.80               # x strength when a signal fights the divergence
+      veto_below: 0.0            # drop dampened signal below this strength (0 = never veto)
   signal_cooldown_minutes: 5
   primary_timeframe: 1m
   min_bars_required: 5
