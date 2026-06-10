@@ -73,23 +73,21 @@ MT5 Terminal → EA_FileBridge.mq5 (file I/O) → MT5Connector
 
 All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orchestrated by `StrategyManager`. Each one is independently toggled via `strategies.<name>.enabled` in the active config, and regime-adaptive weights rewrite their influence per detected market regime.
 
-**As of 2026-05-14, raw strategy signals are post-filtered by `ConfluenceGate` (`src/strategies/confluence_gate.py`).** The gate implements the combo policy from `combine_startegy.md`: only `kalman_regime` fires solo; `sbr` / `vwap` only fire when their confluence legs agree (COMBO A in TREND, COMBO B in RANGE); `smc_ob` + `fibonacci_retracement` + `momentum` aligned in any regime emits a `combo_sniper` signal sized 1.5×. Six strategies are on the kill list and `enabled: false` in every live config: `breakout`, `mean_reversion`, `supply_demand`, `descending_channel_breakout`, `mini_medallion`, `continuation_breakout`. The gate is governed by the `strategies.confluence_gate:` config block (`enabled`, `window_minutes`, `sniper_lot_multiplier`, `sniper_cooldown_minutes`); flipping `enabled: false` reverts to passthrough — kill-list filtering still applies as a safety net.
+**As of 2026-05-14, raw strategy signals are post-filtered by `ConfluenceGate` (`src/strategies/confluence_gate.py`).** The gate implements the combo policy from `combine_startegy.md`: only `kalman_regime` fires solo; `sbr` / `vwap` only fire when their confluence legs agree (COMBO A in TREND, COMBO B in RANGE); `smc_ob` + `fibonacci_retracement` + `momentum` aligned in any regime emits a `combo_sniper` signal sized 1.5×.
+
+**As of 2026-06-10, the six kill-list strategies were DELETED from the codebase** (no backtested edge — disabled live for weeks). Removed: `breakout`, `mean_reversion`, `supply_demand`, `descending_channel_breakout`, `mini_medallion`, `continuation_breakout` — files, tests, config blocks, and `STRATEGY_WEIGHTS` keys are gone. Their names remain in the gate's `KILL_LIST` as a defensive net so a stale config can't crash the registry lookup. Git history preserves the deleted code. The gate is governed by the `strategies.confluence_gate:` config block (`enabled`, `window_minutes`, `sniper_lot_multiplier`, `sniper_cooldown_minutes`, `exhaustion_filter`).
 
 | # | Strategy | File | Combo role (post-gate) | Summary |
 |---|----------|------|------------------------|---------|
 | 1 | **KalmanRegime** | `kalman_regime_strategy.py` | **Solo (allowlist)** | **Reverted 2026-06-04 to v2** (commit 25ce0cd, 2026-05-06 tuning): two-sided trend/range regime-switching Kalman. TREND mode rides direction when close diverges from the Kalman line (ADX gate); RANGE mode fades OU z-score extremes. SELL-side gated by HTF 1H-EMA(50) filter + tighter RSI/strength to curb gold's bullish-drift bleed; 6-hour session mask `[[3,4],[20,23]]`. 15m bars, sl3.0/tp4.0. Chosen over v3 deep-dip after 6mo backtest (v2 PF 1.53 / +117% vs v3 PF 0.93 / −1%, risk-bypassed). ⚠️ v2's −22% DD breaches live caps when uncapped — see [[project_kalman_v2_revert]]. |
-| 2 | **Breakout** | `breakout_strategy.py` | **KILL** | Donchian channel breakout with multi-timeframe confirmation |
-| 3 | **MeanReversion** | `mean_reversion_strategy.py` | **KILL** | OU z-score entries at extremes (|z| > 2.0) |
-| 4 | **Momentum** | `momentum_strategy.py` | Filter-only (COMBO A confirm, COMBO C leg) | Short-term ROC with ADX confirmation |
-| 5 | **VWAP** | `vwap_strategy.py` | COMBO B primary (RANGE) | Deviation from 30-period VWAP |
-| 6 | **MiniMedallion** | `mini_medallion_strategy.py` | **KILL** | 10 weak alpha signals combined into a composite score (threshold ±3.0) |
-| 7 | **StructureBreakRetest** | `structure_break_retest.py` | COMBO A primary (TREND) | Donchian break → retest of broken level → rejection candle; tighter SL than raw breakout |
-| 8 | **FibonacciRetracement** | `fibonacci_retracement_strategy.py` | Filter-only (COMBO A level, COMBO C leg) | Pullbacks into the 50%–61.8% Golden Zone with rejection-candle confirmation |
-| 9 | **DescendingChannelBreakout** | `descending_channel_breakout_strategy.py` | **KILL** | Linear-regression channel + Higher-Low structure shift → breakout of upper trendline |
-| 10 | **SMCOrderBlock** | `smc_ob_strategy.py` | Filter-only (COMBO B precision, COMBO C leg) | 5-phase ICT order-block state machine (OB formed → touched → sweep → waiting-entry → fire) |
-| 11 | **SupplyDemand** | `supply_demand_strategy.py` | **KILL** | First retest of a fresh ATR-sized S/D zone after an impulse candle (currently disabled live) |
-| 12 | **AsiaRangeFade** | `asia_range_fade_strategy.py` | Filter-only (COMBO B session gate) | Range-fade for the UTC 09–14 low-volatility window with BB compression + RSI extremes |
-| 13 | **ContinuationBreakout** | `continuation_breakout_strategy.py` | **KILL** | Wyckoff stair-step: tight range → impulse → re-accumulation → second breakout in the same direction (disabled live, awaiting backtest) |
+| 2 | **Momentum** | `momentum_strategy.py` | Filter-only (COMBO A confirm, COMBO C leg) | Short-term ROC with ADX confirmation |
+| 3 | **VWAP** | `vwap_strategy.py` | COMBO B primary (RANGE) | Deviation from 30-period VWAP |
+| 4 | **StructureBreakRetest** | `structure_break_retest.py` | COMBO A primary (TREND) | Donchian break → retest of broken level → rejection candle; tighter SL than raw breakout |
+| 5 | **FibonacciRetracement** | `fibonacci_retracement_strategy.py` | Filter-only (COMBO A level, COMBO C leg) | Pullbacks into the 50%–61.8% Golden Zone with rejection-candle confirmation |
+| 6 | **SMCOrderBlock** | `smc_ob_strategy.py` | Filter-only (COMBO B precision, COMBO C leg) | 5-phase ICT order-block state machine (OB formed → touched → sweep → waiting-entry → fire) |
+| 7 | **AsiaRangeFade** | `asia_range_fade_strategy.py` | Filter-only (COMBO B session gate) | Range-fade for the UTC 09–14 low-volatility window with BB compression + RSI extremes |
+
+`opening_range_breakout_strategy.py` exists as a research artifact (registered nowhere, not loaded live).
 
 Support modules alongside the strategies:
 - `base_strategy.py` — abstract base class

@@ -3,7 +3,7 @@
 Backtest Runner - Run strategy backtests on historical data.
 
 Usage:
-    python scripts/run_backtest.py --strategy breakout --symbol XAUUSD
+    python scripts/run_backtest.py --strategy kalman_regime --symbol XAUUSD
     python scripts/run_backtest.py --strategy all --symbol XAUUSD --config config/config_live_50000.yaml
 """
 
@@ -41,38 +41,26 @@ from src.backtest.news_replay import NewsBlackoutReplay
 from src.backtest.walk_forward_driver import WalkForwardDriver
 from src.backtest.ensemble_engine import EnsembleBacktestEngine, print_ensemble_report
 from src.backtest import report as bt_report
-from src.strategies.breakout_strategy import BreakoutStrategy
-from src.strategies.mean_reversion_strategy import MeanReversionStrategy
 from src.strategies.momentum_strategy import MomentumStrategy
 from src.strategies.vwap_strategy import VWAPStrategy
 from src.strategies.kalman_regime_strategy import KalmanRegimeStrategy
-from src.strategies.mini_medallion_strategy import MiniMedallionStrategy
 from src.strategies.structure_break_retest import StructureBreakRetestStrategy
-from src.strategies.supply_demand_strategy import SupplyDemandStrategy
 from src.strategies.asia_range_fade_strategy import AsiaRangeFadeStrategy
-from src.strategies.descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
 from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementStrategy
-from src.strategies.continuation_breakout_strategy import ContinuationBreakoutStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['breakout', 'mean_reversion', 'momentum', 'vwap', 'kalman_regime', 'mini_medallion', 'sbr', 'supply_demand', 'asia_range_fade', 'descending_channel_breakout', 'smc_ob', 'fibonacci_retracement', 'continuation_breakout', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'all']
 
 STRATEGY_CLASS_MAP = {
-    'breakout': BreakoutStrategy,
-    'mean_reversion': MeanReversionStrategy,
     'momentum': MomentumStrategy,
     'vwap': VWAPStrategy,
     'kalman_regime': KalmanRegimeStrategy,
-    'mini_medallion': MiniMedallionStrategy,
     'sbr': StructureBreakRetestStrategy,
-    'supply_demand': SupplyDemandStrategy,
     'asia_range_fade': AsiaRangeFadeStrategy,
-    'descending_channel_breakout': DescendingChannelBreakoutStrategy,
     'smc_ob': SMCOrderBlockStrategy,
     'fibonacci_retracement': FibonacciRetracementStrategy,
-    'continuation_breakout': ContinuationBreakoutStrategy,
 }
 
 
@@ -146,33 +134,19 @@ def create_symbol(symbol_name: str, config: dict) -> Symbol:
 
 def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
     strats = config.get('strategies', {})
-    if strategy_name == 'breakout':
-        return BreakoutStrategy(symbol, strats.get('breakout', {}))
-    elif strategy_name == 'mean_reversion':
-        return MeanReversionStrategy(symbol, strats.get('mean_reversion', {}))
-    elif strategy_name == 'momentum':
+    if strategy_name == 'momentum':
         return MomentumStrategy(symbol, strats.get('momentum', {}))
     elif strategy_name == 'vwap':
         cfg = dict(strats.get('vwap', {})); cfg['enabled'] = True
         return VWAPStrategy(symbol, cfg)
     elif strategy_name == 'kalman_regime':
         return KalmanRegimeStrategy(symbol, strats.get('kalman_regime', {}))
-    elif strategy_name == 'mini_medallion':
-        return MiniMedallionStrategy(symbol, strats.get('mini_medallion', {}))
     elif strategy_name == 'sbr':
         return StructureBreakRetestStrategy(symbol, strats.get('sbr', {}))
-    elif strategy_name == 'supply_demand':
-        cfg = dict(strats.get('supply_demand', {}))
-        cfg['enabled'] = True  # Force-enable for backtest
-        return SupplyDemandStrategy(symbol, cfg)
     elif strategy_name == 'asia_range_fade':
         cfg = dict(strats.get('asia_range_fade', {}))
         cfg['enabled'] = True
         return AsiaRangeFadeStrategy(symbol, cfg)
-    elif strategy_name == 'descending_channel_breakout':
-        cfg = dict(strats.get('descending_channel_breakout', {}))
-        cfg['enabled'] = True
-        return DescendingChannelBreakoutStrategy(symbol, cfg)
     elif strategy_name == 'smc_ob':
         cfg = dict(strats.get('smc_ob', {}))
         cfg['enabled'] = True  # Force-enable for backtest
@@ -181,10 +155,6 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('fibonacci_retracement', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return FibonacciRetracementStrategy(symbol, cfg)
-    elif strategy_name == 'continuation_breakout':
-        cfg = dict(strats.get('continuation_breakout', {}))
-        cfg['enabled'] = True  # Force-enable for backtest
-        return ContinuationBreakoutStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
@@ -619,7 +589,7 @@ def main():
         return
 
     strategies_to_run = (
-        ['breakout', 'momentum', 'kalman_regime', 'vwap', 'mini_medallion', 'sbr']
+        ['momentum', 'kalman_regime', 'vwap', 'sbr', 'smc_ob', 'fibonacci_retracement', 'asia_range_fade']
         if args.strategy == 'all'
         else [args.strategy]
     )

@@ -101,9 +101,9 @@ def sample_trade_journal(tmp_path):
     recent_start = datetime.now(timezone.utc) - timedelta(days=29)
     data = {
         "entry_time": pd.date_range(recent_start, periods=30, freq="1D", tz="UTC"),
-        "strategy": (["breakout"] * 10 + ["momentum"] * 10 + ["kalman_regime"] * 10),
+        "strategy": (["sbr"] * 10 + ["momentum"] * 10 + ["kalman_regime"] * 10),
         "realized_pnl": (
-            [5.0, -2.0, 8.0, -1.0, 6.0, 3.0, -4.0, 7.0, 2.0, 1.0]  # breakout: net positive
+            [5.0, -2.0, 8.0, -1.0, 6.0, 3.0, -4.0, 7.0, 2.0, 1.0]  # sbr: net positive
             + [-3.0, -2.0, -5.0, -1.0, -4.0, -2.0, -3.0, -1.0, -2.0, -3.0]  # momentum: net negative
             + [10.0, 5.0, 8.0, -2.0, 12.0, 3.0, 7.0, 4.0, -1.0, 6.0]  # kalman: very positive
         ),
@@ -239,19 +239,18 @@ class TestMarkovSmoothing:
 class TestDynamicWeighting:
     """Tests for resolve_strategy_overrides."""
 
-    def test_trend_regime_enables_breakout_momentum(self):
-        """TREND regime should enable breakout and momentum."""
+    def test_trend_regime_enables_momentum_kalman(self):
+        """TREND regime should enable momentum and kalman_regime."""
         overrides = resolve_strategy_overrides("TREND", 0.80, {})
-        assert overrides["breakout"] is True
-        assert overrides["momentum"] is True
-
-    def test_range_regime_enables_all_profitable(self):
-        """RANGE regime should enable all 4 profitable strategies."""
-        overrides = resolve_strategy_overrides("RANGE", 0.80, {})
-        assert overrides["breakout"] is True
         assert overrides["momentum"] is True
         assert overrides["kalman_regime"] is True
-        assert overrides["mini_medallion"] is True
+
+    def test_range_regime_enables_all_profitable(self):
+        """RANGE regime should enable every live strategy (all weights ≥ threshold)."""
+        overrides = resolve_strategy_overrides("RANGE", 0.80, {})
+        for strat in ("momentum", "kalman_regime", "vwap", "sbr",
+                      "asia_range_fade", "smc_ob", "fibonacci_retracement"):
+            assert overrides[strat] is True, strat
 
     def test_volatile_regime_enables_kalman(self):
         """VOLATILE regime should enable kalman_regime."""
@@ -259,10 +258,7 @@ class TestDynamicWeighting:
         assert overrides["kalman_regime"] is True
 
     def test_unprofitable_strategies_disabled_by_default(self):
-        """mean_reversion disabled in all regimes; vwap disabled only in TREND."""
-        for regime in REGIMES:
-            overrides = resolve_strategy_overrides(regime, 0.80, {})
-            assert overrides["mean_reversion"] is False
+        """vwap disabled only in TREND (0.00); enabled in RANGE/VOLATILE."""
         assert resolve_strategy_overrides("TREND", 0.80, {})["vwap"] is False
         assert resolve_strategy_overrides("RANGE", 0.80, {})["vwap"] is True
         assert resolve_strategy_overrides("VOLATILE", 0.80, {})["vwap"] is True
@@ -281,8 +277,8 @@ class TestDynamicWeighting:
         )
 
     def test_all_regimes_enable_core_profitable_strategies(self):
-        """All regimes enable the 4 core profitable strategies; RANGE/VOLATILE also enable vwap."""
-        core = {"breakout", "momentum", "kalman_regime", "mini_medallion"}
+        """All regimes enable the core profitable strategies; RANGE/VOLATILE also enable vwap."""
+        core = {"momentum", "kalman_regime", "sbr", "smc_ob", "fibonacci_retracement"}
         for regime in REGIMES:
             overrides = resolve_strategy_overrides(regime, 0.80, {})
             enabled = {s for s, v in overrides.items() if v}
@@ -296,10 +292,8 @@ class TestDynamicWeighting:
         """Every regime in STRATEGY_WEIGHTS must cover every enabled strategy
         so new strategies get regime-adaptive weighting and analytics coverage."""
         required_core = {
-            "breakout", "momentum", "kalman_regime", "mean_reversion",
-            "vwap", "mini_medallion", "sbr", "supply_demand",
-            "asia_range_fade", "descending_channel_breakout", "smc_ob",
-            "fibonacci_retracement", "continuation_breakout",
+            "momentum", "kalman_regime", "vwap", "sbr",
+            "asia_range_fade", "smc_ob", "fibonacci_retracement",
         }
         for regime in REGIMES:
             keys = set(STRATEGY_WEIGHTS[regime].keys())
@@ -354,7 +348,7 @@ class TestStrategyScorer:
             journal_path=sample_trade_journal, lookback_days=365,
         )
         assert len(scores) > 0
-        assert "breakout" in scores
+        assert "sbr" in scores
         assert "kalman_regime" in scores
 
     def test_profitable_strategy_positive_score(self, sample_trade_journal):
@@ -384,10 +378,10 @@ class TestWeightAdjustment:
 
     def test_positive_score_increases_weight(self):
         """Positive performance score should increase the weight."""
-        base = {"breakout": 0.5}
-        scores = {"breakout": 0.5}
+        base = {"sbr": 0.5}
+        scores = {"sbr": 0.5}
         adjusted = adjust_weights(base, scores, blend_ratio=1.0)
-        assert adjusted["breakout"] > base["breakout"]
+        assert adjusted["sbr"] > base["sbr"]
 
     def test_negative_score_decreases_weight(self):
         """Negative performance score should decrease the weight."""
@@ -412,8 +406,8 @@ class TestWeightAdjustment:
 
     def test_zero_blend_preserves_base(self):
         """Zero blend ratio should preserve base weights."""
-        base = {"breakout": 0.5, "momentum": 0.3}
-        scores = {"breakout": 1.0, "momentum": -1.0}
+        base = {"sbr": 0.5, "momentum": 0.3}
+        scores = {"sbr": 1.0, "momentum": -1.0}
         adjusted = adjust_weights(base, scores, blend_ratio=0.0)
-        assert adjusted["breakout"] == pytest.approx(base["breakout"], abs=0.01)
+        assert adjusted["sbr"] == pytest.approx(base["sbr"], abs=0.01)
         assert adjusted["momentum"] == pytest.approx(base["momentum"], abs=0.01)

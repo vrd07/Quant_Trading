@@ -16,19 +16,13 @@ from datetime import datetime, timezone, timedelta
 
 from .base_strategy import BaseStrategy
 from ..core.constants import MarketRegime
-from .breakout_strategy import BreakoutStrategy
-from .mean_reversion_strategy import MeanReversionStrategy
 from .vwap_strategy import VWAPStrategy
 from .momentum_strategy import MomentumStrategy
 from .kalman_regime_strategy import KalmanRegimeStrategy
-from .mini_medallion_strategy import MiniMedallionStrategy
 from .structure_break_retest import StructureBreakRetestStrategy
-from .supply_demand_strategy import SupplyDemandStrategy
 from .asia_range_fade_strategy import AsiaRangeFadeStrategy
-from .descending_channel_breakout_strategy import DescendingChannelBreakoutStrategy
 from .smc_ob_strategy import SMCOrderBlockStrategy
 from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
-from .continuation_breakout_strategy import ContinuationBreakoutStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -37,19 +31,13 @@ class StrategyManager:
 
     # Torvalds: registry eliminates special cases — add new strategies here.
     STRATEGY_REGISTRY: Dict[str, type] = {
-        'breakout':       BreakoutStrategy,
-        'mean_reversion': MeanReversionStrategy,
         'vwap':           VWAPStrategy,
         'momentum':       MomentumStrategy,
         'kalman_regime':  KalmanRegimeStrategy,
-        'mini_medallion': MiniMedallionStrategy,
         'sbr':            StructureBreakRetestStrategy,
-        'supply_demand':  SupplyDemandStrategy,
         'asia_range_fade': AsiaRangeFadeStrategy,
-        'descending_channel_breakout': DescendingChannelBreakoutStrategy,
         'smc_ob':         SMCOrderBlockStrategy,
         'fibonacci_retracement': FibonacciRetracementStrategy,
-        'continuation_breakout': ContinuationBreakoutStrategy,
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
