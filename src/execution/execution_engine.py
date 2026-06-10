@@ -83,6 +83,12 @@ class ExecutionEngine:
         # Logging
         from ..monitoring.logger import get_logger
         self.logger = get_logger(__name__)
+
+        # Telegram rejection alerts — throttled so a persistent broker-side
+        # block (e.g. "AutoTrading disabled by server") doesn't ping on every
+        # signal. Keyed by reason text; re-alert only after the cooldown.
+        self._last_reject_alert: Dict[str, float] = {}
+        self._reject_alert_cooldown_s = 900.0  # 15 min per distinct reason
     
     def submit_signal(
         self,
@@ -519,7 +525,9 @@ class ExecutionEngine:
                 order_id=str(order.order_id),
                 reason=str(e)
             )
-            
+
+            self._alert_rejection(order, str(e))
+
             raise
             
         except (OrderTimeoutError, ConnectionError) as e:
@@ -575,7 +583,44 @@ class ExecutionEngine:
                 f"Order submission failed: {str(e)}",
                 order_id=str(order.order_id)
             )
-    
+
+    def _alert_rejection(self, order: Order, reason: str) -> None:
+        """Push a throttled Telegram alert when MT5 rejects an order.
+
+        A persistent broker-side block (most commonly "AutoTrading disabled by
+        server" when the terminal's AlgoTrading button is off) would otherwise
+        silently eat every signal. We surface it once per distinct reason every
+        ``_reject_alert_cooldown_s`` seconds. Fully fail-safe: any error here is
+        swallowed so it can never affect the trade path.
+        """
+        try:
+            key = reason.strip().lower()
+            now = time.monotonic()
+            last = self._last_reject_alert.get(key, 0.0)
+            if now - last < self._reject_alert_cooldown_s:
+                return
+            self._last_reject_alert[key] = now
+
+            from ..sentiment.notify import notify_text, is_configured
+            if not is_configured():
+                return
+
+            import html as _html
+            sym = getattr(order.symbol, 'name', order.symbol)
+            side = getattr(order.side, 'value', order.side)
+            msg = (
+                "🚫 <b>ORDER REJECTED BY MT5</b>\n"
+                f"{_html.escape(str(sym))} · {_html.escape(str(side))} · "
+                f"{order.quantity} lots\n"
+                f"⚠ reason: <b>{_html.escape(reason)}</b>\n"
+                "<i>Signal fired but the broker refused it. If this says "
+                "\"AutoTrading disabled\", switch the AlgoTrading button ON in "
+                "MT5. Throttled — one alert per 15 min per reason.</i>"
+            )
+            notify_text(msg)
+        except Exception:
+            pass
+
     def handle_fill(self, fill_data: Dict) -> Optional[Position]:
         """
         Handle order fill notification from MT5.
