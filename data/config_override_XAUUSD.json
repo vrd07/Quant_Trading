@@ -1,58 +1,44 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-09T19:00:07.719288+00:00",
-  "valid_until": "2026-06-10T19:00:07.719288+00:00",
+  "generated_at": "2026-06-10T19:00:04.732621+00:00",
+  "valid_until": "2026-06-11T19:00:04.732621+00:00",
   "regime": "RANGE",
-  "confidence": 0.8395,
-  "classifier": "RandomForest+Markov (n=338 samples)",
+  "confidence": 0.8066,
+  "classifier": "RandomForest+Markov (n=339 samples)",
   "strategy_overrides": {
-    "breakout": true,
     "momentum": true,
     "kalman_regime": true,
-    "mean_reversion": false,
     "vwap": true,
-    "mini_medallion": true,
     "sbr": true,
-    "supply_demand": false,
     "asia_range_fade": true,
-    "descending_channel_breakout": false,
     "smc_ob": true,
-    "fibonacci_retracement": true,
-    "continuation_breakout": false
+    "fibonacci_retracement": true
   },
   "diagnostics": {
-    "adx_14": 29.659056,
-    "atr_pct": 0.021612,
-    "bb_width_ratio": 1.135436,
-    "close_ema20_pct": -0.041509,
-    "momentum_1d": -0.012417,
-    "momentum_5d": -0.038196,
-    "range_atr_ratio": 1.389074,
-    "vol_ratio": 0.721546,
-    "park_vol_zscore": 1.162182
+    "adx_14": 32.161221,
+    "atr_pct": 0.023328,
+    "bb_width_ratio": 1.457228,
+    "close_ema20_pct": -0.067732,
+    "momentum_1d": -0.025582,
+    "momentum_5d": -0.072856,
+    "range_atr_ratio": 1.259112,
+    "vol_ratio": 1.019426,
+    "park_vol_zscore": 1.910137
   },
   "strategy_weights": {
-    "breakout": 0.6,
     "momentum": 0.55,
     "kalman_regime": 0.75,
-    "mean_reversion": 0.0,
     "vwap": 0.45,
-    "mini_medallion": 0.6,
     "sbr": 0.4,
-    "supply_demand": 0.25,
     "asia_range_fade": 0.7,
-    "descending_channel_breakout": 0.3,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5,
-    "continuation_breakout": 0.3
+    "fibonacci_retracement": 0.5
   },
-  "performance_scores": {
-    "kalman_regime": -0.0268
-  },
+  "performance_scores": {},
   "regime_probabilities": {
-    "TREND": 0.1521,
-    "RANGE": 0.8395,
-    "VOLATILE": 0.0084
+    "TREND": 0.1329,
+    "RANGE": 0.8066,
+    "VOLATILE": 0.0606
   },
   "transition_matrix": {
     "TREND": {
@@ -61,8 +47,8 @@
       "VOLATILE": 0.1389
     },
     "RANGE": {
-      "TREND": 0.0891,
-      "RANGE": 0.9043,
+      "TREND": 0.0888,
+      "RANGE": 0.9046,
       "VOLATILE": 0.0066
     },
     "VOLATILE": {
