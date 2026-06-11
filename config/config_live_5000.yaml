@@ -266,7 +266,7 @@ strategies:
     timeframe: 5m
     asia_end_hour: 7
     entry_start_hour: 7
-    entry_end_hour: 10
+    entry_end_hour: 12    # 2026-06-12: variant B widened window 07:00-11:59 UTC (user decision; marginal trades PF~1.17, slightly dilutive)
     stop_range_fraction: 0.5
     min_asia_bars: 36         # >=3h of 5m bars or no trade
     min_asia_range: 0.0

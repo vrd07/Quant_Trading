@@ -249,7 +249,7 @@ strategies:
                               # and strict-fill stop overshoot is 3× smaller than on 15m
     asia_end_hour: 7          # Asia range = 00:00–06:59 UTC
     entry_start_hour: 7       # first 5m close beyond range in 07:00–09:59
-    entry_end_hour: 10
+    entry_end_hour: 12    # 2026-06-12: variant B widened window 07:00-11:59 UTC (user decision; marginal trades PF~1.17, slightly dilutive)
     stop_range_fraction: 0.5  # SL = half the Asia range behind entry (plateau center)
     min_asia_bars: 36         # ≥3h of 5m bars or no trade
     signal_strength: 0.65
