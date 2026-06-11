@@ -24,6 +24,7 @@ from .asia_range_fade_strategy import AsiaRangeFadeStrategy
 from .smc_ob_strategy import SMCOrderBlockStrategy
 from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from .london_breakout_strategy import LondonBreakoutStrategy
+from .monday_drift_strategy import MondayDriftStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -40,6 +41,7 @@ class StrategyManager:
         'smc_ob':         SMCOrderBlockStrategy,
         'fibonacci_retracement': FibonacciRetracementStrategy,
         'london_breakout': LondonBreakoutStrategy,   # USDJPY-only (self-gated on symbol)
+        'monday_drift':   MondayDriftStrategy,       # GBPUSD/AUDUSD-only (self-gated on symbol)
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
@@ -57,9 +59,18 @@ class StrategyManager:
         self.strategies: Dict[str, Dict[str, BaseStrategy]] = {}
         strategies_cfg = config.get('strategies', {})
 
+        symbols_cfg = config.get('symbols', {})
         for symbol in symbols:
             self.strategies[symbol.ticker] = {}
+            # Optional per-symbol whitelist (symbols.<ticker>.strategy_whitelist):
+            # symbols added for ONE dedicated strategy (e.g. GBPUSD/AUDUSD for
+            # monday_drift) must not inherit the whole enabled roster — kalman
+            # on GBPUSD is a backtested loser. Absent key = all strategies
+            # (existing XAUUSD/USDJPY behavior unchanged).
+            whitelist = symbols_cfg.get(symbol.ticker, {}).get('strategy_whitelist')
             for name, cls in self.STRATEGY_REGISTRY.items():
+                if whitelist and name not in whitelist:
+                    continue
                 strat_cfg = strategies_cfg.get(name, {})
                 if strat_cfg.get('enabled', False):
                     self.strategies[symbol.ticker][name] = cls(
