@@ -37,6 +37,7 @@ DEFAULT_SLIPPAGE_PRICE_UNITS: Dict[str, Decimal] = {
     "EURUSD": Decimal("0.00003"),  # 0.3 pip × 0.0001 pip_value
     "GBPJPY": Decimal("0.003"),    # 0.3 pip × 0.01 pip_value (JPY-quoted)
     "GBPUSD": Decimal("0.00003"),  # 0.3 pip × 0.0001 pip_value
+    "AUDUSD": Decimal("0.00003"),  # 0.3 pip × 0.0001 pip_value
     "USDJPY": Decimal("0.003"),    # 0.3 pip × 0.01 pip_value (JPY-quoted)
 }
 
@@ -54,6 +55,7 @@ DEFAULT_BASE_SPREAD_PRICE_UNITS: Dict[str, Decimal] = {
     "EURUSD": Decimal("0.0001"),  # 1.0 pip
     "GBPJPY": Decimal("0.020"),   # 2.0 pips — typical retail GBPJPY median
     "GBPUSD": Decimal("0.00012"), # 1.2 pips — typical retail GBPUSD median
+    "AUDUSD": Decimal("0.00011"), # 1.1 pips — typical retail AUDUSD median
     "USDJPY": Decimal("0.014"),   # 1.4 pips — typical retail USDJPY median
 }
 

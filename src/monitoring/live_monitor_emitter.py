@@ -1177,6 +1177,7 @@ class LiveMonitorEmitter:
             "supply_demand": "Retest of a fresh supply/demand zone post-impulse",
             "asia_range_fade": "Fade the Asia low-volatility range (UTC 09–14)",
             "london_breakout": "Tokyo-range breakout at London open (USDJPY) — ride to NY, time-stop exit",
+        "monday_drift": "Monday anti-USD drift hold (GBPUSD/AUDUSD) — SMA(50)-gated long, time-stop exit",
         }
         why = base.get(s, f"{s or 'strategy'} signal")
         direction = "long" if side == "LONG" else ("short" if side == "SHORT" else side.lower())
