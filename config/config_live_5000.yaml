@@ -28,6 +28,36 @@ symbols:
     min_stops_distance: 0.05  # 5 pips
     max_spread: 0.03          # 3 pips
 
+  GBPUSD:
+    enabled: true
+    # monday_drift ONLY — kalman is a backtested loser on GBPUSD (PF 0.98,
+    # kill-switched); the whitelist stops the rest of the roster firing here.
+    strategy_whitelist: [monday_drift]
+    pip_value: 0.00001          # 1 point (5-decimal quotes)
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 100000       # USD per 1.0 price move per lot (USD-quoted pair)
+    commission_per_lot: 0.0
+    leverage: 100               # FX 1:100
+    max_notional_pct: 4.0       # clamp lots to 400% balance notional (FX sizing gotcha)
+    min_stops_distance: 0.0005  # 5 pips
+    max_spread: 0.0003          # 3 pips
+
+  AUDUSD:
+    enabled: true
+    strategy_whitelist: [monday_drift]   # monday_drift ONLY (see GBPUSD note)
+    pip_value: 0.00001          # 1 point (5-decimal quotes)
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 100000       # USD per 1.0 price move per lot (USD-quoted pair)
+    commission_per_lot: 0.0
+    leverage: 100               # FX 1:100
+    max_notional_pct: 4.0       # clamp lots to 400% balance notional (FX sizing gotcha)
+    min_stops_distance: 0.0005  # 5 pips
+    max_spread: 0.0003          # 3 pips
+
   XAUUSD:
     enabled: true
     pip_value: 0.01
@@ -129,6 +159,8 @@ risk:
       risk_per_trade_usd: 50
     london_breakout:
       risk_per_trade_usd: 50   # matches the validated backtest sizing (1% of $5k)
+    monday_drift:
+      risk_per_trade_usd: 50   # 1.0×dailyATR stop (~68p GBPUSD) ⇒ ~0.07 lots
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS  (user limits 2026-05-30)
   absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3.0%)
@@ -188,6 +220,12 @@ risk:
       london_breakout:
         time_stop_minutes: 360
         disable_be_lock: true
+      # monday_drift holds the full Monday session: entry ~00:15 UTC, time
+      # stop 1230 min ⇒ flat ~20:45 UTC, before the 21:00 rollover spread.
+      # BE/lock disabled — tightening into intraday noise destroys the hold.
+      monday_drift:
+        time_stop_minutes: 1230
+        disable_be_lock: true
     breakeven_atr_mult: 1.2        # Move SL to breakeven at +1.2× risk distance (was 0.5 — too tight, normal noise stopped out trades)
     lock_atr_mult: 2.0             # Move SL to partial lock at +2.0× risk distance (was 1.5)
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
@@ -234,6 +272,25 @@ strategies:
     min_asia_range: 0.0
     signal_strength: 0.65
     allowed_symbols: [USDJPY]
+
+  # ── MONDAY DRIFT (GBPUSD/AUDUSD ONLY — hard-gated in code) ──────────────────
+  # Long-only Monday anti-USD drift hold: first 15m bar 00:00-00:59 UTC Monday,
+  # gated on daily close > SMA(50) (regime kill-switch — the drift reverses in
+  # USD-strength regimes). SL = 1.0 x dailyATR(14); NO TP — exit is the
+  # trailing_stop strategy_overrides time stop (1230 min = flat ~20:45 UTC).
+  # Research 2026-06-11 (research_monday_drift.py, 2.5y Dukascopy, 2p costs):
+  # GBPUSD PF 1.95 all/1.54 IS/4.17 OOS; AUDUSD 1.59/1.21/2.60; every year
+  # >= flat on both. ⚠️ REGIME trade by user decision 2026-06-11 (not a
+  # structural edge; EURUSD same drift but too weak — excluded).
+  monday_drift:
+    enabled: true
+    timeframe: 15m
+    entry_hour_utc: 0
+    sma_period: 50
+    atr_period: 14
+    stop_atr_multiplier: 1.0
+    signal_strength: 0.60
+    allowed_symbols: [GBPUSD, AUDUSD]
 
   # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
   #    COMBO A (TREND): sbr + fib + momentum
@@ -520,7 +577,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -528,7 +585,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -536,7 +593,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -544,7 +601,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -552,11 +609,11 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-11_news.csv
+    csv_path: news/2026-06-12_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
@@ -564,6 +621,8 @@ trading_hours:
       - USD
       - EUR
       - JPY   # USDJPY live (london_breakout) — BoJ/Tokyo CPI events matter
+      - GBP   # GBPUSD live (monday_drift) — BoE/UK CPI events matter
+      - AUD   # AUDUSD live (monday_drift) — RBA events matter
     impacts:
       - high
       - red

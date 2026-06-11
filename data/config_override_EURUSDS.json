@@ -1,7 +1,7 @@
 {
   "symbol": "EURUSDS",
-  "generated_at": "2026-06-11T08:23:41.187099+00:00",
-  "valid_until": "2026-06-12T08:23:41.187099+00:00",
+  "generated_at": "2026-06-11T19:00:04.764187+00:00",
+  "valid_until": "2026-06-12T19:00:04.764187+00:00",
   "regime": "RANGE",
   "confidence": 0.52,
   "classifier": "rule-based (no data)",
@@ -12,7 +12,9 @@
     "sbr": true,
     "asia_range_fade": true,
     "smc_ob": true,
-    "fibonacci_retracement": true
+    "fibonacci_retracement": true,
+    "london_breakout": true,
+    "monday_drift": true
   },
   "diagnostics": {},
   "strategy_weights": {
@@ -22,7 +24,9 @@
     "sbr": 0.4,
     "asia_range_fade": 0.7,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5
+    "fibonacci_retracement": 0.5,
+    "london_breakout": 0.7,
+    "monday_drift": 0.7
   },
   "performance_scores": {},
   "regime_probabilities": {},

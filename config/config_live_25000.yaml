@@ -35,6 +35,34 @@ symbols:
     min_stops_distance: 0.05  # 5 pips
     max_spread: 0.03          # 3 pips
 
+  GBPUSD:
+    enabled: false              # monday_drift pair — live in config_live_5000 only
+    strategy_whitelist: [monday_drift]   # never let the XAUUSD roster fire here
+    pip_value: 0.00001
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 100000
+    commission_per_lot: 0.0
+    leverage: 100
+    max_notional_pct: 4.0
+    min_stops_distance: 0.0005
+    max_spread: 0.0003
+
+  AUDUSD:
+    enabled: false              # monday_drift pair — live in config_live_5000 only
+    strategy_whitelist: [monday_drift]
+    pip_value: 0.00001
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 100000
+    commission_per_lot: 0.0
+    leverage: 100
+    max_notional_pct: 4.0
+    min_stops_distance: 0.0005
+    max_spread: 0.0003
+
   XAUUSD:
     enabled: true
     pip_value: 0.01
@@ -191,6 +219,9 @@ risk:
       london_breakout:
         time_stop_minutes: 360
         disable_be_lock: true
+      monday_drift:
+        time_stop_minutes: 1230   # flat ~20:45 UTC Monday, before rollover
+        disable_be_lock: true
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
@@ -215,6 +246,19 @@ strategies:
     min_asia_range: 0.0
     signal_strength: 0.65
     allowed_symbols: [USDJPY]
+
+  # ── MONDAY DRIFT (GBPUSD/AUDUSD ONLY — hard-gated in code) ──────────────────
+  # Long-only Monday anti-USD drift hold (see config_live_5000.yaml for the
+  # research notes). Disabled here — enabled only on the 5000 account.
+  monday_drift:
+    enabled: false
+    timeframe: 15m
+    entry_hour_utc: 0
+    sma_period: 50
+    atr_period: 14
+    stop_atr_multiplier: 1.0
+    signal_strength: 0.60
+    allowed_symbols: [GBPUSD, AUDUSD]
 
   # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
   #    COMBO A (TREND): sbr + fib + momentum
@@ -498,7 +542,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -506,7 +550,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -514,7 +558,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -522,7 +566,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -530,11 +574,11 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-11_news.csv
+    csv_path: news/2026-06-12_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

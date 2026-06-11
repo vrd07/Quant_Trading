@@ -1,7 +1,7 @@
 {
   "symbol": "ETHUSD",
-  "generated_at": "2026-06-11T08:23:40.908798+00:00",
-  "valid_until": "2026-06-12T08:23:40.908798+00:00",
+  "generated_at": "2026-06-11T19:00:04.042772+00:00",
+  "valid_until": "2026-06-12T19:00:04.042772+00:00",
   "regime": "RANGE",
   "confidence": 0.9758,
   "classifier": "RandomForest+Markov (n=68 samples)",
@@ -12,7 +12,9 @@
     "sbr": true,
     "asia_range_fade": true,
     "smc_ob": true,
-    "fibonacci_retracement": true
+    "fibonacci_retracement": true,
+    "london_breakout": true,
+    "monday_drift": true
   },
   "diagnostics": {
     "adx_14": 34.466147,
@@ -32,7 +34,9 @@
     "sbr": 0.4,
     "asia_range_fade": 0.7,
     "smc_ob": 0.5,
-    "fibonacci_retracement": 0.5
+    "fibonacci_retracement": 0.5,
+    "london_breakout": 0.7,
+    "monday_drift": 0.7
   },
   "performance_scores": {},
   "regime_probabilities": {
