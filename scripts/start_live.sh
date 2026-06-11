@@ -121,6 +121,11 @@ if [[ " $ENABLED_SYMBOLS " == *" USDJPY "* ]]; then
     echo "    symbol (USDJPYs) is visible in MT5 Market Watch so the EA bridge"
     echo "    can serve its bars and orders."
 fi
+if [[ " $ENABLED_SYMBOLS " == *" GBPUSD "* || " $ENABLED_SYMBOLS " == *" AUDUSD "* ]]; then
+    echo "  ➜ GBPUSD/AUDUSD are live (monday_drift — fires Mondays 00:00-01:00 UTC"
+    echo "    only). Make sure the broker's suffixed symbols (GBPUSDs/AUDUSDs) are"
+    echo "    visible in MT5 Market Watch so the EA bridge can serve them."
+fi
 echo ""
 
 # ── Runtime Risk Setup ───────────────────────────────────────
