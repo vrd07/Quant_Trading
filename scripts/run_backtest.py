@@ -49,10 +49,11 @@ from src.strategies.asia_range_fade_strategy import AsiaRangeFadeStrategy
 from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from src.strategies.london_breakout_strategy import LondonBreakoutStrategy
+from src.strategies.monday_drift_strategy import MondayDriftStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -160,6 +161,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('london_breakout', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return LondonBreakoutStrategy(symbol, cfg)
+    elif strategy_name == 'monday_drift':
+        cfg = dict(strats.get('monday_drift', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return MondayDriftStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
@@ -274,10 +279,19 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
         disable_sl_exits=getattr(args, 'disable_sl', False),
     )
 
+    # Deep-lookback strategies need more than the default 1000-bar window:
+    # monday_drift gates on a 50-day daily SMA resampled from intraday bars,
+    # i.e. ~75 calendar days of history (21,600 5m bars / 7,200 15m bars).
+    max_window = 1000
+    if strategy_name == 'monday_drift':
+        tf_min = _TF_MINUTES.get(args.timeframe, 5)
+        max_window = 75 * (1440 // tf_min)
+
     result = engine.run(
         bars=bars,
         start_date=args.start,
-        end_date=args.end
+        end_date=args.end,
+        max_window=max_window,
     )
 
     print_results(result, strategy_name)
