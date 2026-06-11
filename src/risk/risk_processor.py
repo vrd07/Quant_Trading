@@ -302,11 +302,13 @@ class RiskProcessor:
             tp_dist = risk * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
-        elif strategy_name == 'london_breakout':
-            # Structural stop precomputed by the strategy: a fraction of the
-            # Asia range behind entry. NO take-profit by design — research
-            # (research_usdjpy_lbo.py) shows a 1×range TP collapses the edge
-            # (OOS PF 1.44 → 1.04); the exit is the trailing-stop time stop.
+        elif strategy_name in ('london_breakout', 'monday_drift'):
+            # Structural stop precomputed by the strategy (london_breakout:
+            # fraction of the Asia range; monday_drift: 1.0× daily ATR).
+            # NO take-profit by design — research shows capping these kills
+            # the edge (LBO: 1×range TP collapses OOS PF 1.44 → 1.04;
+            # monday_drift harvests a full-day drift). The exit is the
+            # per-strategy trailing-stop time stop.
             # tp stays None, which also skips the RR-floor gate below.
             precomputed_sl = signal.metadata.get('stop_price')
             if precomputed_sl is not None:
