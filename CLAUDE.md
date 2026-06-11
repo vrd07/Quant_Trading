@@ -89,6 +89,8 @@ All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orches
 
 `opening_range_breakout_strategy.py` exists as a research artifact (registered nowhere, not loaded live).
 
+**Researched and REJECTED 2026-06-11: `session_vwap_reversion`** (NY-session 2σ VWAP fade). Looked promising in flat-cost research (PF ~1.15–1.25 causal) but **failed the official strict-fill gate: PF 0.94, negative Sharpe** — adverse stop-fill slippage kills the thin fade edge. Fully implemented then reverted (research scripts `scripts/research_vwap_*.py` + memory retained). Lesson: flat-cost research PF must clear ~1.3+ to survive strict fills. See `project_intraday_edge_research` memory.
+
 Support modules alongside the strategies:
 - `base_strategy.py` — abstract base class
 - `strategy_manager.py` — per-symbol, per-strategy instance registry + aggregation
