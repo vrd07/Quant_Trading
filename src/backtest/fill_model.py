@@ -35,6 +35,9 @@ DEFAULT_SLIPPAGE_PRICE_UNITS: Dict[str, Decimal] = {
     "XAUUSD": Decimal("0.005"),  # 0.5 pip × 0.01 pip_value = 0.005 in price
     "BTCUSD": Decimal("5.0"),    # $5 raw — BTC quote is in USD, value_per_lot=1
     "EURUSD": Decimal("0.00003"),  # 0.3 pip × 0.0001 pip_value
+    "GBPJPY": Decimal("0.003"),    # 0.3 pip × 0.01 pip_value (JPY-quoted)
+    "GBPUSD": Decimal("0.00003"),  # 0.3 pip × 0.0001 pip_value
+    "USDJPY": Decimal("0.003"),    # 0.3 pip × 0.01 pip_value (JPY-quoted)
 }
 
 # 1.5× safety margin, §3.2: "applies 1.5× the measured average".
@@ -49,6 +52,9 @@ DEFAULT_BASE_SPREAD_PRICE_UNITS: Dict[str, Decimal] = {
     "XAUUSD": Decimal("0.30"),   # 30 cents — typical Goat Funded XAU
     "BTCUSD": Decimal("15.0"),   # $15 — typical retail BTC spread
     "EURUSD": Decimal("0.0001"),  # 1.0 pip
+    "GBPJPY": Decimal("0.020"),   # 2.0 pips — typical retail GBPJPY median
+    "GBPUSD": Decimal("0.00012"), # 1.2 pips — typical retail GBPUSD median
+    "USDJPY": Decimal("0.014"),   # 1.4 pips — typical retail USDJPY median
 }
 
 # Hour-of-day liquidity multiplier (UTC hours 0..23).

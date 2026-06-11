@@ -48,10 +48,11 @@ from src.strategies.structure_break_retest import StructureBreakRetestStrategy
 from src.strategies.asia_range_fade_strategy import AsiaRangeFadeStrategy
 from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementStrategy
+from src.strategies.london_breakout_strategy import LondonBreakoutStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -155,6 +156,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('fibonacci_retracement', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return FibonacciRetracementStrategy(symbol, cfg)
+    elif strategy_name == 'london_breakout':
+        cfg = dict(strats.get('london_breakout', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return LondonBreakoutStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 

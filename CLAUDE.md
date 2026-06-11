@@ -73,7 +73,7 @@ MT5 Terminal → EA_FileBridge.mq5 (file I/O) → MT5Connector
 
 All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orchestrated by `StrategyManager`. Each one is independently toggled via `strategies.<name>.enabled` in the active config, and regime-adaptive weights rewrite their influence per detected market regime.
 
-**As of 2026-05-14, raw strategy signals are post-filtered by `ConfluenceGate` (`src/strategies/confluence_gate.py`).** The gate implements the combo policy from `combine_startegy.md`: only `kalman_regime` fires solo; `sbr` / `vwap` only fire when their confluence legs agree (COMBO A in TREND, COMBO B in RANGE); `smc_ob` + `fibonacci_retracement` + `momentum` aligned in any regime emits a `combo_sniper` signal sized 1.5×.
+**As of 2026-05-14, raw strategy signals are post-filtered by `ConfluenceGate` (`src/strategies/confluence_gate.py`).** The gate implements the combo policy from `combine_startegy.md`: only `kalman_regime` and `london_breakout` fire solo; `sbr` / `vwap` only fire when their confluence legs agree (COMBO A in TREND, COMBO B in RANGE); `smc_ob` + `fibonacci_retracement` + `momentum` aligned in any regime emits a `combo_sniper` signal sized 1.5×.
 
 **As of 2026-06-10, the six kill-list strategies were DELETED from the codebase** (no backtested edge — disabled live for weeks). Removed: `breakout`, `mean_reversion`, `supply_demand`, `descending_channel_breakout`, `mini_medallion`, `continuation_breakout` — files, tests, config blocks, and `STRATEGY_WEIGHTS` keys are gone. Their names remain in the gate's `KILL_LIST` as a defensive net so a stale config can't crash the registry lookup. Git history preserves the deleted code. The gate is governed by the `strategies.confluence_gate:` config block (`enabled`, `window_minutes`, `sniper_lot_multiplier`, `sniper_cooldown_minutes`, `exhaustion_filter`).
 
@@ -86,6 +86,7 @@ All strategies live in `src/strategies/`, inherit `BaseStrategy`, and are orches
 | 5 | **FibonacciRetracement** | `fibonacci_retracement_strategy.py` | Filter-only (COMBO A level, COMBO C leg) | Pullbacks into the 50%–61.8% Golden Zone with rejection-candle confirmation |
 | 6 | **SMCOrderBlock** | `smc_ob_strategy.py` | Filter-only (COMBO B precision, COMBO C leg) | 5-phase ICT order-block state machine (OB formed → touched → sweep → waiting-entry → fire) |
 | 7 | **AsiaRangeFade** | `asia_range_fade_strategy.py` | Filter-only (COMBO B session gate) | Range-fade for the UTC 09–14 low-volatility window with BB compression + RSI extremes |
+| 8 | **LondonBreakout** | `london_breakout_strategy.py` | **Solo (allowlist)** | **Added 2026-06-11, USDJPY ONLY (hard symbol gate in code — loses on GBPUSD/AUDUSD).** Asia 00–07 UTC range; first 5m close beyond it 07:00–09:59 enters with the break; SL = 0.5×range; **NO TP** — exit is the per-strategy time stop (`risk.trailing_stop.strategy_overrides.london_breakout`: 360 min, BE/lock disabled). Research PF 1.23 IS / 1.44 OOS (2.5y Dukascopy); ⚠️ FAILED the strict-fill gate (PF ~1.0) — live by user decision; realistic-fill PF 1.39/+32%. Enabled in `config_live_5000.yaml` only (USDJPY symbol + strategy blocks exist disabled in all other configs). |
 
 `opening_range_breakout_strategy.py` exists as a research artifact (registered nowhere, not loaded live).
 

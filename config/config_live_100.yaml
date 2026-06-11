@@ -20,6 +20,20 @@ account:
   leverage: 100
 
 symbols:
+  USDJPY:
+    enabled: false
+    pip_value: 0.001          # 1 point (= 0.1 pip; JPY pairs quote 3 decimals)
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 659        # USD per 1.0 JPY move per lot = 100k JPY / avg USDJPY ~152
+    commission_per_lot: 0.0
+    leverage: 100             # FX 1:100
+    max_notional_pct: 4.0     # clamp lots to 400% balance notional — tight Asia-range stops
+                              # otherwise demand >1 lot and hit the 500% exposure rejection
+    min_stops_distance: 0.05  # 5 pips
+    max_spread: 0.03          # 3 pips
+
   XAUUSD:
     enabled: true
     pip_value: 0.01
@@ -169,12 +183,36 @@ risk:
 
   trailing_stop:
     enabled: true
+    # Per-strategy exits (strategy name from the MT5 order comment).
+    # london_breakout's validated exit is SL-or-time-stop, no BE/lock moves.
+    strategy_overrides:
+      london_breakout:
+        time_stop_minutes: 360
+        disable_be_lock: true
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
     ml_exhaustion_factor: 0.8
 
 strategies:
+
+  # ── LONDON BREAKOUT (USDJPY ONLY — hard-gated in code) ─────────────────────
+  # Asia 00-07 UTC range; first 5m close beyond it 07:00-09:59 enters with the
+  # break; SL = 0.5 x range; NO TP — exit is the trailing_stop strategy_overrides
+  # time stop (360 min). Research 2026-06-11 (2.5y Dukascopy): PF 1.23 IS / 1.44
+  # OOS, positive 2024/25/26. FAILED the strict-fill gate (PF ~1.0) — live by
+  # user decision 2026-06-11; realistic-fill backtest PF 1.39 / +32%.
+  london_breakout:
+    enabled: false
+    timeframe: 5m
+    asia_end_hour: 7
+    entry_start_hour: 7
+    entry_end_hour: 10
+    stop_range_fraction: 0.5
+    min_asia_bars: 36         # >=3h of 5m bars or no trade
+    min_asia_range: 0.0
+    signal_strength: 0.65
+    allowed_symbols: [USDJPY]
 
   # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
   #    COMBO A (TREND): sbr + fib + momentum
@@ -458,7 +496,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -466,7 +504,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -474,7 +512,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -482,7 +520,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -490,7 +528,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true

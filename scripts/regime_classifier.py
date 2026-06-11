@@ -259,6 +259,7 @@ STRATEGY_WEIGHTS = {
         "asia_range_fade": 0.15, # range-focused; trend regime = not its edge
         "smc_ob":         0.70,
         "fibonacci_retracement": 0.70,  # big_trend sweep: PF 1.75, DD 9.2% (6mo)
+        "london_breakout": 0.70,  # session-structural (Tokyo range → London break); regime-agnostic by design
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -268,6 +269,7 @@ STRATEGY_WEIGHTS = {
         "asia_range_fade": 0.70, # PF 1.31, WR 45.3%, DD 1.6% — range-optimised
         "smc_ob":         0.50,
         "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
+        "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -277,6 +279,7 @@ STRATEGY_WEIGHTS = {
         "asia_range_fade": 0.30, # wide ranges hurt fade logic
         "smc_ob":         0.60,
         "fibonacci_retracement": 0.55,  # strong trends with pullbacks = fib's edge
+        "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
     },
 }
 

@@ -32,6 +32,7 @@ sys.path.insert(0, str(PROJECT_ROOT))
 TICKER_MAP = {
     "XAUUSD": "GC=F",       # Gold Futures (COMEX) — closest to XAUUSD spot
     "EURUSD": "EURUSD=X",   # EUR/USD spot
+    "USDJPY": "USDJPY=X",   # USD/JPY spot — live since 2026-06-11 (london_breakout)
     "BTCUSD": "BTC-USD",    # Bitcoin / USD spot
     "ETHUSD": "ETH-USD",    # Ethereum / USD spot
     "US30":   "YM=F",       # Dow Jones Futures

@@ -70,6 +70,10 @@ class SimulatedBroker:
         self.lock_atr_mult = ts_cfg.get('lock_atr_mult', 1.5)
         self.lock_fraction = ts_cfg.get('lock_fraction', 0.5)
         self.time_stop_minutes = ts_cfg.get('time_stop_minutes', None)
+        # Per-strategy overrides — mirrors live TrailingStopManager so a
+        # backtest of a live config exits positions the same way the bot
+        # will (e.g. london_breakout: time_stop 360, no BE/lock moves).
+        self.strategy_overrides: Dict[str, dict] = ts_cfg.get('strategy_overrides', {}) or {}
 
         # Trailing stop tracking: pos_id -> stage (0=none, 1=breakeven, 2=locked)
         self._trail_stage: Dict[str, int] = {}
@@ -187,13 +191,16 @@ class SimulatedBroker:
             fill_ctx = None
 
         for pos_id, position in self.positions.items():
-            # Time stop: close if position has been open too long
-            if self.trailing_stop_enabled and self.time_stop_minutes is not None:
+            # Time stop: close if position has been open too long.
+            # Per-strategy override beats the global value (live parity).
+            time_stop = self._overrides_for(position).get(
+                'time_stop_minutes', self.time_stop_minutes)
+            if self.trailing_stop_enabled and time_stop is not None:
                 entry_idx = self._trail_entry_bar_idx.get(pos_id)
                 if entry_idx is not None:
                     bars_held = self._current_bar_idx - entry_idx
                     minutes_held = bars_held * self._bar_interval_minutes
-                    if minutes_held >= self.time_stop_minutes:
+                    if minutes_held >= time_stop:
                         positions_to_close[pos_id] = (bar_close, 'time_stop')
                         continue
 
@@ -234,10 +241,19 @@ class SimulatedBroker:
         for pos_id, (exit_price, exit_reason) in positions_to_close.items():
             self._close_position(pos_id, exit_price, exit_reason)
 
+    def _overrides_for(self, position: Position) -> dict:
+        """Per-strategy trailing overrides for this position (live parity)."""
+        if not self.strategy_overrides:
+            return {}
+        strategy = (position.metadata or {}).get('strategy')
+        return self.strategy_overrides.get(strategy, {})
+
     def _update_trailing_stop(self, pos_id: str, position: Position, current_price: Decimal) -> None:
         """Update trailing stop stage for a position (mirrors live TrailingStopManager)."""
         if pos_id not in self._trail_atr_dist:
             return
+        if self._overrides_for(position).get('disable_be_lock', False):
+            return  # strategy's validated exit is SL-or-time-stop only
 
         atr_dist = self._trail_atr_dist[pos_id]
         stage = self._trail_stage.get(pos_id, 0)

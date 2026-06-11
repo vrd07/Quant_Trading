@@ -23,6 +23,7 @@ from .structure_break_retest import StructureBreakRetestStrategy
 from .asia_range_fade_strategy import AsiaRangeFadeStrategy
 from .smc_ob_strategy import SMCOrderBlockStrategy
 from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
+from .london_breakout_strategy import LondonBreakoutStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -38,6 +39,7 @@ class StrategyManager:
         'asia_range_fade': AsiaRangeFadeStrategy,
         'smc_ob':         SMCOrderBlockStrategy,
         'fibonacci_retracement': FibonacciRetracementStrategy,
+        'london_breakout': LondonBreakoutStrategy,   # USDJPY-only (self-gated on symbol)
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):

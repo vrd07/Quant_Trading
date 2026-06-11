@@ -108,6 +108,21 @@ echo "  Time:   $(date -u '+%Y-%m-%d %H:%M UTC')"
 echo "============================================================"
 echo ""
 
+# ── Enabled symbols (read from the chosen config) ────────────
+ENABLED_SYMBOLS="$(python3 - "$CONFIG" <<'PY'
+import sys, yaml
+cfg = yaml.safe_load(open(sys.argv[1]))
+print(' '.join(s for s, c in (cfg.get('symbols') or {}).items() if (c or {}).get('enabled')))
+PY
+)"
+echo "  Symbols enabled: ${ENABLED_SYMBOLS:-none}"
+if [[ " $ENABLED_SYMBOLS " == *" USDJPY "* ]]; then
+    echo "  ➜ USDJPY is live (london_breakout). Make sure the broker's suffixed"
+    echo "    symbol (USDJPYs) is visible in MT5 Market Watch so the EA bridge"
+    echo "    can serve its bars and orders."
+fi
+echo ""
+
 # ── Runtime Risk Setup ───────────────────────────────────────
 if [ "$FORCE" = false ]; then
     python3 scripts/runtime_setup.py --config "$CONFIG" || \

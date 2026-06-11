@@ -1,86 +1,96 @@
 # Live Trading Environment Configuration
-# $1,000 Account Size
-# Rules: 2.5% daily loss ($25), 7% max trailing drawdown ($60)
-# Risk per trade: $5 (0.50%) — 0.01 lot XAUUSD × 50 pip stop = $5
-# Target profit:  $12.50 per trade (RR 2.5)
+# $5,000 Account Size
+# Rules: 3% daily loss ($150), 6% max trailing drawdown ($300)
+# Risk per trade: $15 (0.3%) — 0.02 lot XAUUSD × 75 pip stop = $15
+# Target profit:  $30–$45 per trade (RR 2.0–3.0, set at 2.5 = $37.50)
 # News Trading: Restricted (±5 min around high-impact news)
 # Overnight & Weekend Holding: Allowed
-#
-# Audit-hardened config (Apr 2026):
-#   - Mini Medallion DISABLED (negative expectancy)
-#   - Kalman long_only (SELL side loses money on Gold)
-#   - Pre-trade daily loss budget gate (85%)
-#   - Tightened circuit breaker (3 losses / 30 min)
 
 environment: live
 
 account:
-  initial_balance: 1000.0
+  initial_balance: 5000.0
   currency: USD
-  leverage: 100
+  leverage: 100  # Default (FX). Symbol-specific leverage handled below.
 
 symbols:
-  USDJPY:
-    enabled: false
+  GBPUSD:
+    enabled: true
+    pip_value: 0.00001        # 1 point (= 0.1 pip; 5-decimal quote)
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 100000     # USD-quoted: $ P&L = price diff × lots × 100k, no conversion
+    commission_per_lot: 0.0
+    leverage: 100             # FX 1:100
+    min_stops_distance: 0.00050  # 5 pips
+    max_spread: 0.00030       # 3 pips
+
+  GBPJPY:
+    enabled: true
     pip_value: 0.001          # 1 point (= 0.1 pip; JPY pairs quote 3 decimals)
     min_lot: 0.01
     max_lot: 0.50
     lot_step: 0.01
-    value_per_lot: 659        # USD per 1.0 JPY move per lot = 100k JPY / avg USDJPY ~152
+    value_per_lot: 634        # USD per 1.0 JPY-unit move per lot = 100k JPY / avg USDJPY 157.8 (2026 YTD)
     commission_per_lot: 0.0
     leverage: 100             # FX 1:100
-    max_notional_pct: 4.0     # clamp lots to 400% balance notional — tight Asia-range stops
-                              # otherwise demand >1 lot and hit the 500% exposure rejection
     min_stops_distance: 0.05  # 5 pips
-    max_spread: 0.03          # 3 pips
+    max_spread: 0.04          # 4 pips
 
   XAUUSD:
     enabled: true
     pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 0.01
+    min_lot: 0.02             # System minimum
+    max_lot: 0.05             # Increased to allow strategy overrides (up to 0.05)
     lot_step: 0.01
     value_per_lot: 100
     commission_per_lot: 0.0
-    leverage: 30
-    min_stops_distance: 1.0
-    max_spread: 3.5
+    leverage: 30              # Metals 1:30
+    min_stops_distance: 1.0   # 100 pips min distance for Gold
+    max_spread: 3.5           # 35 pips max spread threshold
+
 
   BTCUSD:
     enabled: false
     pip_value: 0.1
     min_lot: 0.01
-    max_lot: 0.01
+    max_lot: 0.07             # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
-    leverage: 2
-    min_stops_distance: 5.0
-    max_spread: 15.0
+    leverage: 2               # Crypto 1:2
+    max_notional_pct: 0.5     # margin-aware ceiling: $2.5k notional/pos ($1.25k margin @1:2); governs over the price-blind lot count
+    min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
+    max_spread: 15.0          # $15.00 max spread threshold
+
 
   ETHUSD:
     enabled: false
     pip_value: 0.01
     min_lot: 0.01
-    max_lot: 0.01
+    max_lot: 3.0              # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
-    leverage: 5
-    min_stops_distance: 1.0
-    max_spread: 3.0
+    leverage: 5               # Crypto 1:5
+    max_notional_pct: 1.0     # margin-aware ceiling: $5k notional/pos ($1k margin @1:5); governs over the price-blind lot count
+    min_stops_distance: 1.0   # $1.00 min distance for Ethereum
+    max_spread: 3.0           # $3.00 max spread threshold
+
 
   EURUSD:
     enabled: false
     pip_value: 0.00001
     min_lot: 0.01
-    max_lot: 0.01
+    max_lot: 0.02
     lot_step: 0.01
     value_per_lot: 100000
     commission_per_lot: 0.0
-    leverage: 100
-    min_stops_distance: 0.00050
-    max_spread: 0.00030
+    leverage: 100             # FX 1:100
+    min_stops_distance: 0.00050 # 5 pip min distance
+    max_spread: 0.00030       # 3 pips max spread threshold
+
 
   US30:
     enabled: false
@@ -90,8 +100,8 @@ symbols:
     lot_step: 0.01
     value_per_lot: 1
     commission_per_lot: 0.0
-    leverage: 20
-    max_spread: 5.0
+    leverage: 20              # Indices 1:20
+    max_spread: 5.0           # 5 points max spread threshold
 
   USOIL:
     enabled: false
@@ -101,44 +111,45 @@ symbols:
     lot_step: 0.01
     value_per_lot: 1000
     commission_per_lot: 0.0
-    leverage: 10
-    max_spread: 0.05
+    leverage: 10              # Energies 1:10
+    max_spread: 0.05          # 5 cents max spread threshold
 
 risk:
-  # $1,000 Account Risk Parameters
-  max_drawdown_pct: 0.07          # 7% Max Overall/Trailing Drawdown ($70)
-  max_daily_loss_pct: 0.025       # 2.5% Max Daily Loss ($25)
+  # $5,000 Account Risk Parameters
+  max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
+  max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30
 
-  # $5 risk per trade = 0.50% of $1,000
-  # Basis: 0.01 lot XAUUSD × 50 pip stop × $10/pip/lot = $5
-  risk_per_trade_pct: 0.005       # 0.50% = $5 per trade
+  # $15 risk per trade = 0.30% of $5,000
+  # Basis: 0.02 lot XAUUSD × 75 pip stop × $10/pip/lot = $15
+  risk_per_trade_pct: 0.003       # 0.30% = $15 per trade
 
   # Fixed per-trade take-profit target in USD (set via runtime_setup).
   # 0 = disabled → strategies keep their own ATR/structure TP. When > 0,
   # execution_engine rewrites every trade's TP to bank exactly this much.
   take_profit_usd: 0
 
-  # Per-strategy risk override (added 2026-05-06).
-  # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
-  # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
-  # needs ~5% of balance per trade to express its edge; clipping it back to
-  # the operator cap silently rejects the high-vol kalman trades.
+  # Per-strategy risk override.
+  # kalman_regime sizes off its own per-trade $ cap. Cut 250→50 on 2026-05-30:
+  # at the $250-DD / $150-daily budget a $250 cap (clamped to ~$120 at max_lot)
+  # blew the drawdown in a single losing cluster. $50/trade ⇒ ~0.02–0.04 lot,
+  # so 3 losses ≈ $150 daily cap and ~5 losses ≈ the $250 trailing-DD kill.
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
     kalman_regime:
       risk_per_trade_usd: 50
 
-  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
-  absolute_max_loss_usd: 25       # Daily loss limit ($1k × 2.5%)
-  max_drawdown_usd: 60            # Overall drawdown limit ($1k × ~6%)
-  max_daily_profit_usd: 30        # Stop trading for the day once $30 profit hit
+  # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS  (user limits 2026-05-30)
+  absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3.0%)
+  max_drawdown_usd: 250            # Overall trailing drawdown limit (5%)
+  max_daily_profit_usd: 260       # Stop trading for the day once $260 profit hit
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
-                                      # would push daily loss past 85% of $25 = $21.25
+                                      # would push daily loss past 85% of $150 = $127.50
 
-  # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
+  # ── Kalman TP sizing ─────────────────────────────────────────────
   # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
-  # TP is risk-engine-driven off the confidence R:R tier, then floored here
-  # so TP distance always exceeds SL distance (never a sub-1R target).
+  # TP is risk-engine-driven off the confidence R:R tier, then floored here.
+  # Cut 2.0→1.0 on 2026-05-30: TP at 2× stop only won ~30% of the time; pulling
+  # it to 1× stop ~doubled the win rate to ~51% (walk-forward Jan-Mar→Apr-May).
   kalman_min_tp_rr: 1.0
 
   # ── Confidence-based reversal / flip (2026-05-27) ────────────────
@@ -149,70 +160,64 @@ risk:
     enabled: true
     min_confidence_margin: 0.0       # extra confidence pts (0-100) the new signal must beat by
 
-  max_positions: 1                # Small account — 1 position at a time
-  max_daily_trades: 10            # Conservative trade count
+  max_positions: 2                # 2026-05-30: 3→2 — at $50/trade, 2×$50=$100 worst-case stays inside the $150 daily cap (3 would equal it)
+  max_daily_trades: 10            # Conservative — audit standard
   max_exposure_per_symbol_pct: 5.0
-  max_daily_wins: 6               # Stop trading once 6 wins hit
+  max_daily_wins: 8               # Stop trading once 8 wins hit ($250+ target)
 
   position_sizing:
-    method: fixed
-    fixed_lots:
-      XAUUSD: 0.01
-      ETHUSD: 0.01
-      default: 0.01
+    method: dynamic_atr
   circuit_breaker:
     enabled: true
     max_consecutive_losses: 3      # Tightened — audit standard
     cooldown_minutes: 30
-    loss_pause_consecutive: 2
-    loss_pause_minutes: 30
+    loss_pause_consecutive: 2      # Soft pause after 2 consecutive losses
+    loss_pause_minutes: 30         # 30 min cooldown
 
   # News/high-loss blackout — suppresses ALL orders during these UTC hours.
   trading_windows:
     enabled: true
-    blocked_hours_utc: []
+    blocked_hours_utc: []    # London close + US news overlap
 
   # Per-trade + daily cap enforcement for manual MT5 clicks.
   manual_guard:
     enabled: true
-    daily_loss_cap_usd: 10             # $10/day manual loss cap
-    size_multiplier: 0.5
-    max_risk_per_trade_usd: 5          # $5 per manual trade
+    daily_loss_cap_usd: 60             # Cut off after $60 of manual loss/day
+    size_multiplier: 0.5               # Half-size manual orders
+    max_risk_per_trade_usd: 15         # Per-trade $ cap (monitor enforces)
     auto_close_violations: false
     directional_lock: true             # Block bot signals opposite to manual trades
 
   trailing_stop:
     enabled: true
-    # Per-strategy exits (strategy name from the MT5 order comment).
-    # london_breakout's validated exit is SL-or-time-stop, no BE/lock moves.
-    strategy_overrides:
-      london_breakout:
-        time_stop_minutes: 360
-        disable_be_lock: true
-    breakeven_atr_mult: 1.2
-    lock_atr_mult: 2.0
-    lock_fraction: 0.5
-    ml_exhaustion_factor: 0.8
+    breakeven_atr_mult: 1.2        # Move SL to breakeven at +1.2× risk distance (was 0.5 — too tight, normal noise stopped out trades)
+    lock_atr_mult: 2.0             # Move SL to partial lock at +2.0× risk distance (was 1.5)
+    lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
+    # time_stop_minutes removed — was 45 min, killed 30-59% of trades before TP could be reached
+    ml_exhaustion_factor: 0.8      # (ML ONLY) If exhaustion pipeline generates predicted pips, tight_lock 80% of it immediately when reached
+
+  # ── Volatility breaker (shock / geopolitical stand-aside) ─────────
+  # Pauses NEW entries + moves green stops to breakeven when ATR spikes far
+  # above its trailing baseline. DISABLED by default: a 2026-05-30 backtest
+  # (Jan–May 2026 XAUUSD) showed it makes kalman WORSE at every threshold —
+  # kalman *profits* from volatility, so pausing on high ATR strips winners
+  # (full period net $3811 → $939 at 1.6×, → $2599 at 2.0×). The Apr/May war
+  # loss was directional whipsaw (ATR only ~1.8× normal, below profitable
+  # months), which a magnitude filter cannot separate from good volatility.
+  # Code is wired and unit-tested; flip enabled:true only for a genuine
+  # flash-crash tail guard, NOT as a fix for moderate war chop.
+  volatility_breaker:
+    enabled: false
+    timeframe: 15m
+    atr_period: 14
+    baseline_window: 480           # ~5 trading days on 15m — long enough that a spike stands out
+    trigger_mult: 2.0              # ATR ≥ 2.0× baseline ⇒ shock mode on
+    release_mult: 1.5              # ATR ≤ 1.5× baseline ⇒ resume (hysteresis)
+
+  # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
+  # (enforced by trading_hours sessions below)
 
 strategies:
-
-  # ── LONDON BREAKOUT (USDJPY ONLY — hard-gated in code) ─────────────────────
-  # Asia 00-07 UTC range; first 5m close beyond it 07:00-09:59 enters with the
-  # break; SL = 0.5 x range; NO TP — exit is the trailing_stop strategy_overrides
-  # time stop (360 min). Research 2026-06-11 (2.5y Dukascopy): PF 1.23 IS / 1.44
-  # OOS, positive 2024/25/26. FAILED the strict-fill gate (PF ~1.0) — live by
-  # user decision 2026-06-11; realistic-fill backtest PF 1.39 / +32%.
-  london_breakout:
-    enabled: false
-    timeframe: 5m
-    asia_end_hour: 7
-    entry_start_hour: 7
-    entry_end_hour: 10
-    stop_range_fraction: 0.5
-    min_asia_bars: 36         # >=3h of 5m bars or no trade
-    min_asia_range: 0.0
-    signal_strength: 0.65
-    allowed_symbols: [USDJPY]
 
   # ── ConfluenceGate (2026-05-13): combo-based filter from combine_startegy.md
   #    COMBO A (TREND): sbr + fib + momentum
@@ -235,7 +240,7 @@ strategies:
       veto_below: 0.0            # drop dampened signal below this strength (0 = never veto)
   signal_cooldown_minutes: 5
   primary_timeframe: 1m
-  min_bars_required: 5
+  min_bars_required: 5              # Reduced from 10 so 5m strategies activate faster
 
   regime_filter:
     enabled: true
@@ -489,6 +494,9 @@ strategies:
   # Disabled by default — backtest before enabling live.
 
 trading_hours:
+  # Friday cutoff disabled for 24/7 crypto/weekend trading
+  # friday_cutoff_utc: "19:00"
+
   sessions:
     # ── ASIA (Tokyo/Sydney) 00:00–07:00 UTC — low vol, range-fade alpha ──────
     - name: asia
@@ -496,7 +504,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -504,7 +512,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -512,7 +520,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -520,7 +528,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -528,7 +536,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
@@ -549,9 +557,10 @@ monitoring:
   log_level: INFO
   state_save_interval_sec: 10
   enable_console_logging: true
+
   alerts:
     kill_switch: true
-    daily_loss_pct: 0.02
+    daily_loss_pct: 0.02        # Alert at 2% daily loss
 
 data:
   timeframes:
@@ -567,6 +576,19 @@ portfolio:
 
 file_bridge:
   enabled: true
+  # ── MT5 data directory ──────────────────────────────────────────────────────
+  #
+  # WINDOWS 11 USERS:
+  #   Option A (recommended — works with ANY username including spaces):
+  #     Comment out BOTH data_dir lines below. The bot will auto-detect the
+  #     correct path using Windows' %APPDATA% environment variable.
+  #
+  #   Option B (manual — only needed if auto-detect fails):
+  #     Uncomment the line below and replace <YourWindowsUsername> with yours.
+  #     If your username has spaces (e.g. "Shubham Ghodke"), include them as-is:
+  #     data_dir: "C:/Users/Shubham Ghodke/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
+  #
+  # macOS (MT5 under Wine — active by default):
   data_dir: "~/Library/Application Support/net.metaquotes.wine.metatrader5/drive_c/users/user/AppData/Roaming/MetaQuotes/Terminal/Common/Files"
   check_interval_ms: 100
 

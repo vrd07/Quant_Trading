@@ -156,3 +156,12 @@ config/sentiment.env
 
 # Sentiment engine runtime data (scores + history)
 data/sentiment/
+
+# ============================================
+# Historical CSV backups (auto-created by the weekly refresh and
+# fetch_dukascopy merges; regenerable, never needed in the repo)
+# ============================================
+data/historical/*.bak_*
+data/historical/*.corrupt_backup_*
+data/historical/*.stale_backup_*
+data/historical/*.tmp

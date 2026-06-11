@@ -54,7 +54,7 @@ from ..core.constants import MarketRegime, OrderSide
 from ..core.types import Signal
 
 
-SOLO_ALLOWED: frozenset = frozenset({"kalman_regime"})
+SOLO_ALLOWED: frozenset = frozenset({"kalman_regime", "london_breakout"})
 FILTER_ONLY: frozenset = frozenset({
     "momentum",
     "asia_range_fade",

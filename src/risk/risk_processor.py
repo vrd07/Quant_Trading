@@ -302,6 +302,20 @@ class RiskProcessor:
             tp_dist = risk * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
+        elif strategy_name == 'london_breakout':
+            # Structural stop precomputed by the strategy: a fraction of the
+            # Asia range behind entry. NO take-profit by design — research
+            # (research_usdjpy_lbo.py) shows a 1×range TP collapses the edge
+            # (OOS PF 1.44 → 1.04); the exit is the trailing-stop time stop.
+            # tp stays None, which also skips the RR-floor gate below.
+            precomputed_sl = signal.metadata.get('stop_price')
+            if precomputed_sl is not None:
+                sl = Decimal(str(precomputed_sl))
+            else:
+                atr = Decimal(str(signal.metadata.get('atr', entry * Decimal('0.002'))))
+                sl = entry - 2 * atr if side == OrderSide.BUY else entry + 2 * atr
+            tp = None
+
         else:
             # Fallback for unknown strategies (fail-safe ATR stop if available)
             self.logger.warning(f"RiskProcessor: Unknown strategy '{strategy_name}'. Using fallback.")

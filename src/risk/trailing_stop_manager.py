@@ -53,8 +53,23 @@ class TrailingStopManager:
         # Time-based stop (minutes) to close stuck positions
         self.time_stop_minutes: Optional[int] = trail_cfg.get('time_stop_minutes', None)
 
+        # Per-strategy overrides keyed by the strategy name carried in the
+        # MT5 comment ("strategy|orderId" → pos.metadata['strategy']):
+        #   risk.trailing_stop.strategy_overrides.<name>:
+        #     time_stop_minutes: 360    # overrides the global time stop
+        #     disable_be_lock: true     # skip breakeven/lock stages entirely
+        # Added for london_breakout: its validated exit is SL-or-time-stop
+        # with NO breakeven moves; kalman keeps the global behaviour.
+        self.strategy_overrides: Dict[str, dict] = trail_cfg.get('strategy_overrides', {}) or {}
+
         # Track upgrade stage per position ticket: 0=none, 1=breakeven, 2=locked
         self._stage: Dict[str, int] = {}
+
+        # First time we observed each ticket. Position objects are rebuilt
+        # from MT5 on every poll, so pos.opened_at is always "now" — useless
+        # for duration. First-seen is exact for positions opened while the
+        # bot runs (the only ones the bot should time-stop anyway).
+        self._first_seen: Dict[str, 'dt.datetime'] = {}
 
         # Track original entry and initial SL per ticket (to compute ATR distance)
         # Populated on first seen from position.metadata
@@ -127,6 +142,8 @@ class TrailingStopManager:
             return
 
         # Capture initial SL on first seen
+        if ticket_str not in self._first_seen:
+            self._first_seen[ticket_str] = dt.datetime.now(dt.timezone.utc)
         if ticket_str not in self._entry_price:
             self._entry_price[ticket_str] = entry
             self._initial_sl[ticket_str] = current_sl
@@ -166,27 +183,37 @@ class TrailingStopManager:
             )
             self._last_log_time[ticket_str] = time.time()
 
+        # ── Per-strategy overrides (strategy name from MT5 comment) ──
+        pos_strategy = pos.metadata.get('strategy', 'manual') if hasattr(pos, 'metadata') else 'manual'
+        overrides = self.strategy_overrides.get(pos_strategy, {})
+        time_stop_minutes = overrides.get('time_stop_minutes', self.time_stop_minutes)
+
         # ── Time-based stop logic ──
-        if self.time_stop_minutes is not None:
-            # Try to get open time from position
-            _opened_attr = getattr(pos, 'opened_at', None)
-            if _opened_attr is not None:
-                opened_at = _opened_attr
-            elif hasattr(pos, 'metadata') and pos.metadata.get('time_setup'):
+        if time_stop_minutes is not None:
+            # Prefer the EA's setup time when present; fall back to first-seen.
+            # NOTE: pos.opened_at is NOT usable — positions are re-parsed from
+            # MT5 every poll, so opened_at always reads as "just now".
+            if hasattr(pos, 'metadata') and pos.metadata.get('time_setup'):
                 opened_at = dt.datetime.fromtimestamp(pos.metadata['time_setup'], tz=dt.timezone.utc)
             else:
-                opened_at = None
+                opened_at = self._first_seen.get(ticket_str)
 
             if opened_at is not None:
                 duration_minutes = (dt.datetime.now(dt.timezone.utc) - opened_at).total_seconds() / 60.0
-                if duration_minutes >= self.time_stop_minutes:
+                if duration_minutes >= time_stop_minutes:
                     logger.info(
-                        f"[TimeStop] Closing ticket={ticket_str} after {duration_minutes:.1f} minutes "
-                        f"(limit: {self.time_stop_minutes}m), profit_dist={profit_distance:.2f}."
+                        f"[TimeStop] Closing ticket={ticket_str} ({pos_strategy}) after "
+                        f"{duration_minutes:.1f} minutes (limit: {time_stop_minutes}m), "
+                        f"profit_dist={profit_distance:.2f}."
                     )
                     # Use connector to close position
                     connector.close_position(position_id=ticket_str, symbol=getattr(pos.symbol, 'ticker', ''))
                     return
+
+        # Strategies whose validated exit is SL-or-time-stop only (e.g.
+        # london_breakout) skip every SL-tightening stage below.
+        if overrides.get('disable_be_lock', False):
+            return
 
         # ── Stage 3 (ML): Aggressive Trail on Exhaustion approach ──
         # If strategy metadata contains an ML exhaustion distance, auto-trail much tighter
@@ -259,3 +286,4 @@ class TrailingStopManager:
             self._entry_price.pop(t, None)
             self._initial_sl.pop(t, None)
             self._initial_atr_dist.pop(t, None)
+            self._first_seen.pop(t, None)
