@@ -256,6 +256,23 @@ if python3 -c "import tkinter" >/dev/null 2>&1; then
     echo "    Sentiment monitor PID: $SENTIMENT_MON_PID   (log: $SENTIMENT_MON_LOG)"
 fi
 
+# ── Volatility monitor (London/NY-open "Beast mode" scalp alerts) ──
+# Alert-only: never trades, never touches the risk engine. Reads the EA status
+# file passively (no bridge commands), so it cannot race the bot's 250ms loop.
+# Headless here — alerts arrive as macOS notifications + Telegram (if
+# configured) and are logged to data/volatility_alerts.jsonl. For the live
+# table, run scripts/volatility_monitor.py in a terminal instead.
+VOLMON_LOG="logs/volatility_monitor.log"
+echo "  ➜ Launching volatility monitor (Beast-mode session-open alerts, headless)..."
+if pkill -f "volatility_monitor.py" 2>/dev/null; then
+    echo "    (reaped previous volatility monitor)"
+fi
+nohup python3 scripts/volatility_monitor.py --headless --telegram \
+    --config "$CONFIG" \
+    >"$VOLMON_LOG" 2>&1 &
+VOLMON_PID=$!
+echo "    Volatility monitor PID: $VOLMON_PID   (log: $VOLMON_LOG)"
+
 # ── Telegram bot scheduler (optional — needs trading_bot/.env) ──
 TG_LOG="logs/telegram_bot.log"
 if [ -f "trading_bot/.env" ]; then
@@ -277,7 +294,7 @@ else
 fi
 
 # Make sure background helpers die when the main bot exits.
-trap 'kill ${MONITOR_PID:-} ${TG_PID:-} ${SENTIMENT_PID:-} ${SENTIMENT_MON_PID:-} 2>/dev/null || true' EXIT INT TERM
+trap 'kill ${MONITOR_PID:-} ${TG_PID:-} ${SENTIMENT_PID:-} ${SENTIMENT_MON_PID:-} ${VOLMON_PID:-} 2>/dev/null || true' EXIT INT TERM
 
 if [ "$FORCE" = true ]; then
     exec caffeinate -ims python3 src/main.py --env live --config "$CONFIG" --force-live
