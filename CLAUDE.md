@@ -31,6 +31,7 @@ python scripts/health_check.py --config config/config_live_5000.yaml  # Pre-flig
 python scripts/run_backtest.py --symbols XAUUSD --period 2y
 python scripts/view_journal.py                    # Trade history
 python scripts/mt5_dashboard.py                   # Live dashboard
+python scripts/volatility_monitor.py              # London/NY-open "Beast mode" scalp alerts (alert-only; auto-started headless by start_live.sh; EA WatchSymbols input feeds non-chart symbols)
 ```
 
 ## Architecture
