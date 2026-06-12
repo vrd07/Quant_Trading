@@ -230,7 +230,8 @@ def _make_dip_bars(n: int = 200, base_price: float = 2000.0, dip_atr: float = 4.
     return pd.DataFrame(data)
 
 
-def _make_trending_bars(n: int = 200, direction: float = 1.0, base_price: float = 2000.0):
+def _make_trending_bars(n: int = 200, direction: float = 1.0, base_price: float = 2000.0,
+                        freq: str = '1min'):
     """
     Create bars with a clear, sustained trend to trigger Kalman TREND mode.
     
@@ -243,7 +244,7 @@ def _make_trending_bars(n: int = 200, direction: float = 1.0, base_price: float 
         # Strong directional drift + small noise
         closes.append(closes[-1] + direction * 0.5 + np.random.randn() * 0.1)
     data = {
-        'timestamp': pd.date_range('2024-01-01', periods=n, freq='1min'),
+        'timestamp': pd.date_range('2024-01-01', periods=n, freq=freq),
         'open':  [c - 0.2 for c in closes],
         'high':  [c + 0.3 for c in closes],
         'low':   [c - 0.3 for c in closes],
@@ -315,5 +316,34 @@ class TestKalmanRegimeStrategy:
         if signal is not None:
             assert signal.side == OrderSide.SELL
             assert 'atr' in signal.metadata
+
+    def test_htf_sell_filter_handles_live_shaped_bars(self, symbol):
+        """Regression: live bars arrive with a RangeIndex and a `timestamp`
+        column (CandleStore.get_bars reset_index). The HTF SELL resample must
+        handle that shape — the old code raised on the RangeIndex and silently
+        vetoed every SELL as 'insufficient 1h bars'."""
+        bars = _make_trending_bars(n=400, direction=-1.0, freq='15min')
+        assert not isinstance(bars.index, pd.DatetimeIndex)  # live shape
+
+        gated = self._make_strategy(symbol, htf_sell_filter_enabled=True)
+        ungated = self._make_strategy(symbol)
+
+        gated_sells = 0
+        ungated_sells = 0
+        reasons = set()
+        for end in range(gated.min_bars, len(bars) + 1):
+            window = bars.iloc[:end].reset_index(drop=True)
+            if ungated.on_bar(window) is not None:
+                ungated_sells += 1
+            if gated.on_bar(window) is not None:
+                gated_sells += 1
+            reasons.add(getattr(gated, '_last_no_signal_reason', None))
+
+        # The resample must never fail or report insufficient HTF bars.
+        assert not any(r and 'HTF SELL filter' in r for r in reasons), reasons
+        # The downtrend data must actually produce SELLs...
+        assert ungated_sells > 0
+        # ...and a bearish HTF means the filter is transparent: same signals.
+        assert gated_sells == ungated_sells
 
 

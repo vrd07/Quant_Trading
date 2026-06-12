@@ -384,15 +384,22 @@ class KalmanRegimeStrategy(BaseStrategy):
         # a bullish HTF trend (the dominant XAU loss pattern).
         if self.htf_sell_filter_enabled and side == OrderSide.SELL:
             try:
-                htf = bars[['open', 'high', 'low', 'close', 'volume']].resample(
+                src = bars
+                if not isinstance(src.index, pd.DatetimeIndex):
+                    # Live bars carry timestamp as a column over a RangeIndex
+                    # (CandleStore.get_bars reset_index); resample needs a
+                    # DatetimeIndex.
+                    src = src.set_index(pd.DatetimeIndex(src['timestamp']))
+                htf = src[['open', 'high', 'low', 'close', 'volume']].resample(
                     self.htf_sell_resample_to
                 ).agg({
                     'open': 'first', 'high': 'max', 'low': 'min',
                     'close': 'last', 'volume': 'sum',
                 }).dropna()
-            except Exception:
-                htf = None
-            if htf is None or len(htf) < self.htf_sell_ema_period + 1:
+            except Exception as exc:
+                self._log_no_signal(f"HTF SELL filter: resample failed ({exc})")
+                return None
+            if len(htf) < self.htf_sell_ema_period + 1:
                 self._log_no_signal(
                     f"HTF SELL filter: insufficient {self.htf_sell_resample_to} bars"
                 )
