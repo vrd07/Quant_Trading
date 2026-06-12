@@ -45,8 +45,12 @@ input group "=== NOTIFICATIONS ==="
 input bool SendAlerts = true;                       // Enable alerts for important events
 input bool LogAllTrades = true;                     // Log every trade to Experts tab
 
+input group "=== STATUS QUOTE FEED ==="
+input string WatchSymbols = "";                     // Extra symbols in status quotes (comma-separated, e.g. "USDJPYs,GBPUSDs,AUDUSDs")
+
 //--- Global variables
 string lastCommandContent = "";
+string watchSymbols[];                              // parsed WatchSymbols, Market-Watch-selected in OnInit
 double dailyStartingBalance = 0;
 int dailyTradeCount = 0;
 datetime lastResetDate = 0;
@@ -89,6 +93,22 @@ int OnInit()
    
    // Clean up old files
    FileDelete(ResponseFile);
+
+   // Parse the status-quote watch list and force Market Watch subscription so
+   // SymbolInfoTick() returns data even with no chart/position on the symbol.
+   if(WatchSymbols != "")
+   {
+      int n = StringSplit(WatchSymbols, ',', watchSymbols);
+      for(int i = 0; i < n; i++)
+      {
+         StringTrimLeft(watchSymbols[i]);
+         StringTrimRight(watchSymbols[i]);
+         if(watchSymbols[i] != "" && !SymbolSelect(watchSymbols[i], true))
+            Print("WARNING: WatchSymbols entry not available: ", watchSymbols[i]);
+      }
+      Print("Status quote feed: ", n, " watch symbols (", WatchSymbols, ")");
+   }
+
    
    // Initialize daily counters
    dailyStartingBalance = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -446,10 +466,12 @@ void WriteStatus()
    json += "\"total_exposure\":" + DoubleToString(GetTotalExposure(), 2) + ",";
    json += "\"server_time\":\"" + TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS) + "\",";
    
-   // Jeff Dean: only emit quotes for symbols with open positions or the chart symbol.
-   // Iterating all 200+ Market Watch symbols wastes I/O and bloats the status file.
+   // Jeff Dean: only emit quotes for the chart symbol, open-position symbols,
+   // and the explicit WatchSymbols list (volatility monitor feed). Iterating
+   // all 200+ Market Watch symbols wastes I/O and bloats the status file.
    json += "\"quotes\":{";
    int added = 0;
+   string addedKeys = "|" + _Symbol + "|";
 
    // Always include the chart symbol
    MqlTick chartTick;
@@ -473,7 +495,7 @@ void WriteStatus()
       ulong posTicket = PositionGetTicket(i);
       if(posTicket <= 0) continue;
       string posSymbol = PositionGetString(POSITION_SYMBOL);
-      if(posSymbol == _Symbol) continue;  // already added
+      if(StringFind(addedKeys, "|" + posSymbol + "|") >= 0) continue;  // already added
 
       MqlTick posTick;
       if(SymbolInfoTick(posSymbol, posTick))
@@ -488,6 +510,30 @@ void WriteStatus()
          json += "\"time\":" + IntegerToString(posTick.time);
          json += "}";
          added++;
+         addedKeys += posSymbol + "|";
+      }
+   }
+
+   // Watch-list symbols (deduplicated against chart + position symbols)
+   for(int w = 0; w < ArraySize(watchSymbols); w++)
+   {
+      string ws = watchSymbols[w];
+      if(ws == "" || StringFind(addedKeys, "|" + ws + "|") >= 0) continue;
+
+      MqlTick wTick;
+      if(SymbolInfoTick(ws, wTick))
+      {
+         int digits = (int)SymbolInfoInteger(ws, SYMBOL_DIGITS);
+         if(added > 0) json += ",";
+         json += "\"" + ws + "\":{";
+         json += "\"bid\":" + DoubleToString(wTick.bid, digits) + ",";
+         json += "\"ask\":" + DoubleToString(wTick.ask, digits) + ",";
+         json += "\"volume\":" + IntegerToString(wTick.volume) + ",";
+         json += "\"volume_real\":" + DoubleToString(wTick.volume_real, 2) + ",";
+         json += "\"time\":" + IntegerToString(wTick.time);
+         json += "}";
+         added++;
+         addedKeys += ws + "|";
       }
    }
    json += "}";
