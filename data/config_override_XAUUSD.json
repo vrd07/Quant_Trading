@@ -1,7 +1,7 @@
 {
   "symbol": "XAUUSD",
-  "generated_at": "2026-06-12T19:00:06.311111+00:00",
-  "valid_until": "2026-06-13T19:00:06.311111+00:00",
+  "generated_at": "2026-06-13T19:00:12.624401+00:00",
+  "valid_until": "2026-06-14T19:00:12.624401+00:00",
   "regime": "RANGE",
   "confidence": 0.6476,
   "classifier": "RandomForest+Markov (n=341 samples)",
@@ -18,13 +18,13 @@
   },
   "diagnostics": {
     "adx_14": 36.665035,
-    "atr_pct": 0.025233,
-    "bb_width_ratio": 1.613903,
-    "close_ema20_pct": -0.035846,
-    "momentum_1d": -0.000519,
-    "momentum_5d": -0.029648,
+    "atr_pct": 0.025231,
+    "bb_width_ratio": 1.613608,
+    "close_ema20_pct": -0.035764,
+    "momentum_1d": -0.000425,
+    "momentum_5d": -0.029557,
     "range_atr_ratio": 0.614313,
-    "vol_ratio": 0.673049,
+    "vol_ratio": 0.761384,
     "park_vol_zscore": 2.247887
   },
   "strategy_weights": {
