@@ -55,6 +55,17 @@ class MT5Connector:
             # Broker TZ offset: broker_time - real_utc. Detected on connect().
             # Default 0 so mis-bootstrap behavior matches "assume broker is UTC".
             self.broker_offset: timedelta = timedelta(0)
+            # ── Quote-staleness guard ────────────────────────────────────────
+            # The bridge stamps every tick with now(), so a FROZEN MT5 feed
+            # (bid/ask unchanged for minutes — terminal backgrounded, sleep, or
+            # broker quote-stream drop) still looks "fresh" downstream. Bars then
+            # build flat O=H=L=C and NaN-out RSI/ADX. Track when each symbol's
+            # quote last *changed* so we can flag a frozen feed.
+            self.stale_quote_seconds: float = 120.0  # flag after this long unchanged
+            self._last_quote: Dict[str, tuple] = {}          # symbol -> (bid, ask)
+            self._last_quote_change: Dict[str, float] = {}   # symbol -> monotonic ts
+            self._stale_symbols: set = set()
+            self._last_stale_warn: Dict[str, float] = {}     # symbol -> monotonic ts
             logger.info("MT5Connector initialized successfully")
             
         except Exception as e:
@@ -541,12 +552,15 @@ class MT5Connector:
                         break
             
             if quote:
+                bid = quote.get('bid', 0)
+                ask = quote.get('ask', 0)
+                self._check_quote_staleness(symbol, bid, ask)
                 tick = Tick(
                     symbol=self._get_or_create_symbol(symbol),
                     timestamp=datetime.now(timezone.utc),
-                    bid=Decimal(str(quote.get('bid', 0))),
-                    ask=Decimal(str(quote.get('ask', 0))),
-                    last=Decimal(str((quote.get('bid', 0) + quote.get('ask', 0)) / 2)),
+                    bid=Decimal(str(bid)),
+                    ask=Decimal(str(ask)),
+                    last=Decimal(str((bid + ask) / 2)),
                     volume=Decimal("0")
                 )
                 logger.debug("Tick (Multi): %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
@@ -555,12 +569,15 @@ class MT5Connector:
             # 2. Fallback to single symbol check (Backward Compatibility)
             status_sym = status.get('symbol', '')
             if status_sym == symbol or status_sym.startswith(symbol) or symbol.startswith(status_sym):
+                bid = status.get('bid', 0)
+                ask = status.get('ask', 0)
+                self._check_quote_staleness(symbol, bid, ask)
                 tick = Tick(
                     symbol=self._get_or_create_symbol(symbol),
                     timestamp=datetime.now(timezone.utc),
-                    bid=Decimal(str(status.get('bid', 0))),
-                    ask=Decimal(str(status.get('ask', 0))),
-                    last=Decimal(str((status.get('bid', 0) + status.get('ask', 0)) / 2)),
+                    bid=Decimal(str(bid)),
+                    ask=Decimal(str(ask)),
+                    last=Decimal(str((bid + ask) / 2)),
                     volume=Decimal("0")
                 )
                 logger.debug("Tick (Single): %s bid=%s ask=%s", symbol, tick.bid, tick.ask)
@@ -571,7 +588,53 @@ class MT5Connector:
         except Exception as e:
             logger.error("Failed to get tick: %s", e, exc_info=True)
             return None
-    
+
+    def _check_quote_staleness(self, symbol: str, bid, ask) -> bool:
+        """Track quote changes and flag a frozen feed.
+
+        Returns True if the symbol's quote has been unchanged for at least
+        ``stale_quote_seconds``. Emits a rate-limited WARNING on entry into the
+        stale state and an INFO when the feed resumes. Advisory only — the tick
+        is still returned; callers can gate on :meth:`is_quote_stale`.
+        """
+        now = time.monotonic()
+        key = (bid, ask)
+        prev = self._last_quote.get(symbol)
+
+        if prev != key:
+            # Quote moved (or first sighting) -> feed is live.
+            self._last_quote[symbol] = key
+            self._last_quote_change[symbol] = now
+            if symbol in self._stale_symbols:
+                self._stale_symbols.discard(symbol)
+                logger.info("Quote feed for %s resumed (was frozen)", symbol)
+            return False
+
+        # Quote unchanged since the last tick.
+        frozen_for = now - self._last_quote_change.get(symbol, now)
+        if frozen_for >= self.stale_quote_seconds:
+            last_warn = self._last_stale_warn.get(symbol, 0.0)
+            if now - last_warn >= self.stale_quote_seconds:
+                logger.warning(
+                    "Quote feed for %s appears FROZEN: bid/ask unchanged for "
+                    "%.0fs (bid=%s ask=%s). Bars from this feed are flat and may "
+                    "NaN-out indicators — strategy evaluation should be skipped.",
+                    symbol, frozen_for, bid, ask,
+                )
+                self._last_stale_warn[symbol] = now
+            self._stale_symbols.add(symbol)
+            return True
+        return False
+
+    def is_quote_stale(self, symbol: str) -> bool:
+        """True if ``symbol``'s quote feed is currently flagged frozen.
+
+        Set by :meth:`get_current_tick` via :meth:`_check_quote_staleness`.
+        Callers (e.g. the main loop) can use this to skip building bars or
+        evaluating strategies on a dead feed.
+        """
+        return symbol in self._stale_symbols
+
     def _convert_mt5_position(self, mt5_pos: Dict) -> Position:
         """Convert MT5 position dict to Position object."""
         symbol = self._get_or_create_symbol(mt5_pos['symbol'])
