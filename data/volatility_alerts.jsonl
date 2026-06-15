@@ -9,3 +9,4 @@
 {"ts": "2026-06-15T12:31:05.187570+00:00", "symbol": "GBPUSD", "direction": "BUY", "session": "NY_OPEN", "price": 1.34247, "spread": 0.0, "range_ratio": 3.0697674418608973, "momentum_atr": 3.0508474576274467, "spread_frac": 0.0}
 {"ts": "2026-06-15T12:31:06.164859+00:00", "symbol": "AUDUSD", "direction": "BUY", "session": "NY_OPEN", "price": 0.70689, "spread": 0.0, "range_ratio": 2.357142857141951, "momentum_atr": 2.8873239436614173, "spread_frac": 0.0}
 {"ts": "2026-06-15T12:31:07.113644+00:00", "symbol": "XAUUSD", "direction": "BUY", "session": "NY_OPEN", "price": 4339.875, "spread": 0.12999999999919964, "range_ratio": 3.373333333332994, "momentum_atr": 1.8805372963703173, "spread_frac": 0.07430694484092366}
+{"ts": "2026-06-15T12:51:02.239895+00:00", "symbol": "XAUUSD", "direction": "BUY", "session": "NY_OPEN", "price": 4349.195, "spread": 0.13000000000010914, "range_ratio": 2.1533742331300254, "momentum_atr": 1.8255683291558062, "spread_frac": 0.06742155761091609}
