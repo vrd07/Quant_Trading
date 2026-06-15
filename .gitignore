@@ -98,6 +98,9 @@ config/runtime_overrides.yaml
 data/config_override*.json
 data/config_override*.json.*
 
+# Runtime volatility-monitor alerts (regenerated continuously, never needed in the repo)
+data/volatility_alerts.jsonl
+
 # Strategy Specific Backtest Outputs
 *continuation_breakout*.csv
 *continuation_breakout*.txt
