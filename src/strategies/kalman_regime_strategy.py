@@ -80,6 +80,14 @@ class KalmanRegimeStrategy(BaseStrategy):
         # Long-only mode
         self.long_only = config.get('long_only', False)
 
+        # Hard symbol gate: kalman is validated/tuned on GOLD ONLY (XAUUSD).
+        # It is a PF 0.98 loser on GBPUSD and breaks DD caps on crypto — see
+        # project_gbpjpy_kalman_backtest / project_crypto_no_edge memories.
+        # Prefix match so the broker's suffixed ticker (XAUUSDs) also passes.
+        self.allowed_symbol_prefixes = tuple(
+            s.upper() for s in config.get('allowed_symbols', ['XAUUSD'])
+        )
+
         # News filter
         self.news_filter_enabled = config.get('news_filter', False)
         self._news_events = None
@@ -172,6 +180,13 @@ class KalmanRegimeStrategy(BaseStrategy):
     def on_bar(self, bars: pd.DataFrame) -> Optional[Signal]:
         """Generate regime-switching signal with v2 filters."""
         if not self.is_enabled():
+            return None
+
+        # Hard symbol gate — kalman trades GOLD ONLY (validated on XAUUSD).
+        if not self.symbol.ticker.upper().startswith(self.allowed_symbol_prefixes):
+            self._log_no_signal(
+                f"Symbol {self.symbol.ticker} not in allowed set {self.allowed_symbol_prefixes} — kalman is gold-only"
+            )
             return None
 
         if len(bars) < self.min_bars:
