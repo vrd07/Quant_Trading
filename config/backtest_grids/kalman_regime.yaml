@@ -1,48 +1,48 @@
 strategy: kalman_regime
 file: src/strategies/kalman_regime_strategy.py
-description: v3 long-only deep-dip mean reversion off a 2-state Kalman fair-value level. 15m XAUUSD.
+description: v2 two-sided trend/range regime-switching Kalman. 15m XAUUSD. Re-tune 2026-06-19.
 notes: |
-  v3 rewrite (2026-06). Signal research (IC + quintile forward-return study, IS+OOS)
-  showed the Kalman's only robust XAU 15m edge is LONG-ONLY deep-dip reversion: buy
-  when price is >= dip_entry_atr ATR BELOW the filtered level, inside a higher-TF
-  uptrend. Wide stops are essential (dip can deepen before reverting) — tight SL
-  collapses OOS. Tier 1 sweeps the entry/filter shape (dip threshold, HTF gate, kalman
-  responsiveness); tier 2 sweeps the ATR stops + cooldown (tp_atr_multiplier is LIVE,
-  floored by risk.kalman_min_tp_rr). Best validated cell: dip2.5 / sl3.0 / tp3.0
-  (~PF 1.3 IS, 1.34 OOS, ~60 trades/yr) — modest and low-frequency.
+  v2 grid (replaces the stale v3 deep-dip grid — v3 keys like dip_entry_atr are NOT
+  read by the live v2 strategy). Baseline live params (entry_threshold 2.0, trend_adx_min
+  17, sl3.0/tp4.0, htf_sell on) backtest NEGATIVE over the full 2025-01..2026-06 sample:
+  PF 0.68 raw / 0.80 strict+enforce, WR 40-44%, avg win ~= avg loss. The problem is entry
+  quality (coin-flip WR with no payoff asymmetry), so tier1 sweeps the entry-selectivity
+  knobs that actually drive WR; tier2 sweeps the ATR stops / payoff; tier3 the directional
+  + session filters. Run WITHOUT --enforce-risk first (the $1k daily-budget cap rejects
+  almost every trade and masks signal quality); validate the winner under --enforce-risk
+  at live equity afterward.
 
 anchor:
-  process_scale: 0.001
-  measurement_scale: 1.0
-  dip_entry_atr: 2.5
-  dip_strength_scale: 3.0
-  require_htf_uptrend: true
-  htf_resample_to: 4h
-  htf_ema_period: 50
+  entry_threshold: 2.0
+  trend_adx_min: 17
+  min_signal_strength: 0.5
+  min_signal_strength_sell: 0.75
   sl_atr_multiplier: 3.0
-  tp_atr_multiplier: 3.0
+  tp_atr_multiplier: 4.0
   cooldown_bars: 2
-  high_confidence_threshold: 90.0
+  htf_sell_filter_enabled: true
+  htf_sell_ema_period: 50
+  session_filter_enabled: true
 
 tier1_entry:
-  dip_entry_atr: [2.0, 2.3, 2.5, 2.8, 3.0]      # 5 — oversold trigger depth
-  process_scale: [0.0005, 0.001, 0.002]          # 3 — filter responsiveness (Q/R)
-  htf_ema_period: [30, 50, 100]                  # 3 — HTF uptrend gate sensitivity
-  # combos = 5*3*3 = 45
+  trend_adx_min: [17, 22, 26, 30]          # 4 — ADX gate for trend mode (raise selectivity)
+  entry_threshold: [2.0, 2.5, 3.0]          # 3 — OU z-score extreme for range mode
+  min_signal_strength: [0.5, 0.6, 0.7]      # 3 — overall strength floor
+  # combos = 4*3*3 = 36
 
 tier2_risk:
-  sl_atr_multiplier: [2.5, 3.0, 3.5, 4.0]         # wide stops essential
-  tp_atr_multiplier: [2.5, 3.0, 3.5, 4.0]         # LIVE: drives TP, floored by risk.kalman_min_tp_rr
-  cooldown_bars: [1, 2, 4, 6]
-  # one-dim sweep total = 4 + 4 + 4 = 12 runs
+  sl_atr_multiplier: [2.0, 2.5, 3.0, 3.5]   # tighter vs wider stops
+  tp_atr_multiplier: [3.0, 4.0, 5.0, 6.0]   # payoff asymmetry (LIVE: floored by risk.kalman_min_tp_rr)
+  cooldown_bars: [2, 4, 8]                  # re-entry throttle (curbs chop over-trading)
+  # one-dim sweep total = 4 + 4 + 3 = 11 runs
 
 tier3_filters:
-  require_htf_uptrend: [true, false]
-  htf_resample_to: ['1h', '4h']
+  htf_sell_filter_enabled: [true, false]
+  min_signal_strength_sell: [0.6, 0.75, 0.9]
   session_filter_enabled: [true, false]
-  # combos = 2*2*2 = 8
+  # combos = 2*3*2 = 12
 
 max_combos:
-  tier1: 45
-  tier2: 15
-  tier3: 8
+  tier1: 36
+  tier2: 11
+  tier3: 12

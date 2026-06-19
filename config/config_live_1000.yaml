@@ -147,21 +147,28 @@ risk:
   take_profit_usd: 0
 
   # Per-strategy risk override (added 2026-05-06).
-  # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
-  # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
-  # needs ~5% of balance per trade to express its edge; clipping it back to
-  # the operator cap silently rejects the high-vol kalman trades.
-  # Other strategies still follow the global cap.
+  # NOTE (2026-06-20): this override is effectively INERT while the XAUUSD lot
+  # is pinned (symbols.XAUUSD.min_lot == max_lot == 0.01, runtime_setup-fixed):
+  # the sizer honors the fixed lot verbatim and never sizes off this cap. It
+  # only feeds risk_engine CHECK 16, which itself bypasses for min_lot orders.
+  # Kept for when a non-pinned lot is used. Per-trade $ risk is actually governed
+  # by the budget-SL (risk.risk_per_trade_pct × balance ≈ 0.5%).
   strategy_risk_overrides:
     kalman_regime:
       risk_per_trade_usd: 50
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
-  absolute_max_loss_usd: 25       # Daily loss limit ($1k × 2.5%)
-  max_drawdown_usd: 60            # Overall drawdown limit ($1k × ~6%)
-  max_daily_profit_usd: 30        # Stop trading for the day once $30 profit hit
+  # Scaled 2026-06-20 from the original $1k seeds to the live ~$4.7k equity so
+  # the dollar caps agree with the percentage caps (max_daily_loss_pct 0.025 /
+  # max_drawdown_pct 0.07). The frozen $1k seeds ($25/$60) were silently
+  # over-rejecting backtest trades: one trade's worst case (~0.5% ≈ $23.5) had
+  # grown past the frozen $21.25 daily gate. runtime_setup overwrites these at
+  # live launch from operator input; these are the committed/backtest defaults.
+  absolute_max_loss_usd: 117      # Daily loss limit (~2.5% of $4.7k)
+  max_drawdown_usd: 329           # Overall drawdown limit (~7% of $4.7k)
+  max_daily_profit_usd: 140       # Stop trading for the day once daily profit hit
   daily_loss_budget_safety_pct: 0.85  # Pre-trade budget gate: reject if worst-case SL hit
-                                      # would push daily loss past 85% of $25 = $21.25
+                                      # would push daily loss past 85% of $117 ≈ $99
 
   # ── Kalman TP sizing (2026-05-27) ────────────────────────────────
   # Kalman SL stays user-set (strategies.kalman_regime.sl_atr_multiplier);
@@ -576,7 +583,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-19_news.csv
+    csv_path: news/2026-06-20_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
