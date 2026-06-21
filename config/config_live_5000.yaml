@@ -135,6 +135,9 @@ symbols:
     max_spread: 0.05          # 5 cents max spread threshold
 
 risk:
+  decay_floor:
+    enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
+    weights_file: data/strategy_risk_weights.json
   # $5,000 Account Risk Parameters
   max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
   max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30
@@ -613,7 +616,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-21_news.csv
+    csv_path: news/2026-06-22_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

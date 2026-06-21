@@ -80,6 +80,9 @@ symbols:
     commission_per_lot: 0.0
 
 risk:
+  decay_floor:
+    enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
+    weights_file: data/strategy_risk_weights.json
   trailing_stop:
     # Per-strategy exits (strategy name from the MT5 order comment).
     # london_breakout's validated exit is SL-or-time-stop, no BE/lock moves.
@@ -414,7 +417,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-21_news.csv
+    csv_path: news/2026-06-22_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
