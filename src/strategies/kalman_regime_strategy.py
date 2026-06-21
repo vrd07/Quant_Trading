@@ -32,6 +32,7 @@ Risk Management:
 """
 
 from typing import Optional, Dict, List
+import numpy as np
 import pandas as pd
 
 from .base_strategy import BaseStrategy
@@ -121,6 +122,31 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.range_rsi_buy = config.get('range_rsi_buy', 42.0)
         self.range_rsi_sell = config.get('range_rsi_sell', 58.0)
 
+        # ── RANGE structural confirmation (2026-06-21) ─────────────────────
+        # Extra layers so RANGE fires only on a TRUE mean-reversion setup, not a
+        # slow trend mislabelled as range (RANGE was the bleed: PF 0.83). All
+        # default OFF (behaviour preserved); walk-forward before enabling. See
+        # scripts/validate_kalman_range.py / reports/kalman_range_smarter.md.
+        # Layer 1 — true range-bound test: last N closes within ±mult*ATR(period).
+        self.range_channel_enabled = config.get('range_channel_enabled', False)
+        self.range_channel_bars = int(config.get('range_channel_bars', 20))
+        self.range_channel_atr_period = int(config.get('range_channel_atr_period', 50))
+        self.range_channel_atr_mult = float(config.get('range_channel_atr_mult', 1.5))
+        # Layer 2 — momentum exhaustion: MACD-hist divergence agreeing w/ the fade.
+        self.range_divergence_enabled = config.get('range_divergence_enabled', False)
+        self.range_divergence_lookback = int(config.get('range_divergence_lookback', 60))
+        # Layer 3 — volume structure: price near a significant volume NODE/shelf of
+        # the last N bars. NB: literal "near the POC (centre)" would reject the
+        # z-score extreme a fade enters at, so this checks proximity to any
+        # high-volume shelf instead. ⚠️ gold volume is TICK volume (unreliable).
+        self.range_poc_enabled = config.get('range_poc_enabled', False)
+        self.range_poc_bars = int(config.get('range_poc_bars', 50))
+        self.range_poc_bins = int(config.get('range_poc_bins', 24))
+        self.range_poc_atr_mult = float(config.get('range_poc_atr_mult', 1.0))
+        # Layer 4 — time-stop (bars): emitted in signal metadata for the exit
+        # layer; 0 = off. 8 bars on 15m ≈ 2h.
+        self.range_time_stop_bars = int(config.get('range_time_stop_bars', 0))
+
         # Sell-side: require higher signal strength for shorts (gold upward bias)
         self.min_signal_strength_sell = config.get('min_signal_strength_sell', None)
 
@@ -133,6 +159,11 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.htf_sell_filter_enabled = config.get('htf_sell_filter_enabled', False)
         self.htf_sell_resample_to = str(config.get('htf_sell_resample_to', '1h'))
         self.htf_sell_ema_period = int(config.get('htf_sell_ema_period', 50))
+        # Symmetric HTF directional gate for BUY: when enabled, BUY signals require
+        # the higher-TF close to sit ABOVE the same EMA — i.e. don't fight a bearish
+        # HTF trend. Mirrors the SELL gate; reuses htf_sell_resample_to / ema_period.
+        # 2026-06-21 situation-map: counter-HTF-trend BUYs were the bleed (PF 0.76).
+        self.htf_buy_filter_enabled = config.get('htf_buy_filter_enabled', False)
 
         # Confidence threshold (0-100). Signals with confidence >= threshold may stack
         # up to risk.max_positions; below the threshold the executor allows only one
@@ -142,13 +173,22 @@ class KalmanRegimeStrategy(BaseStrategy):
         # Minimum data required
         self.min_bars = max(self.rv_ma_window, 100) + self.rv_window + 10
 
-        # Bump min_bars when HTF SELL filter is on so the resample has enough history.
-        if self.htf_sell_filter_enabled:
+        # Bump min_bars when either HTF filter is on so the resample has enough history.
+        if self.htf_sell_filter_enabled or self.htf_buy_filter_enabled:
             bars_per_htf = {
                 '15min': 1, '15m': 1, '30min': 2, '30m': 2,
                 '1h': 4, '1H': 4, '2h': 8, '2H': 8, '4h': 16, '4H': 16,
             }.get(self.htf_sell_resample_to, 4)
             self.min_bars = max(self.min_bars, (self.htf_sell_ema_period + 10) * bars_per_htf)
+
+        # Bump min_bars for the RANGE structural layers' lookbacks.
+        if self.range_channel_enabled:
+            self.min_bars = max(
+                self.min_bars, self.range_channel_atr_period + self.range_channel_bars + 5)
+        if self.range_poc_enabled:
+            self.min_bars = max(self.min_bars, self.range_poc_bars + 5)
+        if self.range_divergence_enabled:
+            self.min_bars = max(self.min_bars, self.range_divergence_lookback + 5)
 
     def get_name(self) -> str:
         return "kalman_regime"
@@ -176,6 +216,102 @@ class KalmanRegimeStrategy(BaseStrategy):
                     return True
 
         return False
+
+    def _htf_close_ema(self, bars: pd.DataFrame):
+        """Resample to the HTF and return (htf_close, htf_ema) or None.
+
+        Shared by both the SELL and BUY directional gates. Returns None (and logs)
+        if the resample fails or there is insufficient HTF history.
+        """
+        try:
+            src = bars
+            if not isinstance(src.index, pd.DatetimeIndex):
+                # Live bars carry timestamp as a column over a RangeIndex
+                # (CandleStore.get_bars reset_index); resample needs a DatetimeIndex.
+                src = src.set_index(pd.DatetimeIndex(src['timestamp']))
+            htf = src[['open', 'high', 'low', 'close', 'volume']].resample(
+                self.htf_sell_resample_to
+            ).agg({
+                'open': 'first', 'high': 'max', 'low': 'min',
+                'close': 'last', 'volume': 'sum',
+            }).dropna()
+        except Exception as exc:
+            self._log_no_signal(f"HTF filter: resample failed ({exc})")
+            return None
+        if len(htf) < self.htf_sell_ema_period + 1:
+            self._log_no_signal(
+                f"HTF filter: insufficient {self.htf_sell_resample_to} bars")
+            return None
+        htf_close = float(htf['close'].iloc[-1])
+        htf_ema = float(htf['close'].ewm(
+            span=self.htf_sell_ema_period, adjust=False).mean().iloc[-1])
+        return htf_close, htf_ema
+
+    @staticmethod
+    def _volume_nodes(bars: pd.DataFrame, n_bars: int, bins: int):
+        """Volume-profile nodes over the last n_bars: (node_prices, poc_price).
+
+        Bins typical-price by tick volume; node_prices = bin centres whose volume
+        is a 'shelf' (>= mean + 0.5·std of bin volumes); poc = the max-volume bin.
+        Returns (None, None) if the profile can't be built. ⚠️ tick volume on gold.
+        """
+        seg = bars.iloc[-n_bars:]
+        lo, hi = float(seg['low'].min()), float(seg['high'].max())
+        if not (hi > lo) or 'volume' not in seg:
+            return None, None
+        vol = seg['volume'].to_numpy(dtype=float)
+        if vol.sum() <= 0:
+            return None, None
+        tp = ((seg['high'] + seg['low'] + seg['close']) / 3.0).to_numpy(dtype=float)
+        edges = np.linspace(lo, hi, bins + 1)
+        idx = np.clip(np.digitize(tp, edges) - 1, 0, bins - 1)
+        vbin = np.zeros(bins)
+        np.add.at(vbin, idx, vol)
+        centres = (edges[:-1] + edges[1:]) / 2.0
+        poc = float(centres[int(vbin.argmax())])
+        thresh = vbin.mean() + 0.5 * vbin.std()
+        nodes = centres[vbin >= thresh]
+        return nodes, poc
+
+    def _range_structural_ok(self, bars: pd.DataFrame, side, current_atr: float):
+        """Apply the enabled RANGE confirmation layers. Returns (ok, reason)."""
+        close = bars['close']
+        cur = float(close.iloc[-1])
+
+        # Layer 1 — true range-bound test (reject slow trends called 'range').
+        if self.range_channel_enabled:
+            atr_ch = Indicators.atr(bars, period=self.range_channel_atr_period)
+            atr_ch_val = float(atr_ch.iloc[-1])
+            if atr_ch_val <= 0 or pd.isna(atr_ch_val):
+                return False, "RANGE: channel ATR unavailable"
+            win = close.iloc[-self.range_channel_bars:]
+            center = float(win.mean())
+            max_dev = float((win - center).abs().max())
+            if max_dev > self.range_channel_atr_mult * atr_ch_val:
+                return False, (
+                    f"RANGE: not range-bound (dev {max_dev:.2f} > "
+                    f"{self.range_channel_atr_mult}·ATR{self.range_channel_atr_period} "
+                    f"{atr_ch_val:.2f}) — looks like a trend")
+
+        # Layer 2 — momentum exhaustion (divergence agreeing with the fade).
+        if self.range_divergence_enabled:
+            div = Indicators.detect_divergence(bars, lookback=self.range_divergence_lookback)
+            want = 'bullish' if side == OrderSide.BUY else 'bearish'
+            if div.kind != want:
+                return False, f"RANGE: no {want} exhaustion divergence (got {div.kind})"
+
+        # Layer 3 — volume structure (near a high-volume shelf, not in a vacuum).
+        if self.range_poc_enabled:
+            nodes, poc = self._volume_nodes(bars, self.range_poc_bars, self.range_poc_bins)
+            if nodes is None or len(nodes) == 0:
+                return False, "RANGE: volume profile unavailable"
+            nearest = float(np.min(np.abs(nodes - cur)))
+            if nearest > self.range_poc_atr_mult * current_atr:
+                return False, (
+                    f"RANGE: price {cur:.2f} not near a volume shelf "
+                    f"(nearest {nearest:.2f} > {self.range_poc_atr_mult}·ATR)")
+
+        return True, ""
 
     def on_bar(self, bars: pd.DataFrame) -> Optional[Signal]:
         """Generate regime-switching signal with v2 filters."""
@@ -380,6 +516,13 @@ class KalmanRegimeStrategy(BaseStrategy):
                 side = OrderSide.SELL
                 strength = min(abs(current_z) / (self.entry_threshold * 1.5), 1.0)
 
+            # Structural confirmation layers (true range-bound / exhaustion / volume).
+            if side is not None:
+                ok, reason = self._range_structural_ok(bars, side, current_atr)
+                if not ok:
+                    self._log_no_signal(reason)
+                    return None
+
         if side is None:
             mode_str = "TREND" if is_trend else "RANGE"
             self._log_no_signal(
@@ -394,38 +537,27 @@ class KalmanRegimeStrategy(BaseStrategy):
             self._log_no_signal("Long-only mode: SELL signal suppressed")
             return None
 
-        # HTF directional gate for SELL only — only fire SELL when higher-TF
-        # close is below EMA(htf_sell_ema_period). Suppresses shorts that fight
-        # a bullish HTF trend (the dominant XAU loss pattern).
-        if self.htf_sell_filter_enabled and side == OrderSide.SELL:
-            try:
-                src = bars
-                if not isinstance(src.index, pd.DatetimeIndex):
-                    # Live bars carry timestamp as a column over a RangeIndex
-                    # (CandleStore.get_bars reset_index); resample needs a
-                    # DatetimeIndex.
-                    src = src.set_index(pd.DatetimeIndex(src['timestamp']))
-                htf = src[['open', 'high', 'low', 'close', 'volume']].resample(
-                    self.htf_sell_resample_to
-                ).agg({
-                    'open': 'first', 'high': 'max', 'low': 'min',
-                    'close': 'last', 'volume': 'sum',
-                }).dropna()
-            except Exception as exc:
-                self._log_no_signal(f"HTF SELL filter: resample failed ({exc})")
-                return None
-            if len(htf) < self.htf_sell_ema_period + 1:
-                self._log_no_signal(
-                    f"HTF SELL filter: insufficient {self.htf_sell_resample_to} bars"
-                )
-                return None
-            htf_close = float(htf['close'].iloc[-1])
-            htf_ema = float(htf['close'].ewm(span=self.htf_sell_ema_period, adjust=False).mean().iloc[-1])
-            if htf_close >= htf_ema:
+        # HTF directional gate — suppress trades that fight the higher-TF EMA trend.
+        # SELL must sit BELOW the HTF EMA (bearish HTF); BUY must sit ABOVE it
+        # (bullish HTF). SELL gate curbs gold's structural bullish-drift bleed; the
+        # symmetric BUY gate stops counter-trend longs (2026-06-21 situation-map:
+        # counter-HTF-trend trades PF 0.76, the largest fixable loss bucket).
+        gate_sell = self.htf_sell_filter_enabled and side == OrderSide.SELL
+        gate_buy = self.htf_buy_filter_enabled and side == OrderSide.BUY
+        if gate_sell or gate_buy:
+            htf = self._htf_close_ema(bars)
+            if htf is None:
+                return None  # helper already logged the reason
+            htf_close, htf_ema = htf
+            if gate_sell and htf_close >= htf_ema:
                 self._log_no_signal(
                     f"HTF SELL filter: {self.htf_sell_resample_to} close {htf_close:.2f} "
-                    f">= EMA{self.htf_sell_ema_period} {htf_ema:.2f} — bullish HTF"
-                )
+                    f">= EMA{self.htf_sell_ema_period} {htf_ema:.2f} — bullish HTF")
+                return None
+            if gate_buy and htf_close <= htf_ema:
+                self._log_no_signal(
+                    f"HTF BUY filter: {self.htf_sell_resample_to} close {htf_close:.2f} "
+                    f"<= EMA{self.htf_sell_ema_period} {htf_ema:.2f} — bearish HTF")
                 return None
 
         # Minimum signal strength gate (different threshold for SELL if configured)
@@ -458,5 +590,7 @@ class KalmanRegimeStrategy(BaseStrategy):
                 'atr': current_atr,
                 'confidence': confidence,
                 'high_confidence_threshold': self.high_confidence_threshold,
+                # Mode-specific time-stop (bars) for the exit layer; 0 = off.
+                'time_stop_bars': (self.range_time_stop_bars if not is_trend else 0),
             }
         )
