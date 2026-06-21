@@ -156,7 +156,7 @@ risk:
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
     kalman_regime:
-      risk_per_trade_usd: 50
+      risk_per_trade_usd: 33   # 2026-06-21: ×0.66 (SL-22 equiv) — shrinks per-trade $ loss to fit DD inside 7% cap
     london_breakout:
       risk_per_trade_usd: 50   # matches the validated backtest sizing (1% of $5k)
     monday_drift:
@@ -613,7 +613,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-20_news.csv
+    csv_path: news/2026-06-21_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

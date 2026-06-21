@@ -155,7 +155,7 @@ risk:
   # by the budget-SL (risk.risk_per_trade_pct × balance ≈ 0.5%).
   strategy_risk_overrides:
     kalman_regime:
-      risk_per_trade_usd: 50
+      risk_per_trade_usd: 33   # 2026-06-21: ×0.66 (SL-22 equiv) — shrinks per-trade $ loss to fit DD inside 7% cap
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS
   # Scaled 2026-06-20 from the original $1k seeds to the live ~$4.7k equity so
@@ -583,7 +583,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-20_news.csv
+    csv_path: news/2026-06-21_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
