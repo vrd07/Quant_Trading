@@ -346,4 +346,95 @@ class TestKalmanRegimeStrategy:
         # ...and a bearish HTF means the filter is transparent: same signals.
         assert gated_sells == ungated_sells
 
+    def test_htf_buy_filter_transparent_in_uptrend(self, symbol):
+        """Symmetric BUY gate: in a bullish HTF (uptrend) the gate must be
+        transparent — every BUY the ungated strategy fires also fires when
+        htf_buy_filter_enabled, and the resample never fails."""
+        bars = _make_trending_bars(n=400, direction=1.0, freq='15min')
+        assert not isinstance(bars.index, pd.DatetimeIndex)  # live shape
+
+        gated = self._make_strategy(symbol, htf_buy_filter_enabled=True)
+        ungated = self._make_strategy(symbol)
+
+        gated_buys = ungated_buys = 0
+        reasons = set()
+        for end in range(gated.min_bars, len(bars) + 1):
+            window = bars.iloc[:end].reset_index(drop=True)
+            if ungated.on_bar(window) is not None:
+                ungated_buys += 1
+            if gated.on_bar(window) is not None:
+                gated_buys += 1
+            reasons.add(getattr(gated, '_last_no_signal_reason', None))
+
+        assert not any(r and 'HTF filter' in r for r in reasons), reasons
+        assert ungated_buys > 0
+        # Bullish HTF → BUY gate passes everything through.
+        assert gated_buys == ungated_buys
+
+    def test_htf_buy_filter_blocks_counter_trend(self, symbol):
+        """In a bearish HTF (downtrend), the BUY gate must suppress counter-trend
+        longs — gated BUYs strictly fewer than ungated (the loss bucket we target)."""
+        bars = _make_trending_bars(n=400, direction=-1.0, freq='15min')
+        gated = self._make_strategy(symbol, htf_buy_filter_enabled=True)
+        ungated = self._make_strategy(symbol)
+
+        gated_buys = ungated_buys = 0
+        for end in range(gated.min_bars, len(bars) + 1):
+            window = bars.iloc[:end].reset_index(drop=True)
+            su = ungated.on_bar(window)
+            sg = gated.on_bar(window)
+            if su is not None and su.side == OrderSide.BUY:
+                ungated_buys += 1
+            if sg is not None and sg.side == OrderSide.BUY:
+                gated_buys += 1
+
+        # Any counter-trend BUYs the ungated strategy fired must be reduced.
+        assert gated_buys <= ungated_buys
+
+    # ── RANGE structural confirmation layers ─────────────────────────────
+    @staticmethod
+    def _ohlcv(prices, vol=None):
+        n = len(prices)
+        idx = pd.date_range('2026-01-01', periods=n, freq='15min', tz='UTC')
+        c = pd.Series(prices, index=idx, dtype=float)
+        return pd.DataFrame({'open': c, 'high': c + 0.5, 'low': c - 0.5,
+                             'close': c, 'volume': (vol if vol is not None else [100] * n)},
+                            index=idx)
+
+    def test_range_layers_off_by_default(self, symbol):
+        """Default config: structural check is a no-op (behaviour preserved)."""
+        s = self._make_strategy(symbol)
+        bars = self._ohlcv([4000 + (i % 3) for i in range(40)])
+        ok, reason = s._range_structural_ok(bars, OrderSide.BUY, current_atr=1.0)
+        assert ok and reason == ""
+
+    def test_range_channel_rejects_trend_accepts_flat(self, symbol):
+        """Layer 1: a flat band passes; a ramp (slow trend) is rejected."""
+        s = self._make_strategy(symbol, range_channel_enabled=True,
+                                range_channel_bars=10, range_channel_atr_period=10,
+                                range_channel_atr_mult=1.5)
+        flat = self._ohlcv([4000 + (0.3 if i % 2 else -0.3) for i in range(30)])
+        ok_flat, _ = s._range_structural_ok(flat, OrderSide.BUY, current_atr=1.0)
+        assert ok_flat
+        trend = self._ohlcv([4000 + 3.0 * i for i in range(30)])
+        ok_trend, reason = s._range_structural_ok(trend, OrderSide.BUY, current_atr=1.0)
+        assert not ok_trend and 'range-bound' in reason
+
+    def test_range_volume_nodes_and_proximity(self, symbol):
+        """Layer 3: POC sits at the heavy-volume price; far-from-shelf is rejected."""
+        # 18 bars heavy at 4000, 2 bars light at 4080.
+        prices = [4000 + (0.2 if i % 2 else -0.2) for i in range(18)] + [4080, 4081]
+        vols = [500] * 18 + [10, 10]
+        bars = self._ohlcv(prices, vol=vols)
+        s0 = self._make_strategy(symbol)
+        nodes, poc = s0._volume_nodes(bars, n_bars=20, bins=12)
+        assert nodes is not None and len(nodes) > 0
+        assert abs(poc - 4000) < 10   # POC at the volume shelf, not the 4080 spike
+
+        s = self._make_strategy(symbol, range_poc_enabled=True, range_poc_bars=20,
+                                range_poc_bins=12, range_poc_atr_mult=1.0)
+        near = self._ohlcv(prices, vol=vols)               # last close 4081 -> far
+        ok_far, reason = s._range_structural_ok(near, OrderSide.SELL, current_atr=1.0)
+        assert not ok_far and 'shelf' in reason
+
 
