@@ -48,6 +48,14 @@ input bool LogAllTrades = true;                     // Log every trade to Expert
 input group "=== STATUS QUOTE FEED ==="
 input string WatchSymbols = "";                     // Extra symbols in status quotes (comma-separated, e.g. "USDJPYs,GBPUSDs,AUDUSDs")
 
+input group "=== SL VISUALS ==="
+input bool   DrawSLLines     = true;                // Draw the budget-SL line + label on the chart when an order fills
+input color  SLLineColor     = clrCrimson;          // Colour of the SL line and label
+input int    SLLineWidth     = 1;                   // SL line width
+input int    SLLineStyle     = STYLE_DASH;          // SL line style
+input int    SLLabelFontSize = 9;                   // SL label font size
+input int    SLLineHoursRight = 6;                  // How many hours the SL line extends to the right of the fill
+
 //--- Global variables
 string lastCommandContent = "";
 string watchSymbols[];                              // parsed WatchSymbols, Market-Watch-selected in OnInit
@@ -70,6 +78,9 @@ int CountOpenPositions();
 double GetTotalExposure();
 void LogTrade(string action, string symbol, double volume, double price, string result);
 void SendAlert(string message);
+void DrawTradeSL(string symbol, ulong ticket, ENUM_ORDER_TYPE otype, double entry, double slPrice);
+void RemoveTradeSL(ulong ticket);
+void SweepTradeSLObjects();
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -136,6 +147,7 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   SweepTradeSLObjects();   // remove our SL lines/labels so they don't linger after the EA detaches
    Print("=== EA_FileBridge Stopped ===");
    Print("Final Daily P&L: $", DoubleToString(GetDailyPnL(), 2));
    Print("Total Trades Today: ", dailyTradeCount);
@@ -936,7 +948,10 @@ void HandlePlaceOrder(string json)
       successMsg += ",\"volume\":" + DoubleToString(volume, 2);
       successMsg += ",\"slippage_pips\":" + DoubleToString(slippagePips, 2) + "}";
       WriteResponse(successMsg);
-      
+
+      // Annotate the chart with the budget-sized stop the order was filled with.
+      DrawTradeSL(symbol, result.order, request.type, result.price, request.sl);
+
       LogTrade("PLACE_ORDER", symbol, volume, result.price, "SUCCESS - Ticket #" + IntegerToString(result.order));
    }
    else
@@ -986,12 +1001,109 @@ void HandleClosePosition(string json)
    if(SendOrderWithRetry(request, result))
    {
       WriteResponse("{\"status\":\"SUCCESS\",\"pnl\":" + DoubleToString(currentProfit, 2) + "}");
+      RemoveTradeSL(ticket);   // the trade is gone — clear its SL line/label
       LogTrade("CLOSE_POSITION", symbol, volume, result.price, "SUCCESS - P&L: $" + DoubleToString(currentProfit, 2));
    }
    else
    {
       WriteResponse("{\"status\":\"ERROR\",\"code\":" + IntegerToString(result.retcode) + ",\"message\":\"" + result.comment + "\"}");
       LogTrade("CLOSE_POSITION", symbol, volume, 0, "FAILED - " + result.comment);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| SL VISUALS — draw the budget-sized stop on the chart             |
+//|                                                                  |
+//| When an order fills, the Python side has already rewritten the   |
+//| stop to the exact loss-budget price (BudgetSL). This draws that  |
+//| level as a dashed line plus a label showing the stop distance in |
+//| price points and pips, so you can SEE where the SL landed and    |
+//| how tight it is. Objects are tagged "BotSL_<ticket>_*" and live  |
+//| on every open chart whose symbol matches the order.              |
+//+------------------------------------------------------------------+
+void DrawTradeSL(string symbol, ulong ticket, ENUM_ORDER_TYPE otype, double entry, double slPrice)
+{
+   if(!DrawSLLines || slPrice <= 0.0 || entry <= 0.0) return;
+
+   int    digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double point  = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double dist   = MathAbs(entry - slPrice);                 // price-unit distance ("pts")
+   double pips   = (point > 0.0) ? dist / point / 10.0 : 0.0;
+   string side   = (otype == ORDER_TYPE_BUY) ? "BUY" : "SELL";
+
+   string baseId  = "BotSL_" + IntegerToString((int)ticket);
+   string lineNm  = baseId + "_line";
+   string lblNm   = baseId + "_lbl";
+   datetime t0    = TimeCurrent();
+   datetime t1    = t0 + (datetime)(SLLineHoursRight * 3600);
+
+   string txt = StringFormat("SL #%d %s  %.*f pts (%.0f pip)",
+                             (int)ticket, side, digits, dist, pips);
+
+   long cid = ChartFirst();
+   while(cid >= 0)
+   {
+      if(ChartSymbol(cid) == symbol)
+      {
+         ObjectDelete(cid, lineNm);
+         ObjectDelete(cid, lblNm);
+
+         // Dashed SL line anchored at the fill time, extending right
+         if(ObjectCreate(cid, lineNm, OBJ_TREND, 0, t0, slPrice, t1, slPrice))
+         {
+            ObjectSetInteger(cid, lineNm, OBJPROP_COLOR, SLLineColor);
+            ObjectSetInteger(cid, lineNm, OBJPROP_WIDTH, SLLineWidth);
+            ObjectSetInteger(cid, lineNm, OBJPROP_STYLE, SLLineStyle);
+            ObjectSetInteger(cid, lineNm, OBJPROP_RAY_RIGHT, false);
+            ObjectSetInteger(cid, lineNm, OBJPROP_BACK, false);
+            ObjectSetInteger(cid, lineNm, OBJPROP_SELECTABLE, false);
+            ObjectSetInteger(cid, lineNm, OBJPROP_HIDDEN, true);
+         }
+
+         // "SL …" text label at the right end of the line
+         if(ObjectCreate(cid, lblNm, OBJ_TEXT, 0, t1, slPrice))
+         {
+            ObjectSetString(cid, lblNm, OBJPROP_TEXT, txt);
+            ObjectSetInteger(cid, lblNm, OBJPROP_COLOR, SLLineColor);
+            ObjectSetInteger(cid, lblNm, OBJPROP_FONTSIZE, SLLabelFontSize);
+            ObjectSetInteger(cid, lblNm, OBJPROP_ANCHOR, ANCHOR_RIGHT_UPPER);
+            ObjectSetInteger(cid, lblNm, OBJPROP_SELECTABLE, false);
+            ObjectSetInteger(cid, lblNm, OBJPROP_HIDDEN, true);
+         }
+
+         ChartRedraw(cid);
+      }
+      cid = ChartNext(cid);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Remove the SL line/label for one ticket from every open chart    |
+//+------------------------------------------------------------------+
+void RemoveTradeSL(ulong ticket)
+{
+   string baseId = "BotSL_" + IntegerToString((int)ticket);
+   long cid = ChartFirst();
+   while(cid >= 0)
+   {
+      ObjectDelete(cid, baseId + "_line");
+      ObjectDelete(cid, baseId + "_lbl");
+      ChartRedraw(cid);
+      cid = ChartNext(cid);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Remove ALL bot SL objects (prefix sweep) from every open chart   |
+//+------------------------------------------------------------------+
+void SweepTradeSLObjects()
+{
+   long cid = ChartFirst();
+   while(cid >= 0)
+   {
+      ObjectsDeleteAll(cid, "BotSL_");
+      ChartRedraw(cid);
+      cid = ChartNext(cid);
    }
 }
 
