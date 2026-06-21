@@ -261,6 +261,7 @@ STRATEGY_WEIGHTS = {
         "fibonacci_retracement": 0.70,  # big_trend sweep: PF 1.75, DD 9.2% (6mo)
         "london_breakout": 0.70,  # session-structural (Tokyo range → London break); regime-agnostic by design
         "monday_drift":   0.70,  # calendar-structural (Monday anti-USD drift); regime-agnostic — own SMA(50) gate governs
+        "squeeze_breakout": 0.70,  # volatility-coil → expansion breakout; regime-agnostic (own ATR-pctile + Donchian gate governs)
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -272,6 +273,7 @@ STRATEGY_WEIGHTS = {
         "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
+        "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -283,6 +285,7 @@ STRATEGY_WEIGHTS = {
         "fibonacci_retracement": 0.55,  # strong trends with pullbacks = fib's edge
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
+        "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
     },
 }
 

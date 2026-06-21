@@ -294,7 +294,7 @@ class TestDynamicWeighting:
         required_core = {
             "momentum", "kalman_regime", "vwap", "sbr",
             "asia_range_fade", "smc_ob", "fibonacci_retracement",
-            "london_breakout", "monday_drift",
+            "london_breakout", "monday_drift", "squeeze_breakout",
         }
         for regime in REGIMES:
             keys = set(STRATEGY_WEIGHTS[regime].keys())

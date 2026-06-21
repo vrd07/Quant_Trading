@@ -25,6 +25,7 @@ from .smc_ob_strategy import SMCOrderBlockStrategy
 from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from .london_breakout_strategy import LondonBreakoutStrategy
 from .monday_drift_strategy import MondayDriftStrategy
+from .squeeze_breakout_strategy import SqueezeBreakoutStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -42,6 +43,7 @@ class StrategyManager:
         'fibonacci_retracement': FibonacciRetracementStrategy,
         'london_breakout': LondonBreakoutStrategy,   # USDJPY-only (self-gated on symbol)
         'monday_drift':   MondayDriftStrategy,       # GBPUSD/AUDUSD-only (self-gated on symbol)
+        'squeeze_breakout': SqueezeBreakoutStrategy, # XAUUSD-only (self-gated on symbol)
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
