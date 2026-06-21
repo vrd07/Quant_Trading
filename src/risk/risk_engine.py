@@ -94,6 +94,21 @@ class RiskEngine:
             risk_config.get('strategy_risk_overrides', {}) or {}
         )
 
+        # ── Decay-floor allocator (2026-06-21) ─────────────────────────────
+        # A nightly job (scripts/strategy_allocator.py) measures each strategy's
+        # TRAILING realised edge and writes a weights file. A strategy whose edge
+        # has gone negative gets weight 0 → its signals are vetoed here until the
+        # edge recovers. This is the only validated way to handle kalman's regime
+        # decay: don't predict the regime, just stop funding what's losing.
+        # Binary (0/1) — sidesteps the pinned-min-lot fractional-sizing problem.
+        # OFF by default; missing/stale file ⇒ no veto (fail-open, never starves).
+        df_cfg = risk_config.get('decay_floor', {}) or {}
+        self.decay_floor_enabled: bool = bool(df_cfg.get('enabled', False))
+        self.decay_floor_weights_file = str(
+            df_cfg.get('weights_file', 'data/strategy_risk_weights.json'))
+        self._decay_weights: Dict[str, float] = {}
+        self._decay_weights_mtime: float = -1.0
+
         # Initialize sub-components
         self.position_sizer = PositionSizer(config)
         self.kill_switch = KillSwitch()
@@ -255,6 +270,11 @@ class RiskEngine:
 
             # 16: Risk per trade
             ok, reason = self._check_16_risk_per_trade(order, account_balance)
+            if not ok:
+                return False, reason
+
+            # 17: Decay-floor allocator — veto strategies currently defunded
+            ok, reason = self._check_17_decay_floor(order)
             if not ok:
                 return False, reason
 
@@ -623,7 +643,59 @@ class RiskEngine:
                     )
                     return False, reason
         return True, ""
-    
+
+    def _load_decay_weights(self) -> Dict[str, float]:
+        """Lazily (re)load the decay-floor weights, refreshing on file mtime.
+
+        Fail-open: any error or missing file → {} (no strategy is defunded).
+        """
+        import os
+        import json
+        path = self.decay_floor_weights_file
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            self._decay_weights = {}
+            self._decay_weights_mtime = -1.0
+            return self._decay_weights
+        if mtime != self._decay_weights_mtime:
+            try:
+                with open(path) as f:
+                    data = json.load(f)
+                w = data.get('weights', data) if isinstance(data, dict) else {}
+                self._decay_weights = {str(k): float(v) for k, v in w.items()}
+                self._decay_weights_mtime = mtime
+                self.logger.info(
+                    "Decay-floor weights loaded",
+                    file=path,
+                    defunded=[k for k, v in self._decay_weights.items() if v <= 0],
+                )
+            except Exception as exc:
+                self.logger.warning("Decay-floor weights load failed", error=str(exc))
+                self._decay_weights = {}
+        return self._decay_weights
+
+    def strategy_weight(self, strategy_name: Optional[str]) -> float:
+        """Decay-floor weight for a strategy. Defaults to 1.0 (trade normally)."""
+        if not self.decay_floor_enabled or not strategy_name:
+            return 1.0
+        return self._load_decay_weights().get(strategy_name, 1.0)
+
+    def _check_17_decay_floor(self, order: Order) -> Tuple[bool, str]:
+        """Veto orders from a strategy the decay-floor has defunded (weight ≤ 0)."""
+        if not self.decay_floor_enabled:
+            return True, ""
+        strat = (order.metadata or {}).get('strategy') if order.metadata else None
+        if not strat:
+            return True, ""
+        w = self.strategy_weight(strat)
+        if w <= 0:
+            reason = f"Decay-floor: '{strat}' defunded (trailing edge negative)"
+            self.logger.warning("Order rejected - decay floor",
+                                strategy=strat, weight=w)
+            return False, reason
+        return True, ""
+
     def calculate_position_size(
         self,
         symbol: Symbol,

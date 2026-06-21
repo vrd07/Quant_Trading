@@ -147,6 +147,19 @@ class KalmanRegimeStrategy(BaseStrategy):
         # layer; 0 = off. 8 bars on 15m ≈ 2h.
         self.range_time_stop_bars = int(config.get('range_time_stop_bars', 0))
 
+        # ── TREND-quality gate (2026-06-21 regime-score diagnostic) ────────
+        # Continuous trend-conviction score = |kalman slope over N bars| /
+        # (|slope| + rolling_std(slope)) ∈ [0,1]; high = steady directional move.
+        # This self-normalising form ranks TREND quality (diagnostic: high-score
+        # trend PF 1.40) — it is NOT a range detector (that needs ATR-normalising).
+        # Gate TREND signals below min_score. ⚠️ walk-forward (2026-06-21) shows this
+        # HELPS 2026 (PF 1.08→1.32) but FAILS 2025 OOS (1.19→1.12) — regime-dependent,
+        # so it stays DEFAULT OFF. RANGE is unaffected.
+        self.trend_quality_gate_enabled = config.get('trend_quality_gate_enabled', False)
+        self.trend_quality_slope_bars = int(config.get('trend_quality_slope_bars', 3))
+        self.trend_quality_std_window = int(config.get('trend_quality_std_window', 20))
+        self.trend_quality_min_score = float(config.get('trend_quality_min_score', 0.75))
+
         # Sell-side: require higher signal strength for shorts (gold upward bias)
         self.min_signal_strength_sell = config.get('min_signal_strength_sell', None)
 
@@ -272,6 +285,24 @@ class KalmanRegimeStrategy(BaseStrategy):
         thresh = vbin.mean() + 0.5 * vbin.std()
         nodes = centres[vbin >= thresh]
         return nodes, poc
+
+    @staticmethod
+    def _trend_quality_score(kalman: pd.Series, slope_bars: int, std_window: int) -> float:
+        """Self-normalising trend-conviction score in [0,1] (1 = unassessable → pass).
+
+        score = |slope| / (|slope| + rolling_std(slope)), slope = kalman move over
+        slope_bars. High = a steady directional move (slope large vs its own
+        variability) = high-quality trend. This is the form the 2026 diagnostic
+        showed ranks trend quality (it is NOT a range detector).
+        """
+        if len(kalman) <= slope_bars + std_window:
+            return 1.0
+        slope = (kalman - kalman.shift(slope_bars)).abs()
+        sd = slope.rolling(std_window).std().iloc[-1]
+        cur = float(slope.iloc[-1])
+        if pd.isna(sd):
+            return 1.0
+        return cur / (cur + float(sd) + 1e-12)
 
     def _range_structural_ok(self, bars: pd.DataFrame, side, current_atr: float):
         """Apply the enabled RANGE confirmation layers. Returns (ok, reason)."""
@@ -411,6 +442,15 @@ class KalmanRegimeStrategy(BaseStrategy):
                     f"TREND mode: ADX too low ({current_adx:.1f} < {self.trend_adx_min})"
                 )
                 return None
+
+            # Trend-quality gate: skip low-conviction trends (ATR-normalised score).
+            if self.trend_quality_gate_enabled:
+                tq = self._trend_quality_score(
+                    kalman, self.trend_quality_slope_bars, self.trend_quality_std_window)
+                if tq < self.trend_quality_min_score:
+                    self._log_no_signal(
+                        f"TREND quality gate: score {tq:.2f} < {self.trend_quality_min_score}")
+                    return None
 
             # Multi-bar Kalman confirmation
             close_series = bars['close']

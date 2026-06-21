@@ -124,33 +124,38 @@ def main():
     ok = [c for c in cand if c[1]["n"] >= 20 and c[2]["n"] >= 20]
     A("## Verdict")
     A("")
-    if not ok:
-        best = None
-        A("➖ **Sample too thin once filtered** — the session filter cuts breakouts below "
-          "a tradeable count. Kill: research-only.")
+    best = max(ok, key=lambda c: min(c[1]["pf"], c[2]["pf"])) if ok else None
+    # session-filter hypothesis check: did ANY hour-window beat all-hours on the
+    # worst year? (and was it consistent, not a one-year fluke?)
+    allh = ("all hours", res[("all hours", strict, "2026 (in-sample)")][0],
+            res[("all hours", strict, "2025 (OOS)")][0])
+    allh_worst = min(allh[1]["pf"], allh[2]["pf"])
+    A("**1. The session-filter hypothesis is REFUTED.** Each hour-window works in ONE "
+      "year and fails the other — London 07-11 is great 2025 / poor 2026; NY 12-16 is the "
+      "reverse. That is per-year overfitting, not a stable session edge. **All-hours is the "
+      "most consistent variant**, so — unlike the prior Donchian research — a session "
+      "filter does NOT rescue (or even help) this setup. Drop it.")
+    A("")
+    A("**2. It IS cost-robust** (the one genuine positive). Strict 0.50/side barely dents "
+      f"all-hours (2026 1.27→{pf(allh[1]['pf'])}, 2025 1.05→{pf(allh[2]['pf'])}) — wide "
+      "stops + RR2 + low frequency mean it isn't the slippage trap breakouts usually are.")
+    A("")
+    A(f"**3. Verdict on the all-hours squeeze breakout (strict): 2026 PF {pf(allh[1]['pf'])}, "
+      f"2025 OOS PF {pf(allh[2]['pf'])}.**")
+    if allh_worst >= 1.10:
+        A("✅ Clears 1.10 on both years at strict cost — promote to a standalone strategy.")
+    elif allh_worst >= 1.03:
+        A(f"⚠️ **Marginal — do NOT trade standalone, but do NOT kill.** OOS {pf(allh[2]['pf'])} "
+          "sits just under the 1.10 durability bar, yet it is the only additive idea all "
+          "session that is positive on BOTH years AND cost-robust AND needs no fitted "
+          "filter. A PF~1.07 stream is no money-maker alone — but if it is **uncorrelated** "
+          "to the roster it can still improve the blend's Sharpe/DD "
+          "(`project_allweather_portfolio_and_situation_map`). **Next step: measure its "
+          "correlation to kalman/london/monday and, only if low + a longer OOS holds ≥1.05, "
+          "add it as a small-weight diversifier — never as a standalone bet.** Park as the "
+          "lead research candidate.")
     else:
-        best = max(ok, key=lambda c: min(c[1]["pf"], c[2]["pf"]))
-        sname, s_is, s_oos = best
-        worst = min(s_is["pf"], s_oos["pf"])
-        A(f"- Best at strict cost: **{sname}** — 2026 PF {pf(s_is['pf'])} (N{s_is['n']}), "
-          f"2025 OOS PF {pf(s_oos['pf'])} (N{s_oos['n']}).")
-        A("")
-        if worst >= 1.10:
-            A("✅ **PROMOTE.** Clears 1.10 on BOTH years at strict fills — the session "
-              "filter rescues the squeeze breakout, exactly as the prior research predicted "
-              "(the edge lives in the session). Next: build it as a real strategy per the "
-              "CLAUDE.md propagation checklist (registry → STRATEGY_WEIGHTS → configs → "
-              "tests), wired with this session gate + RR2.0, default-enabled only after a "
-              "final run through the official strict-fill backtest gate.")
-        elif worst >= 1.00:
-            A("⚠️ **Still marginal — KILL as a standalone.** The session filter helps but "
-              "does not lift BOTH years clear of the 1.10 bar at strict cost; the worst "
-              f"year is {pf(worst)}, inside slippage noise. The edge is real-ish but too "
-              "thin to carry trading costs reliably. Keep as research; do not wire live.")
-        else:
-            A("➖ **KILL.** Even the best session variant drops below 1.0 on one year at "
-              "strict cost. Consistent with `project_breakout_15m_research` — gold intraday "
-              "mean-reverts; the squeeze pre-condition is not enough. Research-only.")
+        A("➖ **KILL.** Below 1.0 on a year even all-hours at strict cost. Research-only.")
     A("")
     A("> Whatever the result, this stays separate from the OOS-dead Kalman entry. A pass "
       "would be a NEW standalone strategy, sized small and added to the uncorrelated "

@@ -437,4 +437,13 @@ class TestKalmanRegimeStrategy:
         ok_far, reason = s._range_structural_ok(near, OrderSide.SELL, current_atr=1.0)
         assert not ok_far and 'shelf' in reason
 
+    def test_trend_quality_score(self, symbol):
+        """Self-normalising score: high for a steady trend; in [0,1]; safe fallback."""
+        s = self._make_strategy(symbol)
+        steady = pd.Series([4000 + 5.0 * i for i in range(60)])   # constant slope → low std
+        hi = s._trend_quality_score(steady, slope_bars=3, std_window=20)
+        assert 0.0 <= hi <= 1.0 and hi > 0.8
+        # unassessable (series shorter than slope_bars+std_window) -> 1.0 (don't block)
+        assert s._trend_quality_score(pd.Series([1.0, 2.0, 3.0]), slope_bars=3, std_window=20) == 1.0
+
 
