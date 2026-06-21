@@ -104,6 +104,8 @@ def main():
     ap.add_argument("--lot", type=str, default="0.05")
     ap.add_argument("--gate-off", action="store_true",
                     help="Disable ConfluenceGate (baseline run). Kill-list still applies.")
+    ap.add_argument("--relaxed", action="store_true",
+                    help="Enable 2-of-3 confluence relaxation (primary + ≥1 leg; sniper ≥2 of 3).")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -120,11 +122,14 @@ def main():
         cfg.setdefault("strategies", {}).setdefault("confluence_gate", {})["enabled"] = False
         print("[combo-backtest] ConfluenceGate DISABLED (baseline run — kill-list still drops)")
     else:
+        if args.relaxed:
+            cfg.setdefault("strategies", {}).setdefault("confluence_gate", {})["relaxed_2of3"] = True
         gate_cfg = (cfg.get("strategies") or {}).get("confluence_gate", {}) or {}
         print(
             f"[combo-backtest] ConfluenceGate ENABLED "
             f"(window={gate_cfg.get('window_minutes', 25)}min, "
-            f"sniper={gate_cfg.get('sniper_lot_multiplier', 1.5)}×)"
+            f"sniper={gate_cfg.get('sniper_lot_multiplier', 1.5)}×, "
+            f"relaxed_2of3={bool(gate_cfg.get('relaxed_2of3', False))})"
         )
 
     symbol = _build_symbol(cfg, args.symbol)
@@ -154,10 +159,11 @@ def main():
                 "combo_C": 0, "suppressed": 0}
     original_filter = gate.filter
 
-    def counting_filter(symbol, signals, regime=None, now=None):
+    def counting_filter(symbol, signals, regime=None, now=None, **kwargs):
         counters["calls"] += 1
-        n_in = sum(1 for _ in signals)
-        out = original_filter(symbol=symbol, signals=signals, regime=regime, now=now)
+        signals = list(signals)
+        n_in = len(signals)
+        out = original_filter(symbol=symbol, signals=signals, regime=regime, now=now, **kwargs)
         for s in out:
             combo = s.metadata.get("combo") if s.metadata else None
             if combo == "A":
