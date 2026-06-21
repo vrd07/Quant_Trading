@@ -243,6 +243,30 @@ strategies:
   # time stop (360 min). Research 2026-06-11 (2.5y Dukascopy): PF 1.23 IS / 1.44
   # OOS, positive 2024/25/26. FAILED the strict-fill gate (PF ~1.0) — live by
   # user decision 2026-06-11; realistic-fill backtest PF 1.39 / +32%.
+  # ── SQUEEZE BREAKOUT (XAUUSD ONLY — hard-gated in code) ─────────────────────
+  # Volatility-coil → expansion breakout on XAUUSD 15m. Research SL33pts/RR2.0:
+  # 2026 PF 1.27 (+$3,120) / 2025 OOS PF 1.05 (+$660); cost-robust under strict
+  # fills; session filter REFUTED → trade all hours. Shipped by user decision as
+  # a diversifier stream — MARGINAL standalone (OOS just under the 1.10 bar),
+  # same instrument as kalman. scripts/research_squeeze_breakout.py.
+  squeeze_breakout:
+    enabled: true
+    timeframe: 15m
+    atr_period: 14
+    pct_window: 100          # ATR percentile lookback
+    pct: 0.20                # squeeze = ATR <= 20th pctile of last 100 bars
+    donch: 20                # coil Donchian channel
+    slope_bars: 3            # Kalman flatness lookback
+    flat_atr_mult: 0.5       # |kalman slope| <= 0.5*ATR == flat
+    coil_lookback: 6         # breakout must follow a coil within 6 bars
+    cooldown_bars: 8         # one entry per fresh coil
+    kalman_q: 0.00001
+    kalman_r: 0.01
+    sl_atr_multiplier: 3.0   # ~33pts = 3.0x median 2026 15m ATR
+    rr: 2.0                  # TP = SL*RR — RR2.0 is the edge (RR1.0 loses both years)
+    timeframe_minutes: 15
+    allowed_symbols: [XAUUSD]
+
   london_breakout:
     enabled: true    # 2026-06-12: enabled in all configs (user decision; USDJPY-only hard gate in code)
     timeframe: 5m
@@ -550,7 +574,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -558,7 +582,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -566,7 +590,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -574,7 +598,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -582,7 +606,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
