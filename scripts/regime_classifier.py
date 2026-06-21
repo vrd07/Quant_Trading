@@ -262,6 +262,7 @@ STRATEGY_WEIGHTS = {
         "london_breakout": 0.70,  # session-structural (Tokyo range → London break); regime-agnostic by design
         "monday_drift":   0.70,  # calendar-structural (Monday anti-USD drift); regime-agnostic — own SMA(50) gate governs
         "squeeze_breakout": 0.70,  # volatility-coil → expansion breakout; regime-agnostic (own ATR-pctile + Donchian gate governs)
+        "stoch_pullback": 0.70,  # stochastic trend-continuation pullback; regime-agnostic (own EMA-trend + stoch + breakout gate governs)
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -274,6 +275,7 @@ STRATEGY_WEIGHTS = {
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
+        "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -286,6 +288,7 @@ STRATEGY_WEIGHTS = {
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
+        "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
     },
 }
 
