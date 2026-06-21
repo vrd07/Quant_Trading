@@ -51,10 +51,11 @@ from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementSt
 from src.strategies.london_breakout_strategy import LondonBreakoutStrategy
 from src.strategies.monday_drift_strategy import MondayDriftStrategy
 from src.strategies.squeeze_breakout_strategy import SqueezeBreakoutStrategy
+from src.strategies.stoch_pullback_strategy import StochPullbackStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'stoch_pullback', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -170,6 +171,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('squeeze_breakout', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return SqueezeBreakoutStrategy(symbol, cfg)
+    elif strategy_name == 'stoch_pullback':
+        cfg = dict(strats.get('stoch_pullback', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return StochPullbackStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 

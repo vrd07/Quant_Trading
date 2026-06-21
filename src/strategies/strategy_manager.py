@@ -26,6 +26,7 @@ from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from .london_breakout_strategy import LondonBreakoutStrategy
 from .monday_drift_strategy import MondayDriftStrategy
 from .squeeze_breakout_strategy import SqueezeBreakoutStrategy
+from .stoch_pullback_strategy import StochPullbackStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -44,6 +45,7 @@ class StrategyManager:
         'london_breakout': LondonBreakoutStrategy,   # USDJPY-only (self-gated on symbol)
         'monday_drift':   MondayDriftStrategy,       # GBPUSD/AUDUSD-only (self-gated on symbol)
         'squeeze_breakout': SqueezeBreakoutStrategy, # XAUUSD-only (self-gated on symbol)
+        'stoch_pullback': StochPullbackStrategy,     # XAUUSD-only (self-gated on symbol)
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):

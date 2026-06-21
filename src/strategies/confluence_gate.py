@@ -54,7 +54,7 @@ from ..core.constants import MarketRegime, OrderSide
 from ..core.types import Signal
 
 
-SOLO_ALLOWED: frozenset = frozenset({"kalman_regime", "london_breakout", "monday_drift", "squeeze_breakout"})
+SOLO_ALLOWED: frozenset = frozenset({"kalman_regime", "london_breakout", "monday_drift", "squeeze_breakout", "stoch_pullback"})
 FILTER_ONLY: frozenset = frozenset({
     "momentum",
     "asia_range_fade",
@@ -102,6 +102,13 @@ class ConfluenceGate:
         self.window_minutes: float = float(config.get("window_minutes", 25.0))
         self.sniper_lot_multiplier: float = float(config.get("sniper_lot_multiplier", 1.5))
         self.sniper_cooldown_minutes: float = float(config.get("sniper_cooldown_minutes", 60.0))
+
+        # 2-of-3 relaxation (prototype 2026-06-22). Default OFF preserves the
+        # strict "primary AND both legs" / "all three sniper legs" policy. When
+        # ON, a combo needs only the primary + ≥1 confluence leg (so 2 of the
+        # 3 named strategies), and the sniper needs ≥2 of its 3 legs. This is
+        # the relaxation being evaluated for why combos never fire live.
+        self.relaxed_2of3: bool = bool(config.get("relaxed_2of3", False))
 
         # Exhaustion filter (§8 momentum divergence). Confidence modifier only:
         # it never creates signals, only nudges the strength of ones the combo
@@ -293,7 +300,11 @@ class ConfluenceGate:
         required: Iterable[str],
         now: datetime,
     ) -> bool:
-        return all(self._strategy_fired(symbol, name, side, now) for name in required)
+        required = tuple(required)
+        fired = sum(1 for name in required if self._strategy_fired(symbol, name, side, now))
+        # Strict: all legs. Relaxed: ≥1 leg (primary + 1 = 2-of-3).
+        needed = 1 if self.relaxed_2of3 else len(required)
+        return fired >= needed
 
     def _latest_entry_price(
         self,
@@ -321,8 +332,11 @@ class ConfluenceGate:
         if last and (now - last) < timedelta(minutes=self.sniper_cooldown_minutes):
             return None
 
+        # Strict sniper: all 3 legs align. Relaxed: ≥2 of 3 legs.
+        needed = 2 if self.relaxed_2of3 else len(COMBO_C_LEGS)
         for side in (OrderSide.BUY, OrderSide.SELL):
-            if all(self._strategy_fired(symbol, leg, side, now) for leg in COMBO_C_LEGS):
+            fired = sum(1 for leg in COMBO_C_LEGS if self._strategy_fired(symbol, leg, side, now))
+            if fired >= needed:
                 return self._build_sniper_signal(symbol, side, signals, now)
         return None
 

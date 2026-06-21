@@ -339,6 +339,25 @@ class RiskProcessor:
                 sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
                 tp = entry + sl_dist * rr if side == OrderSide.BUY else entry - sl_dist * rr
 
+        elif strategy_name == 'stoch_pullback':
+            # Stochastic trend-continuation pullback. The strategy precomputes a
+            # STRUCTURAL stop (just behind the consolidation range) and TP = rr ×
+            # that stop distance (RR2.0 = the edge). Honor the precomputed stops
+            # verbatim; the strategy also sets metadata['preserve_structural_sl']
+            # so the execution-layer BudgetSL does not shrink this stop to the
+            # dollar budget (which would break the RR geometry).
+            precomputed_sl = signal.metadata.get('stop_price')
+            precomputed_tp = signal.metadata.get('take_profit_price')
+            if precomputed_sl is not None and precomputed_tp is not None:
+                sl = Decimal(str(precomputed_sl))
+                tp = Decimal(str(precomputed_tp))
+            else:
+                atr = Decimal(str(signal.metadata.get('atr', entry * Decimal('0.002'))))
+                rr = Decimal(str(strat_cfg.get('rr', 2.0)))
+                sl_dist = 2 * atr
+                sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+                tp = entry + sl_dist * rr if side == OrderSide.BUY else entry - sl_dist * rr
+
         else:
             # Fallback for unknown strategies (fail-safe ATR stop if available)
             self.logger.warning(f"RiskProcessor: Unknown strategy '{strategy_name}'. Using fallback.")
