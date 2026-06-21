@@ -169,8 +169,13 @@ def generate_signals(bars: pd.DataFrame, cfg: dict, refresh: bool) -> pd.DataFra
 def simulate(bars: pd.DataFrame, sig_df: pd.DataFrame, *,
              sl_pts=SL_PTS, rr=RR, lot=LOT, cost=COST,
              be_enabled=True, daily_cap=DAILY_LOSS_CAP,
-             max_positions=MAX_POSITIONS, directional_lock=DIRECTIONAL_LOCK):
-    """Run the fixed-SL/TP/lot simulation. Returns (trades_df, skipped_counts)."""
+             max_positions=MAX_POSITIONS, directional_lock=DIRECTIONAL_LOCK,
+             range_max_bars=None):
+    """Run the fixed-SL/TP/lot simulation. Returns (trades_df, skipped_counts).
+
+    range_max_bars: if set, force-close RANGE-mode trades at market once they have
+    been open this many bars without hitting SL/TP (layer-4 time-stop).
+    """
     o = bars["open"].to_numpy(float)
     h = bars["high"].to_numpy(float)
     l = bars["low"].to_numpy(float)
@@ -279,6 +284,13 @@ def simulate(bars: pd.DataFrame, sig_df: pd.DataFrame, *,
         # B1: exit positions opened on a PREVIOUS bar (gap-aware).
         for p in list(open_pos):
             if p["entry_bar"] < i:
+                # Layer-4 RANGE time-stop: close at market if not reverted in time.
+                if (range_max_bars and p.get("mode") == "range"
+                        and (i - p["entry_bar"]) >= range_max_bars):
+                    fill = o[i] - cost if p["side"] == 1 else o[i] + cost
+                    close_trade(p, fill, "time_stop", i)
+                    open_pos.remove(p)
+                    continue
                 res = try_exit(p, o[i], h[i], l[i], is_entry_bar=False)
                 if res:
                     fill, reason = res
