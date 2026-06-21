@@ -29,16 +29,17 @@ def make_strategy(**overrides) -> SqueezeBreakoutStrategy:
     return SqueezeBreakoutStrategy(make_symbol(), cfg)
 
 
-def make_coil_then_break(direction: str = "up", n_warm: int = 180,
-                         base: float = 2000.0) -> pd.DataFrame:
+def make_coil_then_break(direction: str = "up", n_warm: int = 140,
+                         coil_len: int = 70, base: float = 2000.0) -> pd.DataFrame:
     """Build 15m bars: a wide-ATR warmup, a tight COIL, then a breakout bar.
 
     The warmup gives the 100-bar ATR percentile something to sit above so the
-    coil's low ATR registers as a squeeze; the coil is flat+tight; the last bar
-    expands ATR and closes beyond the prior Donchian(20) channel.
+    coil's low ATR registers as a squeeze; the coil is long enough for the
+    Kalman line to settle flat; the last bar expands ATR and closes beyond the
+    prior Donchian(20) channel.
     """
     start = datetime(2026, 6, 1, 0, 0, tzinfo=timezone.utc)
-    n = n_warm + 30 + 1
+    n = n_warm + coil_len + 1
     idx = pd.date_range(start, periods=n, freq="15min")
     rs = np.random.RandomState(3)
 

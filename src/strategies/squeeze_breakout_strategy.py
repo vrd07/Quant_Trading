@@ -61,8 +61,16 @@ class SqueezeBreakoutStrategy(BaseStrategy):
         self.cooldown_bars = int(config.get('cooldown_bars', 8))
         self.kalman_q = float(config.get('kalman_q', 0.00001))
         self.kalman_r = float(config.get('kalman_r', 0.01))
-        # SL = sl_atr_multiplier x ATR (~33pts); TP = SL x rr (RR2.0 = the edge).
+        # SL geometry. `sl_points` = a FIXED price-point stop (default 33 = the
+        # research geometry). This is DELIBERATELY the default, not an ATR
+        # multiple: a 3.0x ATR stop floats wider in high-vol stretches and
+        # destroys the breakout edge (validated — fixed 33pt = 2026 PF 1.20
+        # through the engine; 3xATR = PF 0.99). Set `sl_points: null` in config
+        # to fall back to `sl_atr_multiplier` x ATR (inferior; for research only).
+        # TP = SL x rr (RR2.0 is the edge — RR1.0 loses both years).
         self.sl_atr_multiplier = float(config.get('sl_atr_multiplier', 3.0))
+        _slp = config.get('sl_points', 33.0)
+        self.sl_points = None if _slp is None else float(_slp)
         self.rr = float(config.get('rr', 2.0))
         self.timeframe_minutes = int(config.get('timeframe_minutes', 15))
         # Hard symbol gate: validated on XAUUSD only. Prefix match so the
@@ -131,8 +139,9 @@ class SqueezeBreakoutStrategy(BaseStrategy):
             if elapsed_min < self.cooldown_bars * self.timeframe_minutes:
                 return None
 
-        # --- Sizing geometry: SL = k*ATR (~33pts), TP = SL*RR (RR2.0) ---
-        sl_dist = self.sl_atr_multiplier * atr_now
+        # --- Sizing geometry: SL = sl_points (fixed) or k*ATR; TP = SL*RR ---
+        sl_dist = float(self.sl_points) if self.sl_points is not None \
+            else self.sl_atr_multiplier * atr_now
         tp_dist = sl_dist * self.rr
         if side == OrderSide.BUY:
             stop = c - sl_dist
@@ -156,6 +165,9 @@ class SqueezeBreakoutStrategy(BaseStrategy):
                 'mode': 'breakout',
                 'stop_price': stop,        # RiskProcessor honors this verbatim
                 'take_profit_price': target,
+                # The fixed SL/RR2.0 geometry IS the edge — keep the execution
+                # layer's BudgetSL from shrinking the stop to the dollar budget.
+                'preserve_structural_sl': True,
                 'atr': atr_now,
                 'donch_high': donch_hi,
                 'donch_low': donch_lo,

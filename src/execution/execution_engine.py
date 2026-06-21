@@ -283,7 +283,15 @@ class ExecutionEngine:
                 _pct = Decimal(str(_risk_cfg.get('risk_per_trade_pct', 0) or 0))
                 _max_loss_usd = account_balance * _pct
 
+            # Strategies whose edge IS a fixed SL/RR geometry (e.g. squeeze_breakout's
+            # SL33/RR2.0 — a tighter budget-sized stop chokes the breakout) opt out of
+            # the rewrite via metadata['preserve_structural_sl']. Position size was
+            # already computed off the structural SL above, so per-trade risk is still
+            # governed by it (subject to the broker min-lot floor).
+            _preserve_sl = bool(signal.metadata.get('preserve_structural_sl'))
+
             if (_max_loss_usd > 0
+                    and not _preserve_sl
                     and position_size > 0
                     and signal.symbol.value_per_lot > 0
                     and signal.entry_price):
@@ -329,6 +337,7 @@ class ExecutionEngine:
             # strategy fired. Disabled (0) → leave the strategy/ATR TP untouched.
             _tp_usd = Decimal(str(_risk_cfg.get('take_profit_usd', 0) or 0))
             if (_tp_usd > 0
+                    and not _preserve_sl
                     and position_size > 0
                     and signal.symbol.value_per_lot > 0
                     and signal.entry_price):

@@ -318,6 +318,27 @@ class RiskProcessor:
                 sl = entry - 2 * atr if side == OrderSide.BUY else entry + 2 * atr
             tp = None
 
+        elif strategy_name == 'squeeze_breakout':
+            # Volatility-coil breakout. The strategy precomputes SL = sl_atr_multiplier
+            # × ATR and TP = SL × rr — the FIXED RR2.0 geometry is the entire edge
+            # (RR1.0 loses both years; breakouts need room, so the wide SL must NOT
+            # be tightened). Honor the precomputed stops verbatim; fall back to the
+            # config multiples only if metadata is absent. The strategy also sets
+            # metadata['preserve_structural_sl'] so the execution-layer BudgetSL
+            # does not shrink this stop back to the dollar budget.
+            precomputed_sl = signal.metadata.get('stop_price')
+            precomputed_tp = signal.metadata.get('take_profit_price')
+            if precomputed_sl is not None and precomputed_tp is not None:
+                sl = Decimal(str(precomputed_sl))
+                tp = Decimal(str(precomputed_tp))
+            else:
+                atr = Decimal(str(signal.metadata.get('atr', 0)))
+                sl_mult = Decimal(str(strat_cfg.get('sl_atr_multiplier', 3.0)))
+                rr = Decimal(str(strat_cfg.get('rr', 2.0)))
+                sl_dist = sl_mult * atr
+                sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+                tp = entry + sl_dist * rr if side == OrderSide.BUY else entry - sl_dist * rr
+
         else:
             # Fallback for unknown strategies (fail-safe ATR stop if available)
             self.logger.warning(f"RiskProcessor: Unknown strategy '{strategy_name}'. Using fallback.")

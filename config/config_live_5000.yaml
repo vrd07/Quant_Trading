@@ -283,7 +283,8 @@ strategies:
     cooldown_bars: 8         # one entry per fresh coil
     kalman_q: 0.00001
     kalman_r: 0.01
-    sl_atr_multiplier: 3.0   # ~33pts = 3.0x median 2026 15m ATR
+    sl_points: 33            # FIXED 33pt stop = research geometry (engine PF 1.20 '26 / 1.13 full).
+    sl_atr_multiplier: 3.0   # only used if sl_points: null — 3xATR floats too wide, PF 0.99 (inferior)
     rr: 2.0                  # TP = SL*RR — RR2.0 is the edge (RR1.0 loses both years)
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]

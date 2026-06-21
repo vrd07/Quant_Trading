@@ -50,10 +50,11 @@ from src.strategies.smc_ob_strategy import SMCOrderBlockStrategy
 from src.strategies.fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from src.strategies.london_breakout_strategy import LondonBreakoutStrategy
 from src.strategies.monday_drift_strategy import MondayDriftStrategy
+from src.strategies.squeeze_breakout_strategy import SqueezeBreakoutStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -165,6 +166,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('monday_drift', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return MondayDriftStrategy(symbol, cfg)
+    elif strategy_name == 'squeeze_breakout':
+        cfg = dict(strats.get('squeeze_breakout', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return SqueezeBreakoutStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
