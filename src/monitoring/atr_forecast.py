@@ -77,6 +77,85 @@ def wilder_atr(
     return tr.ewm(alpha=1.0 / period, adjust=False).mean()
 
 
+def _wilder_adx(
+    high: pd.Series, low: pd.Series, close: pd.Series, period: int = 14
+) -> pd.Series:
+    """Wilder's ADX — directional movement strength, RMA-smoothed (α=1/period)."""
+    up_move = high.diff()
+    down_move = -low.diff()
+    plus_dm = ((up_move > down_move) & (up_move > 0)).astype(float) * up_move
+    minus_dm = ((down_move > up_move) & (down_move > 0)).astype(float) * down_move
+
+    prev_close = close.shift(1)
+    tr = pd.concat(
+        [(high - low).abs(), (high - prev_close).abs(), (low - prev_close).abs()],
+        axis=1,
+    ).max(axis=1)
+    atr = tr.ewm(alpha=1.0 / period, adjust=False).mean()
+
+    plus_di = 100.0 * plus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / atr
+    minus_di = 100.0 * minus_dm.ewm(alpha=1.0 / period, adjust=False).mean() / atr
+    di_sum = (plus_di + minus_di).replace(0, np.nan)
+    dx = 100.0 * (plus_di - minus_di).abs() / di_sum
+    return dx.ewm(alpha=1.0 / period, adjust=False).mean()
+
+
+def classify_regime_rt(
+    bars: pd.DataFrame,
+    adx_period: int = 14,
+    atr_period: int = 14,
+    atr_ma_period: int = 50,
+    adx_trend: float = 25.0,
+    adx_range: float = 20.0,
+    vol_expansion: float = 1.3,
+) -> str:
+    """Real-time TREND / RANGE / VOLATILE classification for the live monitor.
+
+    DISPLAY-ONLY — this does NOT gate any trade. The trading regime filter in
+    src/strategies/regime_filter.py is intentionally left unchanged.
+
+    Definition follows the standard directional-vs-volatility decomposition
+    (ADX answers "is there a trend right now"; ATR-vs-average answers "how big
+    are the swings"). The two axes are orthogonal, so a volatile day is one
+    with large swings but NO clean direction (news churn), not simply a strong
+    trend:
+
+      TREND    : ADX >= adx_trend (directional persistence), regardless of vol.
+      VOLATILE : vol expanding (ATR >= vol_expansion x its average) AND ADX
+                 below the trend threshold -> big, directionless swings.
+      RANGE    : ADX < adx_range and vol not expanding -> quiet/sideways.
+      UNKNOWN  : the 20-25 ADX no-man's-land at normal vol, or too little data.
+    """
+    min_required = max(adx_period, atr_ma_period) + 1
+    if bars is None or len(bars) < min_required:
+        return "UNKNOWN"
+    for col in ("high", "low", "close"):
+        if col not in bars.columns:
+            return "UNKNOWN"
+
+    high = bars["high"].astype(float)
+    low = bars["low"].astype(float)
+    close = bars["close"].astype(float)
+
+    cur_adx = float(_wilder_adx(high, low, close, adx_period).iloc[-1])
+    if not np.isfinite(cur_adx):
+        return "UNKNOWN"
+
+    atr_series = wilder_atr(high, low, close, atr_period)
+    atr_ma = atr_series.rolling(atr_ma_period).mean()
+    cur_atr = float(atr_series.iloc[-1])
+    cur_atr_ma = float(atr_ma.iloc[-1])
+    atr_ratio = cur_atr / cur_atr_ma if cur_atr_ma > 0 else 1.0
+
+    if cur_adx >= adx_trend:
+        return "TREND"
+    if atr_ratio >= vol_expansion:
+        return "VOLATILE"
+    if cur_adx < adx_range:
+        return "RANGE"
+    return "UNKNOWN"
+
+
 def direction_from_returns(
     close: pd.Series, lookback: int = 20, deadband: float = 0.001
 ) -> str:
