@@ -144,3 +144,11 @@ class TestStochPullback:
         bars = make_trend_pullback_break("up")
         assert strat.on_bar(bars) is not None
         assert strat.on_bar(bars) is None   # within cooldown window
+
+    def test_trend_extension_gate_blocks_chop(self):
+        """Trend-extension filter: an entry with price too close to the EMA (no
+        real trend separation) is rejected. A high min_ema_dist_atr forces the
+        strong-trend fixture to fail the gate; disabling it (0) lets it through."""
+        bars = make_trend_pullback_break("up")
+        assert make_strategy(min_ema_dist_atr=0.0).on_bar(bars) is not None   # raw signal
+        assert make_strategy(min_ema_dist_atr=100.0).on_bar(bars) is None     # gate vetoes

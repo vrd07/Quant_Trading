@@ -29,8 +29,9 @@ def make_strategy(**overrides) -> SqueezeBreakoutStrategy:
     return SqueezeBreakoutStrategy(make_symbol(), cfg)
 
 
-def make_coil_then_break(direction: str = "up", n_warm: int = 140,
-                         coil_len: int = 70, base: float = 2000.0) -> pd.DataFrame:
+def make_coil_then_break(direction: str = "up", n_warm: int = 340,
+                         coil_len: int = 70, base: float = 2000.0,
+                         warm_slope: float = 0.0) -> pd.DataFrame:
     """Build 15m bars: a wide-ATR warmup, a tight COIL, then a breakout bar.
 
     The warmup gives the 100-bar ATR percentile something to sit above so the
@@ -46,9 +47,10 @@ def make_coil_then_break(direction: str = "up", n_warm: int = 140,
     close = np.empty(n)
     high = np.empty(n)
     low = np.empty(n)
-    # Wide, choppy warmup (high ATR) oscillating around base.
+    # Wide, choppy warmup (high ATR) oscillating around base (+ optional drift,
+    # so the HTF-EMA can be pushed above/below the eventual breakout price).
     for i in range(n_warm):
-        c = base + 8.0 * np.sin(i / 5.0) + rs.uniform(-3, 3)
+        c = base + warm_slope * i + 8.0 * np.sin(i / 5.0) + rs.uniform(-3, 3)
         close[i] = c
         high[i] = c + 4.0
         low[i] = c - 4.0
@@ -145,3 +147,33 @@ class TestSqueezeBreakout:
         assert first is not None
         # same frame again → within cooldown window → suppressed
         assert strat.on_bar(bars) is None
+
+    def test_shallow_break_rejected(self):
+        """Loser-profile filter: a break that barely clears the channel is a
+        fakeout — reject it. A high min_penetration_atr makes the strong fixture
+        fail the gate."""
+        bars = make_coil_then_break("up")
+        assert make_strategy().on_bar(bars) is not None          # default passes
+        assert make_strategy(min_penetration_atr=1000.0).on_bar(bars) is None
+
+    def test_weak_expansion_rejected(self):
+        """Loser-profile filter: a mere ATR uptick is not a real vol surge.
+        A high atr_expansion_ratio makes the strong fixture fail the gate."""
+        bars = make_coil_then_break("up")
+        assert make_strategy().on_bar(bars) is not None          # default passes
+        assert make_strategy(atr_expansion_ratio=10.0).on_bar(bars) is None
+
+    def test_htf_gate_blocks_counter_trend_break(self):
+        """HTF-trend gate: an UP-break while price sits BELOW the slow EMA
+        (a downtrend) is a counter-trend whipsaw — reject it. Disabling the gate
+        (htf_ema_period=0) lets the same raw break through, isolating the gate."""
+        # strong downward drift over the warmup → EMA400 sits well above the coil
+        bars = make_coil_then_break("up", warm_slope=-0.6)
+        assert make_strategy(htf_ema_period=0).on_bar(bars) is not None   # raw break fires
+        assert make_strategy(htf_ema_period=400).on_bar(bars) is None     # gate vetoes it
+
+    def test_htf_gate_allows_with_trend_break(self):
+        """An UP-break while price is ABOVE the slow EMA (uptrend) passes the gate."""
+        bars = make_coil_then_break("up", warm_slope=0.5)
+        sig = make_strategy(htf_ema_period=400).on_bar(bars)
+        assert sig is not None and sig.side == OrderSide.BUY
