@@ -260,6 +260,9 @@ strategies:
     slope_bars: 3            # Kalman flatness lookback
     flat_atr_mult: 0.5       # |kalman slope| <= 0.5*ATR == flat
     coil_lookback: 6         # breakout must follow a coil within 6 bars
+    min_penetration_atr: 0.1    # reject shallow fakeout breaks (<0.1*ATR past Donchian) — loser-profile filter (2026-06-22)
+    atr_expansion_ratio: 1.05   # require a real vol surge (ATR >= 1.05x prior bar), not a mere uptick
+    htf_ema_period: 400         # HTF-trend gate: only breaks aligned w/ EMA400 (BUY above / SELL below); 0=off. Halves DD, lifts PF both yrs
     cooldown_bars: 8         # one entry per fresh coil
     kalman_q: 0.00001
     kalman_r: 0.01
@@ -280,6 +283,8 @@ strategies:
     range_bars: 5            # consolidation lookback for the breakout + structural stop
     buffer_pts: 0.10         # stop placed this far behind the range
     min_stop_pts: 2.0        # reject if structural stop is tighter than this
+    min_ema_dist_atr: 1.0       # trend-extension: price must be >=1*ATR from EMA in trend dir (else chop = loser cluster); 0=off (2026-06-22)
+    atr_period: 14              # ATR period for the trend-extension filter
     rr: 2.0                  # TP = rr * structural SL — RR2.0 is the edge (2026 PF 1.31 / 2025 1.19)
     cooldown_bars: 5         # one entry per fresh breakout
     session_start_hour: 7    # London open (UTC) — session filter ~halves drawdown
@@ -637,7 +642,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-22_news.csv
+    csv_path: news/2026-06-23_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
