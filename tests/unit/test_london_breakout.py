@@ -126,3 +126,26 @@ class TestRiskProcessorIntegration:
         out = rp.calculate_stops(sig)
         assert out.take_profit is None
         assert float(out.stop_loss) == pytest.approx(sig.metadata["stop_price"])
+
+    def test_kalman_tp_is_marked_structural(self):
+        """kalman's ATR TP (the backtested edge) must opt out of the dollar-TP
+        rewrite so a runtime take_profit_usd can't stretch it back to ~8×ATR."""
+        from src.risk.risk_processor import RiskProcessor
+        from src.core.types import Signal
+
+        sig = Signal(
+            strategy_name="kalman_regime",
+            symbol=make_symbol("XAUUSD"),
+            side=OrderSide.SELL,
+            entry_price=Decimal("4200"),
+            metadata={"atr": 6.0},
+        )
+        cfg = {
+            "strategies": {"kalman_regime": {
+                "sl_atr_multiplier": 3.0, "tp_atr_multiplier": 4.0}},
+            "risk": {"kalman_min_tp_rr": 1.0},
+        }
+        out = RiskProcessor(cfg).calculate_stops(sig)
+        # 4×ATR TP below entry on a SELL → ~RR 1.33, not a dollar target.
+        assert out.metadata.get("preserve_structural_tp") is True
+        assert float(out.take_profit) == pytest.approx(4200 - 4.0 * 6.0)
