@@ -359,7 +359,12 @@ class ConfluenceGate:
             if template is not None:
                 break
         if template is None:
-            # No live leg this tick — pull from history.
+            # No live leg this tick — pull from history. Borrow a Symbol from
+            # any signal present this tick (all share the same ticker object);
+            # without it the risk engine crashes on symbol=None.
+            ref_symbol = next((s.symbol for _, s in signals if s.symbol is not None), None)
+            if ref_symbol is None:
+                return None  # no executable symbol context this tick — skip
             bucket = self._history.get(symbol) or ()
             for ts, name, s_side, entry in reversed(bucket):
                 if name in COMBO_C_LEGS and s_side == side:
@@ -367,7 +372,7 @@ class ConfluenceGate:
                     snip = Signal(
                         signal_id=uuid4(),
                         strategy_name="combo_sniper",
-                        symbol=None,  # filled by caller context if needed
+                        symbol=ref_symbol,
                         side=side,
                         strength=0.9,
                         timestamp=now,
