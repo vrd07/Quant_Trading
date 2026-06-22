@@ -106,6 +106,9 @@ def main():
                     help="Disable ConfluenceGate (baseline run). Kill-list still applies.")
     ap.add_argument("--relaxed", action="store_true",
                     help="Enable 2-of-3 confluence relaxation (primary + ≥1 leg; sniper ≥2 of 3).")
+    ap.add_argument("--capital", type=str, default=None,
+                    help="Override initial_balance (keeps the account solvent so "
+                         "combo signals aren't starved by an early blow-up).")
     ap.add_argument("--verbose", action="store_true")
     args = ap.parse_args()
 
@@ -142,6 +145,8 @@ def main():
     print(f"[combo-backtest] fixed lot = {args.lot}  initial capital = "
           f"{cfg.get('account', {}).get('initial_balance', 10000)}")
 
+    if args.capital is not None:
+        cfg.setdefault("account", {})["initial_balance"] = args.capital
     initial_capital = Decimal(str(cfg.get("account", {}).get("initial_balance", 10000)))
     engine = EnsembleBacktestEngine(
         symbol=symbol,
