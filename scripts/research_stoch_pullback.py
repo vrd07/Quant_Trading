@@ -93,20 +93,26 @@ def load_tf(tf_min: int, start, end) -> pd.DataFrame:
 def stoch_pullback_signals(bars, *, trend_ema=50, stoch_period=14,
                            pull_lo=20.0, pull_hi=30.0, arm_window=10,
                            range_bars=5, buffer_pts=0.10, min_stop_pts=2.0,
-                           session_hours=None):
+                           session_hours=None, min_ema_dist_atr=1.0):
     """Vectorised stochastic-pullback-continuation signals.
 
     Returns a DataFrame: bar_idx, signal_ts, side, stop_price, strength.
     The stop is STRUCTURAL (per-trade), carried on the row; TP is derived from RR
     in the simulator.
+
+    min_ema_dist_atr is the trend-extension filter (analyze_stoch_losers.py): price
+    must be >= this * ATR from the EMA in the trend direction (real trend, not chop
+    around the mean). Lifts PF on IS+OOS. Set 0 to disable.
     """
     close = bars["close"]
     high, low = bars["high"], bars["low"]
     ema = Indicators.ema(bars, period=trend_ema)
     k, d = Indicators.stochastic(bars, period=stoch_period)
+    atr = Indicators.atr(bars, period=14)
 
-    up = (close > ema) & (ema > ema.shift(5))     # established uptrend
-    dn = (close < ema) & (ema < ema.shift(5))     # established downtrend
+    ext = min_ema_dist_atr * atr
+    up = (close > ema + ext) & (ema > ema.shift(5))     # established, extended uptrend
+    dn = (close < ema - ext) & (ema < ema.shift(5))     # established, extended downtrend
 
     # PULLBACK armed: %K dipped into the cool-off zone within the last arm_window bars
     long_cool = (k <= pull_hi)                    # cooled off (<=30) at some recent bar

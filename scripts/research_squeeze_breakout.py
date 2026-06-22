@@ -41,8 +41,19 @@ YEARS = {"2025 (OOS)": ("2025-02-01", "2026-01-01"),
 
 def squeeze_breakout_signals(bars, *, atr_period=14, pct_window=100, pct=0.20,
                              donch=20, slope_bars=3, flat_atr_mult=0.5,
-                             coil_lookback=6, cooldown=8):
-    """Vectorised squeeze→breakout signals. Returns a sig_df for simulate()."""
+                             coil_lookback=6, cooldown=8,
+                             min_penetration_atr=0.1, atr_expansion_ratio=1.05,
+                             htf_ema_period=400):
+    """Vectorised squeeze→breakout signals. Returns a sig_df for simulate().
+
+    min_penetration_atr / atr_expansion_ratio are the loser-profile filters
+    (2026-06-22, analyze_squeeze_losers.py): reject shallow fakeout breaks and
+    weak (mere-uptick) vol expansions — both lift IS+OOS PF.
+
+    htf_ema_period is the HTF-trend gate (research_squeeze_htf_gate.py): only take
+    breaks aligned with the slow EMA (BUY above / SELL below). Halves DD + lifts PF
+    on IS+OOS. Set 0 to disable.
+    """
     close, high, low = bars["close"], bars["high"], bars["low"]
     atr = Indicators.atr(bars, period=atr_period)
     kal = Indicators.kalman_filter(close, q=KAL_Q, r=KAL_R)
@@ -56,10 +67,18 @@ def squeeze_breakout_signals(bars, *, atr_period=14, pct_window=100, pct=0.20,
 
     donch_hi = high.rolling(donch).max().shift(1)
     donch_lo = low.rolling(donch).min().shift(1)
-    atr_expand = atr > atr.shift(1)
+    atr_expand = atr >= atr_expansion_ratio * atr.shift(1)
+    deep_hi = close > donch_hi + min_penetration_atr * atr
+    deep_lo = close < donch_lo - min_penetration_atr * atr
 
-    buy = recently & atr_expand & (close > donch_hi)
-    sell = recently & atr_expand & (close < donch_lo)
+    if htf_ema_period and htf_ema_period > 0:
+        htf = close.ewm(span=htf_ema_period, adjust=False).mean()
+        up_ok, dn_ok = close > htf, close < htf
+    else:
+        up_ok = dn_ok = pd.Series(True, index=close.index)
+
+    buy = recently & atr_expand & (close > donch_hi) & deep_hi & up_ok
+    sell = recently & atr_expand & (close < donch_lo) & deep_lo & dn_ok
 
     rows, last = [], -10**9
     n = len(bars)
