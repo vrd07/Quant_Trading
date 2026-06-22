@@ -5,7 +5,10 @@ Implements the ACY "How to Trade Gold Using Stochastics (2R/3R)" method
 (acy.com/.../how-to-trade-gold-using-stochastics-2r-3r-j-o-100124). The edge is
 NOT a stochastic reversal — it is a TREND-CONTINUATION pullback:
 
-  1. TREND filter:  EMA(`trend_ema`) slope + price on the trend side.
+  1. TREND filter:  EMA(`trend_ema`) slope + price at least `min_ema_dist_atr`
+                    * ATR away from the EMA on the trend side (real separation,
+                    not chop around the mean — the loser cluster, see
+                    analyze_stoch_losers.py).
   2. PULLBACK:      Stochastic(14,3) %K "cools off" into the 20-30 zone (long) /
                     70-80 zone (short) within the last `arm_window` bars — a
                     momentum reset, not an extreme reversal call.
@@ -58,6 +61,15 @@ class StochPullbackStrategy(BaseStrategy):
         self.range_bars = int(config.get('range_bars', 5))   # consolidation lookback
         self.buffer_pts = float(config.get('buffer_pts', 0.10))
         self.min_stop_pts = float(config.get('min_stop_pts', 2.0))
+        # Trend-extension filter (validated 2026-06-22, scripts/analyze_stoch_losers.py):
+        # the bleed was entries taken while price sat ON the EMA — a "continuation"
+        # pullback with no actual trend separation (|ema_dist| 0.3-1.0 ATR: WR ~20%,
+        # -$781). Require price to be at least min_ema_dist_atr * ATR away from the
+        # EMA in the trade direction = a genuinely established/extended trend, not
+        # chop around the mean. Walk-forward lifts PF on BOTH years (2026 1.27->1.39,
+        # 2025 1.31->1.37) and cuts DD; >1.25 starts to overfit IS. Set 0 to disable.
+        self.min_ema_dist_atr = float(config.get('min_ema_dist_atr', 1.0))
+        self.atr_period = int(config.get('atr_period', 14))
         self.rr = float(config.get('rr', 2.0))               # TP = rr * structural SL
         self.cooldown_bars = int(config.get('cooldown_bars', 5))
         # Embedded session filter (UTC entry-hour gate). London open → NY = the
@@ -96,19 +108,24 @@ class StochPullbackStrategy(BaseStrategy):
 
         ema = Indicators.ema(bars, period=self.trend_ema)
         k, d = Indicators.stochastic(bars, period=self.stoch_period)
+        atr = Indicators.atr(bars, period=self.atr_period)
 
         c = float(close.iloc[-1])
         ema_now = float(ema.iloc[-1])
         ema_prev = float(ema.iloc[-6])
         k_now = float(k.iloc[-1])
         d_now = float(d.iloc[-1])
-        if pd.isna(ema_now) or pd.isna(k_now) or pd.isna(d_now):
+        atr_now = float(atr.iloc[-1])
+        if pd.isna(ema_now) or pd.isna(k_now) or pd.isna(d_now) or pd.isna(atr_now) or atr_now <= 0:
             return None
 
-        up = c > ema_now and ema_now > ema_prev       # established uptrend
-        dn = c < ema_now and ema_now < ema_prev       # established downtrend
+        # Trend-extension gate: price must be a real distance from the EMA in the
+        # trend direction, else it's chop around the mean (the loser cluster).
+        ext = self.min_ema_dist_atr * atr_now
+        up = c > ema_now + ext and ema_now > ema_prev       # established uptrend
+        dn = c < ema_now - ext and ema_now < ema_prev       # established downtrend
         if not (up or dn):
-            self._log_no_signal("no established trend")
+            self._log_no_signal("no established/extended trend")
             return None
 
         # PULLBACK armed: %K dipped into the cool-off zone within the prior
