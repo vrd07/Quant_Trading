@@ -632,7 +632,7 @@ class LiveMonitorEmitter:
             # lookbacks with longer windows weighted more, validated by
             # scripts/backtest_mta_direction.py.
             try:
-                from .atr_forecast import wilder_atr, direction_mta
+                from .atr_forecast import wilder_atr, direction_mta, classify_regime_rt
 
                 eng = getattr(ts, "data_engine", None)
                 if eng is not None:
@@ -659,6 +659,13 @@ class LiveMonitorEmitter:
                         row["direction"] = mta["consensus"]
                         row["mta_n_aligned"] = int(mta["n_aligned"])
                         row["mta_n_total"] = int(mta["n_total"])
+                        # Real-time TREND/RANGE/VOLATILE from live bars (display-only;
+                        # does NOT gate trades). Overrides the nightly daily-ML label
+                        # set above so the monitor reflects the market right now;
+                        # falls back to that daily label when bars are too thin.
+                        rt_regime = classify_regime_rt(bars)
+                        if rt_regime != "UNKNOWN":
+                            row["regime"] = rt_regime
                         # Liquidity reference levels — PDH/PDL + today's Asia
                         # session H/L (UTC 00-07). CandleStore.get_bars()
                         # returns bars with a RangeIndex + 'timestamp' column,

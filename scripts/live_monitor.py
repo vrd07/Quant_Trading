@@ -619,6 +619,13 @@ class LiveMonitorApp:
                                   font=("Menlo", 9, "bold"), padx=4, pady=3)
         self.news_chip.pack(side=tk.RIGHT)
 
+        # Real-time market regime (TREND / RANGE / VOLATILE) for the primary
+        # symbol — sits just left of the news status chip. Color-coded via
+        # COLOR_BY_REGIME. Computed live in the emitter (atr_forecast).
+        self.regime_chip = tk.Label(hdr, text="  REGIME —  ", bg=BG_PANEL_2, fg=TEXT_DIM,
+                                    font=("Menlo", 9, "bold"), padx=4, pady=3)
+        self.regime_chip.pack(side=tk.RIGHT, padx=(0, 6))
+
         # Scrollable cards container — canvas + inner frame. Cards are CREATED
         # ONCE and reused; each tick only call .config() / pack_forget() on
         # existing widgets so the panel never blinks (no destroy/recreate).
@@ -1097,6 +1104,14 @@ class LiveMonitorApp:
             self.news_chip.config(text=" NEWS BLACKOUT ", bg=RED, fg=BG)
         else:
             self.news_chip.config(text=" NEWS CLEAR ", bg=BG_PANEL_2, fg=TEXT_DIM)
+
+        # Real-time regime chip — primary (first enabled) symbol's live regime.
+        syms = d.get("symbols", []) or []
+        primary = next((s for s in syms if s.get("enabled")), syms[0] if syms else None)
+        regime = (primary.get("regime") if primary else "UNKNOWN") or "UNKNOWN"
+        regime = regime.upper()
+        regime_fg = COLOR_BY_REGIME.get(regime, TEXT_DIM)
+        self.regime_chip.config(text=f" REGIME {regime} ", fg=regime_fg)
 
         self._render_news_cards(news.get("upcoming") or [])
 
