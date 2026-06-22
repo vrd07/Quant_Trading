@@ -96,6 +96,12 @@ class RiskProcessor:
             tp_dist = max(tp_mult * atr, sl_dist * min_tp_rr)
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
+            # This ATR TP IS the backtested edge (PF 1.28 @ 4×ATR). Flag it so the
+            # execution-layer BudgetTP does NOT stretch it to a fixed take_profit_usd
+            # (which re-introduces the 8×ATR TP the 2026-05-06 retune removed). The
+            # SL stays budget-governed (DD lever); only the TP is preserved.
+            signal.metadata['preserve_structural_tp'] = True
+
         elif strategy_name == 'momentum_scalp':
             atr = Decimal(str(signal.metadata.get('atr', 0)))
             atr_mult = Decimal(str(strat_cfg.get('atr_stop_multiplier', 2.0)))

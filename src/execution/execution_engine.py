@@ -335,9 +335,18 @@ class ExecutionEngine:
             # in runtime_setup, rewrite the strategy's structural TP so every
             # trade targets exactly `take_profit_usd`, regardless of which
             # strategy fired. Disabled (0) → leave the strategy/ATR TP untouched.
+            # kalman_regime's edge is its ATR-based TP (4×ATR ≈ RR 1.33 — the
+            # 2026-05-06 retune cut TP from 8×ATR to 4×ATR because XAU 15m trends
+            # rarely reach 8×ATR). A fixed-dollar take_profit_usd stretches the TP
+            # back out (e.g. $240 → ~8×ATR), silently un-doing that retune, so
+            # kalman flags metadata['preserve_structural_tp'] to opt its TP out of
+            # the budget rewrite. (Its SL still follows the dollar budget for DD
+            # control.)
+            _preserve_tp = bool(signal.metadata.get('preserve_structural_tp'))
             _tp_usd = Decimal(str(_risk_cfg.get('take_profit_usd', 0) or 0))
             if (_tp_usd > 0
                     and not _preserve_sl
+                    and not _preserve_tp
                     and position_size > 0
                     and signal.symbol.value_per_lot > 0
                     and signal.entry_price):
