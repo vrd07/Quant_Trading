@@ -445,7 +445,7 @@ strategies:
     trend_adx_min: 17               # v3 loose: 20 -> 17 (KEPT pending isolation test)
     kalman_confirm_bars: 2          # 2026-05-05: v3-loose REVERTED (was 1)
     min_signal_strength: 0.50       # 2026-05-05: v3-loose REVERTED (was 0.35) — BUY-side gate
-    min_signal_strength_sell: 0.75  # 2026-05-05: SELL-specific tighter gate — trade log showed SELL WR 14.6% vs BUY 33.9% (gold has bullish drift)
+    min_signal_strength_sell: 0.85  # 2026-06-22: 0.75→0.85 — drops weak counter-trend SELLs (gold bullish drift). 15m kalman backtest PF 1.24→1.28, maxDD −16.9%→−13.1%, Sharpe 0.23→0.27. Original basis 2026-05-05: SELL WR 14.6% vs BUY 33.9%.
     cooldown_bars: 2                # 2026-05-05: v3-loose REVERTED (was 1)
     atr_period: 14
     sl_atr_multiplier: 3.0          # 2026-05-06: 1.5/2.5 → 3.0 — 2-D SL×TP sweep on $10k showed (3.0, 4.0) is winrate sweet spot (WR 47.6%, PF 1.32)
