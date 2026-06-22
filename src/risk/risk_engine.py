@@ -57,6 +57,14 @@ from .drawdown_tracker import DrawdownTracker
 from .exposure_manager import ExposureManager
 
 
+# Strategies that measurably co-move and should share a single position slot.
+# squeeze_breakout × stoch_pullback correlate +0.34 (both are gold-coil
+# breakouts on the same instrument) — see scripts/handcraft_weights.py and the
+# project_handcraft_weights memory. Baked in so the guard protects even an
+# un-edited config; override/extend via risk.correlation_guard.clusters.
+DEFAULT_CORRELATION_CLUSTERS = [["squeeze_breakout", "stoch_pullback"]]
+
+
 class RiskEngine:
     """
     Central risk management engine.
@@ -108,6 +116,26 @@ class RiskEngine:
             df_cfg.get('weights_file', 'data/strategy_risk_weights.json'))
         self._decay_weights: Dict[str, float] = {}
         self._decay_weights_mtime: float = -1.0
+
+        # ── Correlation guard (2026-06-23) ─────────────────────────────────
+        # Some strategies are near-duplicate bets and measurably co-move — e.g.
+        # squeeze_breakout × stoch_pullback correlate +0.34 (both gold-coil
+        # breakouts). Letting both hold at once doubles one exposure and can
+        # fill both max_positions slots with a single bet. This caps how many
+        # open positions a correlation CLUSTER may hold concurrently (default
+        # 1 = the cluster shares one slot). Clusters are config-overridable; the
+        # empirically-found gold pair is the baked-in default. ON unless the
+        # operator explicitly disables it. Schema:
+        #   risk.correlation_guard:
+        #     enabled: true
+        #     max_per_cluster: 1
+        #     clusters: [["squeeze_breakout", "stoch_pullback"], ...]
+        cg_cfg = risk_config.get('correlation_guard', {}) or {}
+        self.correlation_guard_enabled: bool = bool(cg_cfg.get('enabled', True))
+        self.correlation_max_per_cluster: int = int(cg_cfg.get('max_per_cluster', 1))
+        raw_clusters = cg_cfg.get('clusters') or DEFAULT_CORRELATION_CLUSTERS
+        # frozenset per cluster for O(1) membership; drop degenerate singletons.
+        self._correlation_clusters = [frozenset(c) for c in raw_clusters if len(c) > 1]
 
         # Initialize sub-components
         self.position_sizer = PositionSizer(config)
@@ -275,6 +303,11 @@ class RiskEngine:
 
             # 17: Decay-floor allocator — veto strategies currently defunded
             ok, reason = self._check_17_decay_floor(order)
+            if not ok:
+                return False, reason
+
+            # 18: Correlation guard — a near-duplicate bet shares one slot
+            ok, reason = self._check_18_correlation_cluster(order, current_positions)
             if not ok:
                 return False, reason
 
@@ -693,6 +726,42 @@ class RiskEngine:
             reason = f"Decay-floor: '{strat}' defunded (trailing edge negative)"
             self.logger.warning("Order rejected - decay floor",
                                 strategy=strat, weight=w)
+            return False, reason
+        return True, ""
+
+    def _check_18_correlation_cluster(
+        self, order: Order, current_positions: Dict[str, Position]
+    ) -> Tuple[bool, str]:
+        """Reject if a correlated strategy cluster already holds its max slots.
+
+        Strategies in the same cluster are near-duplicate bets (e.g. squeeze ×
+        stoch on gold, corr +0.34). Capping concurrent positions per cluster
+        stops one exposure from quietly occupying multiple position slots.
+        Counts any open position whose strategy is in the same cluster as the
+        incoming order — including the order's own strategy.
+        """
+        if not self.correlation_guard_enabled or not self._correlation_clusters:
+            return True, ""
+        strat = (order.metadata or {}).get('strategy') if order.metadata else None
+        if not strat:
+            return True, ""
+        cluster = next((c for c in self._correlation_clusters if strat in c), None)
+        if cluster is None:
+            return True, ""
+        open_in_cluster = sum(
+            1 for p in current_positions.values()
+            if (p.metadata or {}).get('strategy') in cluster
+        )
+        if open_in_cluster >= self.correlation_max_per_cluster:
+            peers = "/".join(sorted(cluster))
+            reason = (f"Correlation guard: cluster [{peers}] already holds "
+                      f"{open_in_cluster} (max {self.correlation_max_per_cluster})")
+            self.logger.warning(
+                "Order rejected - correlation guard",
+                strategy=strat, cluster=sorted(cluster),
+                open_in_cluster=open_in_cluster,
+                max_per_cluster=self.correlation_max_per_cluster,
+            )
             return False, reason
         return True, ""
 

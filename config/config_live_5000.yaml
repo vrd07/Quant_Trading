@@ -138,6 +138,17 @@ risk:
   decay_floor:
     enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
     weights_file: data/strategy_risk_weights.json
+  # 2026-06-23 correlation guard (risk check 18): correlated strategies share
+  # one position slot so a single bet can't fill multiple max_positions slots.
+  # squeeze_breakout × stoch_pullback correlate +0.34 (both gold-coil breakouts,
+  # scripts/handcraft_weights.py). ON by default with this baked-in cluster even
+  # if this block is absent; listed here for visibility/tuning. max_per_cluster
+  # 1 = the cluster holds at most one position at a time.
+  correlation_guard:
+    enabled: true
+    max_per_cluster: 1
+    clusters:
+      - [squeeze_breakout, stoch_pullback]
   # $5,000 Account Risk Parameters
   max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
   max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30

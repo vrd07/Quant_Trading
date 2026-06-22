@@ -74,6 +74,15 @@ def load_strategies() -> dict:
     md = pd.concat([mg, ma], ignore_index=True)
     out["monday_drift"] = _r_from(md, "timestamp", "r_dollars")
 
+    # squeeze_breakout — XAUUSD 15m; r_dollars = per-trade $ risk; entry day.
+    # Full-span tape; the WIN_START/WIN_END calendar clips it to 2026.
+    sq = pd.read_csv(bt / "backtest_result_squeeze_breakout_trades.csv")
+    out["squeeze_breakout"] = _r_from(sq, "timestamp", "r_dollars")
+
+    # stoch_pullback — XAUUSD 15m; same tape format.
+    st = pd.read_csv(bt / "backtest_result_stoch_pullback_trades.csv")
+    out["stoch_pullback"] = _r_from(st, "timestamp", "r_dollars")
+
     return out
 
 
