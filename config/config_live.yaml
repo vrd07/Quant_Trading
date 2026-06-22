@@ -305,7 +305,7 @@ strategies:
     #   min_signal_strength 0.50→0.35, cooldown_bars 2→1.
     entry_threshold: 2.0            # 2026-05-05: v3-loose REVERTED (was 1.5) — testing v2 entry quality
     trend_adx_min: 17               # v3 loose: 20 -> 17 (KEPT pending isolation test)
-    kalman_confirm_bars: 2          # 2026-05-05: v3-loose REVERTED (was 1)
+    kalman_confirm_bars: 4          # 2026-06-22: 2→4 — trims weakest entries. 2026 PF 1.35→1.39, DD −16.9%→−15.1%; full-span PF 1.28→1.30, DD −13.1%→−11.8%, WR 47.3→47.7%. (5 gives back return.)
     min_signal_strength: 0.50       # 2026-05-05: v3-loose REVERTED (was 0.35) — BUY-side gate
     min_signal_strength_sell: 0.85  # 2026-06-22: 0.75→0.85 — drops weak counter-trend SELLs (gold bullish drift). 15m kalman backtest PF 1.24→1.28, maxDD −16.9%→−13.1%, Sharpe 0.23→0.27. Original basis 2026-05-05: SELL WR 14.6% vs BUY 33.9%.
     cooldown_bars: 2                # 2026-05-05: v3-loose REVERTED (was 1)
