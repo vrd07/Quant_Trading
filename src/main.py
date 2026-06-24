@@ -252,7 +252,26 @@ class TradingSystem:
             
             # 2. Initialize symbols
             self.logger.info("2. Loading symbols...")
-            symbols = self._load_symbols()
+            # Auto-on: a strategy's enabled flag is inert unless its required
+            # symbol is also enabled. Force the symbols on so an enabled
+            # symbol-gated strategy (monday_drift/london_breakout/index_overnight)
+            # can never sit silently dead the way monday_drift did on $25k.
+            from src.strategies.symbol_reconciler import (
+                reconcile_enabled_symbols, streaming_warning,
+            )
+            auto_enabled, missing = reconcile_enabled_symbols(self.config)
+            if auto_enabled:
+                self.logger.info(
+                    f"   ↻ Auto-enabled symbols for active strategies: {', '.join(auto_enabled)}"
+                )
+            if missing:
+                self.logger.warning(
+                    f"   ⚠ Strategies need symbols with NO config block (cannot trade): "
+                    f"{', '.join(missing)} — add a symbols.<TICKER> block."
+                )
+            for line in streaming_warning(self.config, getattr(self, 'chart_symbol', '')):
+                self.logger.warning(line)
+            symbols = self._load_symbols(apply_broker_spec=True)
             self.logger.info(f"✓ Loaded {len(symbols)} symbols")
             
             # 3. Initialize data engine
@@ -745,6 +764,19 @@ class TradingSystem:
         today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
         if self._session_mgr.state.daily_wins_date != today_str:
             self._session_mgr.state.reset_daily()
+
+            # -- Day-aware EA-streaming reminder for day-gated strategies ----
+            # Warn (today + the day before) which non-chart symbols must be in
+            # the EA WatchSymbols so monday_drift/index_overnight actually fire.
+            try:
+                from src.strategies.symbol_reconciler import streaming_reminder
+                for line in streaming_reminder(
+                    self.config, datetime.now(timezone.utc).weekday(),
+                    getattr(self, 'chart_symbol', '')
+                ):
+                    self.logger.warning(line)
+            except Exception as e:
+                self.logger.debug(f"streaming reminder skipped: {e}")
 
             # -- Reload news filter to pick up today's auto-fetched CSV ----
             self._load_news_filter()
@@ -1975,25 +2007,55 @@ class TradingSystem:
         except Exception as e:
             self.logger.error("Error displaying dashboard", error=str(e))
     
-    def _load_symbols(self) -> list:
-        """Load symbols from config."""
+    def _load_symbols(self, apply_broker_spec: bool = False) -> list:
+        """Load symbols from config.
+
+        When apply_broker_spec is True (startup only) and the EA supports
+        GET_SYMBOL_SPEC, the broker's real contract spec overrides the config
+        value_per_lot / min_lot / max_lot / lot_step so lots are sized
+        automatically — no hand-entered, possibly-wrong specs (the US30/NAS100
+        placeholders). Falls back silently to config on any miss (old EA,
+        unknown symbol)."""
         from src.core.types import Symbol
-        
+
         symbols = []
         for ticker, config in self.config.get('symbols', {}).items():
             if config.get('enabled', False):
-                symbol = Symbol(
-                    ticker=ticker,
-                    pip_value=Decimal(str(config.get('pip_value', 0.01))),
-                    min_lot=Decimal(str(config.get('min_lot', 0.01))),
-                    max_lot=Decimal(str(config.get('max_lot', 100.0))),
-                    lot_step=Decimal(str(config.get('lot_step', 0.01))),
-                    value_per_lot=Decimal(str(config.get('value_per_lot', 1))),
-                    leverage=Decimal(str(config.get('leverage', 1))),
-                    max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
-                )
+                spec = None
+                if apply_broker_spec and getattr(self, 'connector', None) is not None:
+                    try:
+                        spec = self.connector.get_symbol_spec(ticker)
+                    except Exception:
+                        spec = None
+                if spec:
+                    vpl = Decimal(str(spec['value_per_lot']))
+                    symbol = Symbol(
+                        ticker=ticker,
+                        pip_value=Decimal(str(spec.get('tick_size') or config.get('pip_value', 0.01))),
+                        min_lot=Decimal(str(spec.get('volume_min') or config.get('min_lot', 0.01))),
+                        max_lot=Decimal(str(spec.get('volume_max') or config.get('max_lot', 100.0))),
+                        lot_step=Decimal(str(spec.get('volume_step') or config.get('lot_step', 0.01))),
+                        value_per_lot=vpl,
+                        leverage=Decimal(str(config.get('leverage', 1))),
+                        max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
+                    )
+                    self.logger.info(
+                        f"   ⚙ {ticker}: broker spec → value_per_lot={vpl}, "
+                        f"min_lot={symbol.min_lot}, step={symbol.lot_step} (auto-sized)"
+                    )
+                else:
+                    symbol = Symbol(
+                        ticker=ticker,
+                        pip_value=Decimal(str(config.get('pip_value', 0.01))),
+                        min_lot=Decimal(str(config.get('min_lot', 0.01))),
+                        max_lot=Decimal(str(config.get('max_lot', 100.0))),
+                        lot_step=Decimal(str(config.get('lot_step', 0.01))),
+                        value_per_lot=Decimal(str(config.get('value_per_lot', 1))),
+                        leverage=Decimal(str(config.get('leverage', 1))),
+                        max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
+                    )
                 symbols.append(symbol)
-        
+
         return symbols
     
     def _signal_handler(self, signum, frame):
