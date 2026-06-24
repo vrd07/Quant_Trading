@@ -112,15 +112,36 @@ symbols:
     max_spread: 0.00030
 
   US30:
-    enabled: false
+    enabled: true
+    # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
+    # whitelist keeps them off this index. ⚠️ VERIFY contract spec vs broker
+    # (MT5 → Symbols → Specification): min_lot / value_per_lot drive sizing &
+    # the drawdown cap. Defaults assume a 0.01-min-lot, $1/point index CFD.
+    strategy_whitelist: [index_overnight]
     pip_value: 1.0
     min_lot: 0.01
     max_lot: 10.0
     lot_step: 0.01
-    value_per_lot: 1
+    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
     commission_per_lot: 0.0
-    leverage: 20
-    max_spread: 5.0
+    leverage: 20               # indices ~1:20 — VERIFY
+    max_notional_pct: 4.0      # clamp lots (wide ATR stop → min-lot can over-risk)
+    min_stops_distance: 1.0
+    max_spread: 8.0
+
+  NAS100:
+    enabled: true
+    strategy_whitelist: [index_overnight]   # index_overnight ONLY (see US30 note)
+    pip_value: 1.0
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
+    commission_per_lot: 0.0
+    leverage: 20               # VERIFY
+    max_notional_pct: 4.0
+    min_stops_distance: 1.0
+    max_spread: 10.0
 
   USOIL:
     enabled: false
@@ -134,6 +155,15 @@ symbols:
     max_spread: 0.05
 
 risk:
+  # 2026-06-24 correlation guard: index_overnight runs on BOTH US30 and NAS100
+  # (~0.9 corr, both fire Tuesday) — its own cluster caps them to one concurrent
+  # slot. Kept separate from the gold-coil cluster (uncorrelated to gold).
+  correlation_guard:
+    enabled: true
+    max_per_cluster: 1
+    clusters:
+      - [squeeze_breakout, stoch_pullback]   # gold coils, +0.34 corr
+      - [index_overnight]                    # US30≈NAS100 ~0.9 corr → one index slot
   decay_floor:
     enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
     weights_file: data/strategy_risk_weights.json
@@ -157,6 +187,11 @@ risk:
   # the operator cap silently rejects the high-vol kalman trades.
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
+    index_overnight:
+      risk_per_trade_pct: 0.01   # 1% of balance — auto-scales every account.
+                                 # Sweep-tuned on $5k (=$50/trade): ~4× the $15-default
+                                 # contribution at −2.4% DD (half the cap); see
+                                 # reports/index_overnight_tuesday_research.md.
     kalman_regime:
       risk_per_trade_usd: 330  # 2026-06-21: ×0.66 (SL-22 equiv) — shrinks per-trade $ loss to fit DD inside 7% cap
 
@@ -231,6 +266,9 @@ risk:
       monday_drift:
         time_stop_minutes: 1230   # flat ~20:45 UTC Monday, before rollover
         disable_be_lock: true
+      index_overnight:
+        time_stop_minutes: 1050   # enter ~Tue 20:00 UTC → flat ~Wed 13:30 (US cash open)
+        disable_be_lock: true     # BE/lock tightening destroys an overnight drift hold
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
@@ -292,6 +330,17 @@ strategies:
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]
 
+  index_overnight:
+    enabled: true
+    timeframe: 15m
+    entry_dow: 1               # Tuesday (0=Mon) — "Turnaround Tuesday" night drift
+    entry_hour_utc: 19         # entry window opens 19:45 UTC (≈ US cash close 20:00)
+    entry_minute_utc: 45
+    atr_period: 14             # daily ATR for the catastrophe stop
+    stop_atr_multiplier: 1.5   # WIDE guard only (research ran no stop at −3% DD); time stop is the real exit
+    signal_strength: 0.60
+    allowed_symbols: [US30, NAS100]
+
   london_breakout:
     enabled: true    # 2026-06-12: enabled in all configs (user decision; USDJPY-only hard gate in code)
     timeframe: 5m
@@ -308,7 +357,7 @@ strategies:
   # Long-only Monday anti-USD drift hold (see config_live_5000.yaml for the
   # research notes). Disabled here — enabled only on the 5000 account.
   monday_drift:
-    enabled: false
+    enabled: true
     timeframe: 15m
     entry_hour_utc: 0
     sma_period: 50
@@ -602,7 +651,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC ───────────────────────────────────────────────
     # European open; liquidity builds → trend / breakout alpha.
@@ -611,7 +660,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC ────────────────────────────────────
     # Peak liquidity for XAUUSD and BTCUSD. All enabled strategies fire here.
@@ -620,7 +669,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC ─────────────────────────────────────────────
     # US afternoon; trend continuation / momentum-led.
@@ -629,7 +678,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC ─────────────────────────────────────
     # NY close → Asia open; low liquidity, wide spreads. Disabled by default.
@@ -638,11 +687,11 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-23_news.csv
+    csv_path: news/2026-06-24_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

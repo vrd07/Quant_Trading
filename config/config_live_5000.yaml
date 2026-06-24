@@ -113,15 +113,36 @@ symbols:
 
 
   US30:
-    enabled: false
+    enabled: true
+    # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
+    # whitelist keeps them off this index. ⚠️ VERIFY contract spec vs broker
+    # (MT5 → Symbols → Specification): min_lot / value_per_lot drive sizing &
+    # the drawdown cap. Defaults assume a 0.01-min-lot, $1/point index CFD.
+    strategy_whitelist: [index_overnight]
     pip_value: 1.0
     min_lot: 0.01
     max_lot: 10.0
     lot_step: 0.01
-    value_per_lot: 1
+    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
     commission_per_lot: 0.0
-    leverage: 20              # Indices 1:20
-    max_spread: 5.0           # 5 points max spread threshold
+    leverage: 20               # indices ~1:20 — VERIFY
+    max_notional_pct: 4.0      # clamp lots (wide ATR stop → min-lot can over-risk)
+    min_stops_distance: 1.0
+    max_spread: 8.0
+
+  NAS100:
+    enabled: true
+    strategy_whitelist: [index_overnight]   # index_overnight ONLY (see US30 note)
+    pip_value: 1.0
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
+    commission_per_lot: 0.0
+    leverage: 20               # VERIFY
+    max_notional_pct: 4.0
+    min_stops_distance: 1.0
+    max_spread: 10.0
 
   USOIL:
     enabled: false
@@ -148,7 +169,8 @@ risk:
     enabled: true
     max_per_cluster: 1
     clusters:
-      - [squeeze_breakout, stoch_pullback]
+      - [squeeze_breakout, stoch_pullback]   # gold coils, +0.34 corr
+      - [index_overnight]                    # US30≈NAS100 ~0.9 corr → one index slot at a time; decoupled from gold (uncorrelated)
   # $5,000 Account Risk Parameters
   max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
   max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30
@@ -175,6 +197,13 @@ risk:
       risk_per_trade_usd: 50   # matches the validated backtest sizing (1% of $5k)
     monday_drift:
       risk_per_trade_usd: 50   # 1.0×dailyATR stop (~68p GBPUSD) ⇒ ~0.07 lots
+    index_overnight:
+      risk_per_trade_usd: 50   # 2026-06-24 sweep-tuned: 1% of $5k (matches monday_drift/london_breakout).
+                               # Sweep (enforce-risk, per symbol): $15→+2.4%/−0.7%, $50→+9-10%/−2.4%,
+                               # $100→+20%/−4.9%, $150=DEAD (single-trade risk ≥ $150 daily cap → rejected).
+                               # $50 = ~4× baseline contribution at half the 5% DD cap; own correlation
+                               # cluster caps US30+NAS100 to one concurrent slot. Dial up toward $75 for
+                               # more, but $100 nearly eats the whole cap (kills enforcement headroom).
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS  (user limits 2026-05-30)
   absolute_max_loss_usd: 150      # Daily loss limit ($5k × 3.0%)
@@ -240,6 +269,9 @@ risk:
       monday_drift:
         time_stop_minutes: 1230
         disable_be_lock: true
+      index_overnight:
+        time_stop_minutes: 1050   # enter ~Tue 20:00 UTC → flat ~Wed 13:30 (US cash open)
+        disable_be_lock: true     # BE/lock tightening destroys an overnight drift hold
     breakeven_atr_mult: 1.2        # Move SL to breakeven at +1.2× risk distance (was 0.5 — too tight, normal noise stopped out trades)
     lock_atr_mult: 2.0             # Move SL to partial lock at +2.0× risk distance (was 1.5)
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
@@ -322,6 +354,17 @@ strategies:
     session_end_hour: 21     # through NY (exclusive). 0/24 = all hours
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]
+
+  index_overnight:
+    enabled: true
+    timeframe: 15m
+    entry_dow: 1               # Tuesday (0=Mon) — "Turnaround Tuesday" night drift
+    entry_hour_utc: 19         # entry window opens 19:45 UTC (≈ US cash close 20:00)
+    entry_minute_utc: 45
+    atr_period: 14             # daily ATR for the catastrophe stop
+    stop_atr_multiplier: 1.5   # WIDE guard only (research ran no stop at −3% DD); time stop is the real exit
+    signal_strength: 0.60
+    allowed_symbols: [US30, NAS100]
 
   london_breakout:
     enabled: true
@@ -639,7 +682,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -647,7 +690,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -655,7 +698,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -663,7 +706,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -671,11 +714,11 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-23_news.csv
+    csv_path: news/2026-06-24_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
