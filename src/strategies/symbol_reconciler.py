@@ -21,6 +21,7 @@ _STRATEGY_SYMBOLS: Dict[str, List[str]] = {
     'monday_drift':    ['GBPUSD', 'AUDUSD'],
     'london_breakout': ['USDJPY'],
     'index_overnight': ['US30', 'NAS100'],
+    'wednesday_drift': ['AUDJPY'],
     'squeeze_breakout': ['XAUUSD'],
     'stoch_pullback':  ['XAUUSD'],
     'kalman_regime':   ['XAUUSD'],
@@ -31,6 +32,7 @@ _STRATEGY_SYMBOLS: Dict[str, List[str]] = {
 _FIRE_WEEKDAY: Dict[str, int] = {
     'monday_drift':    0,   # Monday
     'index_overnight': 1,   # Tuesday
+    'wednesday_drift': 1,   # enters Tuesday (for the Wed move) — needs AUDJPY streaming Tue/Wed
 }
 
 _WD = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
@@ -73,6 +75,8 @@ def _non_chart_symbols(config: Dict[str, Any], chart_symbol: str) -> List[str]:
     that only stream if listed in the EA WatchSymbols input."""
     chart = (chart_symbol or '').upper()
     syms = {s for v in required_symbols(config).values() for s in v}
+    if not chart:
+        return sorted(syms)   # chart unknown → warn about ALL required symbols
     # prefix match so a base ticker (US30) counts the broker-suffixed chart (US30.cash)
     return sorted(s for s in syms if not (chart.startswith(s) or s.startswith(chart)))
 
