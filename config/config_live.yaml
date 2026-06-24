@@ -110,24 +110,6 @@ symbols:
     value_per_lot: 100
     commission_per_lot: 0.0
   
-  BTCUSD:
-    enabled: false
-    pip_value: 0.1
-    min_lot: 0.01
-    max_lot: 2.0
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-
-  ETHUSD:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 2.0
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-
 risk:
   # 2026-06-24 correlation guard: index_overnight runs on BOTH US30 and NAS100
   # (~0.9 corr, both fire Tuesday) — its own cluster caps them to one concurrent

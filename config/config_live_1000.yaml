@@ -91,42 +91,6 @@ symbols:
     min_stops_distance: 1.0
     max_spread: 3.5
 
-  BTCUSD:
-    enabled: false
-    pip_value: 0.1
-    min_lot: 0.01
-    max_lot: 0.01
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 2
-    min_stops_distance: 5.0
-    max_spread: 15.0
-
-  ETHUSD:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 0.01
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 5
-    min_stops_distance: 1.0
-    max_spread: 3.0
-
-  EURUSD:
-    enabled: false
-    pip_value: 0.00001
-    min_lot: 0.01
-    max_lot: 0.01
-    lot_step: 0.01
-    value_per_lot: 100000
-    commission_per_lot: 0.0
-    leverage: 100
-    min_stops_distance: 0.00050
-    max_spread: 0.00030
-
   US30:
     enabled: true
     # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
@@ -158,17 +122,6 @@ symbols:
     max_notional_pct: 4.0
     min_stops_distance: 1.0
     max_spread: 10.0
-
-  USOIL:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 10.0
-    lot_step: 0.01
-    value_per_lot: 1000
-    commission_per_lot: 0.0
-    leverage: 10
-    max_spread: 0.05
 
 risk:
   # 2026-06-24 correlation guard: index_overnight runs on BOTH US30 and NAS100
@@ -433,8 +386,6 @@ strategies:
     hurst_trend_threshold: 0.55
     hurst_range_threshold: 0.45
 
-
-
   vwap:
     enabled: true               # v5: VWAP band-touch + MACD crossover (2026-05-09)
     timeframe: 15m
@@ -456,7 +407,6 @@ strategies:
     max_hold_minutes: 60
     # Session filter: allowed_hours for live deployment (not used in all-sessions backtest)
     allowed_hours: [2, 11, 15, 19]   # v4 data-driven net-positive UTC hours
-
 
   # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
   # Momentum v3: Session-filtered, wider SL, optimized for profitability
@@ -535,7 +485,6 @@ strategies:
 
   # Mini Medallion v2: +31% return, PF 1.59, DD 4.3% (backtest Jan 2025–Mar 2026)
   # v2 changes: long-only, session filter, lower threshold, higher RR, ADX filter
-
 
   # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
   # v2: +5.30%, PF 1.88, DD 1.61% — EMA trend + session filter + strength gate

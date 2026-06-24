@@ -90,46 +90,6 @@ symbols:
     min_stops_distance: 1.0   # 100 pips min distance for Gold
     max_spread: 3.5           # 35 pips max spread threshold
 
-
-  BTCUSD:
-    enabled: false
-    pip_value: 0.1
-    min_lot: 0.08
-    max_lot: 0.08             # Increased for 100K margin
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 2               # Crypto 1:2
-    min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
-    max_spread: 15.0          # $15.00 max spread threshold
-
-
-  ETHUSD:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.08
-    max_lot: 0.08             # Scaled for 100K margin
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 5               # Crypto 1:5
-    min_stops_distance: 1.0   # $1.00 min distance for Ethereum
-    max_spread: 3.0           # $3.00 max spread threshold
-
-
-  EURUSD:
-    enabled: false
-    pip_value: 0.00001
-    min_lot: 0.01
-    max_lot: 0.04
-    lot_step: 0.01
-    value_per_lot: 100000
-    commission_per_lot: 0.0
-    leverage: 100             # FX 1:100
-    min_stops_distance: 0.00050 # 5 pip min distance
-    max_spread: 0.00030       # 3 pips max spread threshold
-
-
   US30:
     enabled: true
     # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
@@ -161,17 +121,6 @@ symbols:
     max_notional_pct: 4.0
     min_stops_distance: 1.0
     max_spread: 10.0
-
-  USOIL:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 10.0
-    lot_step: 0.01
-    value_per_lot: 1000
-    commission_per_lot: 0.0
-    leverage: 10              # Energies 1:10
-    max_spread: 0.05          # 5 cents max spread threshold
 
 risk:
   # 2026-06-24 correlation guard: index_overnight runs on BOTH US30 and NAS100
@@ -293,7 +242,6 @@ risk:
     lock_fraction: 0.5             # Lock in 50% of original risk at stage 2
     # time_stop_minutes removed — was 45 min, killed 30-59% of trades before TP could be reached
     ml_exhaustion_factor: 0.8      # (ML ONLY) If exhaustion pipeline generates predicted pips, tight_lock 80% of it immediately when reached
-
 
   # Session windows: only trade London open (7-9am) and NY open (12-2pm UTC)
   # (enforced by trading_hours sessions below)
@@ -436,8 +384,6 @@ strategies:
     hurst_trend_threshold: 0.55
     hurst_range_threshold: 0.45
 
-
-
   vwap:
     enabled: true               # v5: VWAP band-touch + MACD crossover (2026-05-09)
     timeframe: 15m
@@ -459,7 +405,6 @@ strategies:
     max_hold_minutes: 60
     # Session filter: allowed_hours for live deployment (not used in all-sessions backtest)
     allowed_hours: [2, 11, 15, 19]   # v4 data-driven net-positive UTC hours
-
 
   # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
   # Momentum v3: Session-filtered, wider SL, optimized for $500/day target
@@ -548,7 +493,6 @@ strategies:
   # v1 audit: -$5,449, PF 0.84, 26.9% WR — SELL side lost -$8.3K, BUY made +$3.1K
   # v2 changes: long-only, session filter (profitable hours only), lower threshold,
   #   higher RR, ADX filter, rebalanced weights
-
 
   # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
   # Trades confirmed retests of broken Donchian channel structure.

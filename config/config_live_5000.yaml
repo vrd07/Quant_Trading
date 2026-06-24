@@ -87,48 +87,6 @@ symbols:
     min_stops_distance: 1.0   # 100 pips min distance for Gold
     max_spread: 3.5           # 35 pips max spread threshold
 
-
-  BTCUSD:
-    enabled: false
-    pip_value: 0.1
-    min_lot: 0.01
-    max_lot: 0.07             # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 2               # Crypto 1:2
-    max_notional_pct: 0.5     # margin-aware ceiling: $2.5k notional/pos ($1.25k margin @1:2); governs over the price-blind lot count
-    min_stops_distance: 5.0   # $5.00 min distance for Bitcoin
-    max_spread: 15.0          # $15.00 max spread threshold
-
-
-  ETHUSD:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 3.0              # hard backstop ≠ min_lot so sizing is dynamic, not operator-fixed
-    lot_step: 0.01
-    value_per_lot: 1
-    commission_per_lot: 0.0
-    leverage: 5               # Crypto 1:5
-    max_notional_pct: 1.0     # margin-aware ceiling: $5k notional/pos ($1k margin @1:5); governs over the price-blind lot count
-    min_stops_distance: 1.0   # $1.00 min distance for Ethereum
-    max_spread: 3.0           # $3.00 max spread threshold
-
-
-  EURUSD:
-    enabled: false
-    pip_value: 0.00001
-    min_lot: 0.01
-    max_lot: 0.02
-    lot_step: 0.01
-    value_per_lot: 100000
-    commission_per_lot: 0.0
-    leverage: 100             # FX 1:100
-    min_stops_distance: 0.00050 # 5 pip min distance
-    max_spread: 0.00030       # 3 pips max spread threshold
-
-
   US30:
     enabled: true
     # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
@@ -160,17 +118,6 @@ symbols:
     max_notional_pct: 4.0
     min_stops_distance: 1.0
     max_spread: 10.0
-
-  USOIL:
-    enabled: false
-    pip_value: 0.01
-    min_lot: 0.01
-    max_lot: 10.0
-    lot_step: 0.01
-    value_per_lot: 1000
-    commission_per_lot: 0.0
-    leverage: 10              # Energies 1:10
-    max_spread: 0.05          # 5 cents max spread threshold
 
 risk:
   decay_floor:
@@ -465,8 +412,6 @@ strategies:
     hurst_trend_threshold: 0.55
     hurst_range_threshold: 0.45
 
-
-
   vwap:
     enabled: true               # v5: VWAP band-touch + MACD crossover (2026-05-09)
     timeframe: 15m
@@ -488,7 +433,6 @@ strategies:
     max_hold_minutes: 60
     # Session filter: allowed_hours for live deployment (not used in all-sessions backtest)
     allowed_hours: [2, 11, 15, 19]   # v4 data-driven net-positive UTC hours
-
 
   # ── PRIMARY STRATEGY ──────────────────────────────────────────────────────
   # Momentum v3: Session-filtered, wider SL, optimized for profitability
@@ -567,7 +511,6 @@ strategies:
 
   # Mini Medallion v2: +31% return, PF 1.59, DD 4.3% (backtest Jan 2025–Mar 2026)
   # v2 changes: long-only, session filter, lower threshold, higher RR, ADX filter
-
 
   # ── STRUCTURE BREAK + RETEST (SBR) ─────────────────────────────────
   # v2: +5.30%, PF 1.88, DD 1.61% — EMA trend + session filter + strength gate
