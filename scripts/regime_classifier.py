@@ -264,6 +264,7 @@ STRATEGY_WEIGHTS = {
         "squeeze_breakout": 0.70,  # volatility-coil → expansion breakout; regime-agnostic (own ATR-pctile + Donchian gate governs)
         "stoch_pullback": 0.70,  # stochastic trend-continuation pullback; regime-agnostic (own EMA-trend + stoch + breakout gate governs)
         "index_overnight": 0.70,  # calendar-structural (Tuesday index night drift); regime-agnostic — fires once/week on its own latch
+        "wednesday_drift": 0.70,  # calendar-structural (AUDJPY mid-week risk-on drift); regime-agnostic — fires once/week on its own latch
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -278,6 +279,7 @@ STRATEGY_WEIGHTS = {
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
         "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
+        "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -292,6 +294,7 @@ STRATEGY_WEIGHTS = {
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
         "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
+        "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
     },
 }
 
