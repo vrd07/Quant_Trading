@@ -20,7 +20,7 @@ from typing import Any, Dict, List, Tuple
 _STRATEGY_SYMBOLS: Dict[str, List[str]] = {
     'monday_drift':    ['GBPUSD', 'AUDUSD'],
     'london_breakout': ['USDJPY'],
-    'index_overnight': ['US30', 'NAS100'],
+    'index_overnight': ['US30'],   # NAS100 dropped — broker offers no NASDAQ index CFD
     'wednesday_drift': ['AUDJPY'],
     'squeeze_breakout': ['XAUUSD'],
     'stoch_pullback':  ['XAUUSD'],

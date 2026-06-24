@@ -10,7 +10,7 @@ def base_config():
         'strategies': {
             'monday_drift':    {'enabled': True, 'allowed_symbols': ['GBPUSD', 'AUDUSD']},
             'london_breakout': {'enabled': True, 'allowed_symbols': ['USDJPY']},
-            'index_overnight': {'enabled': True, 'allowed_symbols': ['US30', 'NAS100']},
+            'index_overnight': {'enabled': True, 'allowed_symbols': ['US30']},
             'kalman_regime':   {'enabled': True},
         },
         'symbols': {
@@ -19,7 +19,6 @@ def base_config():
             'AUDUSD': {'enabled': False},
             'USDJPY': {'enabled': False},
             'US30':   {'enabled': False},
-            'NAS100': {'enabled': False},
         },
     }
 
@@ -30,7 +29,7 @@ class TestRequiredSymbols:
         cfg['strategies']['monday_drift']['enabled'] = False
         req = required_symbols(cfg)
         assert 'monday_drift' not in req
-        assert req['index_overnight'] == ['US30', 'NAS100']
+        assert req['index_overnight'] == ['US30']
 
     def test_uses_configured_allowed_symbols(self):
         cfg = base_config()
@@ -42,17 +41,19 @@ class TestReconcile:
     def test_forces_required_symbols_on(self):
         cfg = base_config()
         auto, missing = reconcile_enabled_symbols(cfg)
-        assert set(auto) == {'GBPUSD', 'AUDUSD', 'USDJPY', 'US30', 'NAS100'}
+        assert set(auto) == {'GBPUSD', 'AUDUSD', 'USDJPY', 'US30'}
         assert missing == []
-        for s in ('GBPUSD', 'AUDUSD', 'USDJPY', 'US30', 'NAS100'):
+        for s in ('GBPUSD', 'AUDUSD', 'USDJPY', 'US30'):
             assert cfg['symbols'][s]['enabled'] is True
 
     def test_missing_block_reported_not_crashed(self):
+        # A required symbol with no config block is reported, and the strategy's
+        # other required symbols still get auto-enabled (monday_drift = 2 symbols).
         cfg = base_config()
-        del cfg['symbols']['US30']
+        del cfg['symbols']['GBPUSD']
         auto, missing = reconcile_enabled_symbols(cfg)
-        assert 'US30' in missing
-        assert 'NAS100' in auto
+        assert 'GBPUSD' in missing
+        assert 'AUDUSD' in auto
 
     def test_disabled_strategy_symbols_untouched(self):
         cfg = base_config()

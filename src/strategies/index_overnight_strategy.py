@@ -71,11 +71,13 @@ class IndexOvernightStrategy(BaseStrategy):
         self.atr_period = int(config.get('atr_period', 14))
         self.stop_atr_multiplier = float(config.get('stop_atr_multiplier', 1.5))
         self.signal_strength = float(config.get('signal_strength', 0.60))
-        # Hard symbol gate: validated on US30/NAS100 ONLY (GER40 stronger but
-        # not offered by the broker). Prefix match covers broker suffixes
-        # (US30.cash / US30s / NAS100.cash etc.).
+        # Hard symbol gate: research-validated on US30/NAS100/GER40, but this
+        # broker offers only US30 as an index CFD (no NASDAQ-100 or GER40 CFD —
+        # the "NASDAQ" group is cash equities/ETFs, untradeable overnight), so
+        # the default is US30 only. Prefix match covers broker suffixes
+        # (US30.cash / US30s etc.).
         self.allowed_symbol_prefixes = tuple(
-            s.upper() for s in config.get('allowed_symbols', ['US30', 'NAS100'])
+            s.upper() for s in config.get('allowed_symbols', ['US30'])
         )
         self._last_signal_week = None   # one-trade-per-week latch (ISO year, week)
 

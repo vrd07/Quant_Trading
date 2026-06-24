@@ -15,7 +15,7 @@ from src.strategies.index_overnight_strategy import (
 )
 
 
-def make_symbol(ticker: str = "NAS100") -> Symbol:
+def make_symbol(ticker: str = "US30") -> Symbol:
     return Symbol(
         ticker=ticker,
         pip_value=Decimal("1.0"),
@@ -45,7 +45,7 @@ def make_bars(end: datetime, days: int = 40, trend: str = "up",
 
 
 def make_strategy(**overrides) -> IndexOvernightStrategy:
-    ticker = overrides.pop("_ticker", "NAS100")
+    ticker = overrides.pop("_ticker", "US30")
     cfg = {"enabled": True}
     cfg.update(overrides)
     return IndexOvernightStrategy(make_symbol(ticker), cfg)
@@ -91,12 +91,14 @@ class TestIndexOvernight:
         assert strat.on_bar(make_bars(next_tue)) is not None
 
     def test_symbol_gate_blocks_unvalidated_symbols(self):
-        for ticker in ("XAUUSD", "EURUSD", "GER40", "USDJPY"):
+        # NAS100/GER40 are research-validated but this broker offers no such
+        # index CFD, so the live gate is US30-only (see allowed_symbols default).
+        for ticker in ("XAUUSD", "EURUSD", "GER40", "NAS100", "USDJPY"):
             assert make_strategy(_ticker=ticker).on_bar(make_bars(TUE_1945)) is None
 
     def test_symbol_gate_accepts_broker_suffix(self):
         assert make_strategy(_ticker="US30.cash").on_bar(make_bars(TUE_1945)) is not None
-        assert make_strategy(_ticker="NAS100s").on_bar(make_bars(TUE_1945)) is not None
+        assert make_strategy(_ticker="US30s").on_bar(make_bars(TUE_1945)) is not None
 
     def test_insufficient_daily_history_skips(self):
         # 10 days < ATR(14)+1 requirement — stand aside, do not crash.
