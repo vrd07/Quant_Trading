@@ -495,6 +495,34 @@ class MT5Connector:
             logger.warning("GET_BARS error for %s: %s", symbol, e)
             return []
 
+    def get_symbol_spec(self, symbol: str, timeout: int = 5) -> Optional[Dict]:
+        """Fetch the broker's contract spec so lots can be sized automatically.
+
+        Returns a dict (volume_min/max/step, tick_value, tick_size,
+        value_per_lot, contract_size, point, digits) or None when the spec is
+        unavailable (old EA without GET_SYMBOL_SPEC, or unknown symbol) — callers
+        fall back to the config values. Handles broker suffixes like get_bars.
+        """
+        mapped = self._symbol_map.get(symbol, symbol)
+        try:
+            resp = self.client.get_symbol_spec(symbol=mapped, timeout=timeout)
+            if resp.get("status") == "ERROR":
+                if mapped == symbol:
+                    discovered = self._discover_broker_symbol(symbol)
+                    if discovered and discovered != symbol:
+                        resp = self.client.get_symbol_spec(symbol=discovered, timeout=timeout)
+                if resp.get("status") == "ERROR":
+                    logger.debug("GET_SYMBOL_SPEC unavailable for %s: %s",
+                                 symbol, resp.get("message"))
+                    return None
+            # A valid spec must have a usable value_per_lot; otherwise fall back.
+            if not resp.get("value_per_lot"):
+                return None
+            return resp
+        except Exception as e:
+            logger.debug("GET_SYMBOL_SPEC error for %s: %s", symbol, e)
+            return None
+
     def _discover_broker_symbol(self, symbol: str) -> Optional[str]:
         """Find the broker's actual symbol name (handles suffixes like .pro, .i, etc.)."""
         try:

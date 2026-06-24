@@ -329,6 +329,17 @@ class MT5FileClient:
             "count": str(count)
         }, timeout=timeout, retry_on_timeout=retry_on_timeout)
 
+    def get_symbol_spec(self, symbol, timeout=5):
+        """Fetch the broker's contract spec for a symbol so lots size
+        automatically. Returns dict with volume_min/max/step, tick_value,
+        tick_size, contract_size, value_per_lot, point, digits — or an error
+        dict if the EA predates this command (graceful: caller falls back to
+        config)."""
+        return self.send_command({
+            "command": "GET_SYMBOL_SPEC",
+            "symbol": symbol,
+        }, timeout=timeout)
+
 
 def test_file_bridge():
     """Test the file-based MT5 bridge."""

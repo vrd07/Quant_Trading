@@ -597,6 +597,7 @@ void ProcessCommands()
    else if(command == "MODIFY_ORDER")     HandleModifyOrder(commandJson);
    else if(command == "GET_LIMITS")       HandleGetLimits();
    else if(command == "GET_BARS")        HandleGetBars(commandJson);
+   else if(command == "GET_SYMBOL_SPEC")  HandleGetSymbolSpec(commandJson);
 }
 
 //+------------------------------------------------------------------+
@@ -641,6 +642,38 @@ void HandleGetLimits()
    json += "\"max_exposure\":" + DoubleToString(MaxTotalExposureLots, 2);
    json += "}";
    WriteResponse(json);
+}
+
+//+------------------------------------------------------------------+
+//| GET_SYMBOL_SPEC — broker contract spec so the Python side can     |
+//| size lots automatically (no hand-entered value_per_lot). Read-only.|
+//| value_per_lot = tick_value / tick_size = $ per 1.0 price move/lot. |
+//+------------------------------------------------------------------+
+void HandleGetSymbolSpec(string json)
+{
+   string symbol = ExtractJsonValue(json, "symbol");
+   if(symbol == "") symbol = _Symbol;
+   // Ensure the symbol is in Market Watch before querying (non-chart symbols).
+   SymbolSelect(symbol, true);
+
+   double tickValue    = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize     = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double contractSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+   double valuePerLot  = (tickSize > 0) ? tickValue / tickSize : 0.0;
+
+   string out = "{";
+   out += "\"symbol\":\"" + symbol + "\",";
+   out += "\"volume_min\":"   + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN), 4) + ",";
+   out += "\"volume_max\":"   + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX), 4) + ",";
+   out += "\"volume_step\":"  + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP), 4) + ",";
+   out += "\"tick_value\":"   + DoubleToString(tickValue, 5) + ",";
+   out += "\"tick_size\":"    + DoubleToString(tickSize, 8) + ",";
+   out += "\"contract_size\":" + DoubleToString(contractSize, 4) + ",";
+   out += "\"value_per_lot\":" + DoubleToString(valuePerLot, 5) + ",";
+   out += "\"point\":"        + DoubleToString(SymbolInfoDouble(symbol, SYMBOL_POINT), 8) + ",";
+   out += "\"digits\":"       + IntegerToString(SymbolInfoInteger(symbol, SYMBOL_DIGITS));
+   out += "}";
+   WriteResponse(out);
 }
 
 //+------------------------------------------------------------------+
