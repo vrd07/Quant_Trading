@@ -52,10 +52,11 @@ from src.strategies.london_breakout_strategy import LondonBreakoutStrategy
 from src.strategies.monday_drift_strategy import MondayDriftStrategy
 from src.strategies.squeeze_breakout_strategy import SqueezeBreakoutStrategy
 from src.strategies.stoch_pullback_strategy import StochPullbackStrategy
+from src.strategies.index_overnight_strategy import IndexOvernightStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'stoch_pullback', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'stoch_pullback', 'index_overnight', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -175,6 +176,10 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('stoch_pullback', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return StochPullbackStrategy(symbol, cfg)
+    elif strategy_name == 'index_overnight':
+        cfg = dict(strats.get('index_overnight', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return IndexOvernightStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
@@ -293,7 +298,9 @@ def run_single(strategy_name: str, symbol: Symbol, bars: pd.DataFrame, config: d
     # monday_drift gates on a 50-day daily SMA resampled from intraday bars,
     # i.e. ~75 calendar days of history (21,600 5m bars / 7,200 15m bars).
     max_window = 1000
-    if strategy_name == 'monday_drift':
+    if strategy_name in ('monday_drift', 'index_overnight'):
+        # both resample a daily frame from intraday bars: monday_drift needs a
+        # 50-day SMA, index_overnight a 14-day ATR — give both ~75 calendar days.
         tf_min = _TF_MINUTES.get(args.timeframe, 5)
         max_window = 75 * (1440 // tf_min)
 
