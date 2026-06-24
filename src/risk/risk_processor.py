@@ -308,7 +308,7 @@ class RiskProcessor:
             tp_dist = risk * rr
             tp = entry + tp_dist if side == OrderSide.BUY else entry - tp_dist
 
-        elif strategy_name in ('london_breakout', 'monday_drift', 'index_overnight'):
+        elif strategy_name in ('london_breakout', 'monday_drift', 'index_overnight', 'wednesday_drift'):
             # Structural stop precomputed by the strategy (london_breakout:
             # fraction of the Asia range; monday_drift: 1.0× daily ATR;
             # index_overnight: wide 1.5× daily ATR catastrophe guard).
