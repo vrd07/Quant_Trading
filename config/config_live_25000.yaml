@@ -21,6 +21,23 @@ account:
   leverage: 100
 
 symbols:
+  AUDJPY:
+    enabled: true
+    # wednesday_drift ONLY — the rest of the roster is gold/FX-validated; the
+    # whitelist keeps them off this cross. ⚠️ value_per_lot is a seed; the live
+    # GET_SYMBOL_SPEC auto-spec refines it from the broker.
+    strategy_whitelist: [wednesday_drift]
+    pip_value: 0.001          # JPY cross: 3-decimal quote
+    min_lot: 0.01
+    max_lot: 0.50
+    lot_step: 0.01
+    value_per_lot: 658        # USD per 1.0 AUDJPY move per lot (~100k JPY / USDJPY~152) — auto-spec refines
+    commission_per_lot: 0.0
+    leverage: 100
+    max_notional_pct: 4.0
+    min_stops_distance: 0.05
+    max_spread: 0.05
+
   USDJPY:
     enabled: false
     pip_value: 0.001          # 1 point (= 0.1 pip; JPY pairs quote 3 decimals)
@@ -187,6 +204,8 @@ risk:
   # the operator cap silently rejects the high-vol kalman trades.
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
+    wednesday_drift:
+      risk_per_trade_pct: 0.01   # 1% of balance — auto-scales (AUDJPY Wed drift, sweep-tuned like index_overnight)
     index_overnight:
       risk_per_trade_pct: 0.01   # 1% of balance — auto-scales every account.
                                  # Sweep-tuned on $5k (=$50/trade): ~4× the $15-default
@@ -263,6 +282,9 @@ risk:
       index_overnight:
         time_stop_minutes: 1050   # enter ~Tue 20:00 UTC → flat ~Wed 13:30 (US cash open)
         disable_be_lock: true     # BE/lock tightening destroys an overnight drift hold
+      wednesday_drift:
+        time_stop_minutes: 1440   # enter ~Tue 20:00 UTC → flat ~Wed 20:00 (session close)
+        disable_be_lock: true     # BE/lock tightening destroys a mid-week drift hold
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
@@ -323,6 +345,17 @@ strategies:
     session_end_hour: 21     # through NY (exclusive). 0/24 = all hours
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]
+
+  wednesday_drift:
+    enabled: true
+    timeframe: 15m
+    entry_dow: 1               # Tuesday (enters for the Wednesday session move)
+    entry_hour_utc: 19         # entry window opens 19:45 UTC (≈ session close 20:00)
+    entry_minute_utc: 45
+    atr_period: 14
+    stop_atr_multiplier: 1.5   # WIDE guard only (research ran no stop at −5% DD); time stop is the real exit
+    signal_strength: 0.60
+    allowed_symbols: [AUDJPY]
 
   index_overnight:
     enabled: true
@@ -642,7 +675,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -650,7 +683,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -658,7 +691,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -666,7 +699,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -674,7 +707,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
