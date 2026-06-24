@@ -105,20 +105,6 @@ symbols:
     min_stops_distance: 1.0
     max_spread: 8.0
 
-  NAS100:
-    enabled: true
-    strategy_whitelist: [index_overnight]   # index_overnight ONLY (see US30 note)
-    pip_value: 1.0
-    min_lot: 0.01
-    max_lot: 10.0
-    lot_step: 0.01
-    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
-    commission_per_lot: 0.0
-    leverage: 20               # VERIFY
-    max_notional_pct: 4.0
-    min_stops_distance: 1.0
-    max_spread: 10.0
-
 risk:
   decay_floor:
     enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
@@ -134,7 +120,7 @@ risk:
     max_per_cluster: 1
     clusters:
       - [squeeze_breakout, stoch_pullback]   # gold coils, +0.34 corr
-      - [index_overnight]                    # US30≈NAS100 ~0.9 corr → one index slot at a time; decoupled from gold (uncorrelated)
+      - [index_overnight]                    # sole index symbol (NAS100 dropped — no broker CFD); decoupled from gold (uncorrelated)
   # $5,000 Account Risk Parameters
   max_drawdown_pct: 0.05          # 5% Max Overall/Trailing Drawdown ($250) — user limit 2026-05-30
   max_daily_loss_pct: 0.03        # 3% Max Daily Loss ($150) — user limit 2026-05-30
@@ -168,7 +154,7 @@ risk:
                                # Sweep (enforce-risk, per symbol): $15→+2.4%/−0.7%, $50→+9-10%/−2.4%,
                                # $100→+20%/−4.9%, $150=DEAD (single-trade risk ≥ $150 daily cap → rejected).
                                # $50 = ~4× baseline contribution at half the 5% DD cap; own correlation
-                               # cluster caps US30+NAS100 to one concurrent slot. Dial up toward $75 for
+                               # cluster caps the index slot to one concurrent. Dial up toward $75 for
                                # more, but $100 nearly eats the whole cap (kills enforcement headroom).
 
   # ABSOLUTE DOLLAR LOSS/PROFIT LIMITS  (user limits 2026-05-30)
@@ -344,7 +330,7 @@ strategies:
     atr_period: 14             # daily ATR for the catastrophe stop
     stop_atr_multiplier: 1.5   # WIDE guard only (research ran no stop at −3% DD); time stop is the real exit
     signal_strength: 0.60
-    allowed_symbols: [US30, NAS100]
+    allowed_symbols: [US30]
 
   london_breakout:
     enabled: true
@@ -694,7 +680,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-24_news.csv
+    csv_path: news/2026-06-25_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.

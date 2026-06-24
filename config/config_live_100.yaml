@@ -109,30 +109,16 @@ symbols:
     min_stops_distance: 1.0
     max_spread: 8.0
 
-  NAS100:
-    enabled: true
-    strategy_whitelist: [index_overnight]   # index_overnight ONLY (see US30 note)
-    pip_value: 1.0
-    min_lot: 0.01
-    max_lot: 10.0
-    lot_step: 0.01
-    value_per_lot: 1            # USD per 1.0 index-point move per 1.0 lot — VERIFY
-    commission_per_lot: 0.0
-    leverage: 20               # VERIFY
-    max_notional_pct: 4.0
-    min_stops_distance: 1.0
-    max_spread: 10.0
-
 risk:
-  # 2026-06-24 correlation guard: index_overnight runs on BOTH US30 and NAS100
-  # (~0.9 corr, both fire Tuesday) — its own cluster caps them to one concurrent
+  # 2026-06-24 correlation guard: index_overnight runs on US30 only
+  # (single index symbol; cluster keeps it to one concurrent
   # slot. Kept separate from the gold-coil cluster (uncorrelated to gold).
   correlation_guard:
     enabled: true
     max_per_cluster: 1
     clusters:
       - [squeeze_breakout, stoch_pullback]   # gold coils, +0.34 corr
-      - [index_overnight]                    # US30≈NAS100 ~0.9 corr → one index slot
+      - [index_overnight]                    # sole index symbol (NAS100 dropped — no broker CFD)
   decay_floor:
     enabled: true            # 2026-06-21 decay-floor allocator (scripts/strategy_allocator.py)
     weights_file: data/strategy_risk_weights.json
@@ -317,7 +303,7 @@ strategies:
     atr_period: 14             # daily ATR for the catastrophe stop
     stop_atr_multiplier: 1.5   # WIDE guard only (research ran no stop at −3% DD); time stop is the real exit
     signal_strength: 0.60
-    allowed_symbols: [US30, NAS100]
+    allowed_symbols: [US30]
 
   london_breakout:
     enabled: true    # 2026-06-12: enabled in all configs (user decision; USDJPY-only hard gate in code)
@@ -658,7 +644,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-06-24_news.csv
+    csv_path: news/2026-06-25_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
