@@ -1,13 +1,10 @@
 {
-  "generated": "2026-06-24T19:15:05.630196+00:00",
-  "journal": "/Users/varadbandekar/Documents/Quant_trading/data/logs/trade_journal.csv",
+  "generated": "2026-06-26T19:15:06.103379+00:00",
+  "journal": "/Users/varadbandekar/Documents/Quant_trading/data/logs/trade_journal_config_live_25000.csv",
   "window_days": 45,
   "min_trades": 8,
   "sharpe_floor": 0.0,
   "weights": {
-    "donchian_breakout": 1.0,
-    "kalman_regime": 1.0,
-    "smc_ob": 1.0,
-    "supply_demand": 1.0
+    "kalman_regime": 1.0
   }
 }
