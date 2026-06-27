@@ -14,7 +14,7 @@
 
 ## ✨ What makes it different
 
-- **13 independent strategies** — Kalman regime, Donchian breakout, momentum, VWAP reversion, a 10-signal Mini Medallion composite, SMC order blocks with FVG confluence, Wyckoff continuation, Fibonacci golden zone, descending channel, Asia range fade, and more — each independently configurable, regime-gated, and session-whitelisted.
+- **13 independent strategies** — Kalman regime, momentum, VWAP reversion, structure-break retest, SMC order blocks with FVG confluence, Fibonacci golden zone, Asia range fade, a USDJPY London breakout, Monday / Wednesday calendar drifts, a volatility-squeeze breakout, a stochastic trend-pullback, and a "Turnaround-Tuesday" index-overnight edge — each independently configurable, regime-gated, symbol-gated, and session-whitelisted.
 - **A 16-step risk engine** that has absolute veto power over every order. No order reaches MT5 without passing kill-switch, circuit-breaker, hour-blackout, daily-loss budget, drawdown, exposure, and per-trade-risk checks. Any breach trips a one-way kill switch that requires manual reset.
 - **A nightly ML regime classifier** (RandomForest + Markov chain smoother + RL-lite performance feedback) that rewrites strategy weights once per UTC day so the system adapts to TREND / RANGE / VOLATILE regimes without code changes.
 - **Crash-safe state management** — every state mutation is serialised to disk every 10 seconds; a power outage at 03:00 UTC produces a recoverable system at 03:01 UTC.
@@ -23,21 +23,23 @@
 
 ## 📊 The strategy stack
 
-| # | Strategy | TF | Style | Regime | Live |
+| # | Strategy | TF | Symbol | Style | Live |
 |---|---|---|---|---|---|
-| 1 | Kalman Regime | 15m | Trend / OU mean-rev hybrid | TREND + RANGE | ✅ |
-| 2 | Breakout | 5m | Donchian + multi-TF + BB squeeze | TREND | ✅ |
-| 3 | Momentum | 5m | RSI + MACD + EMA stack | TREND | ✅ |
-| 4 | VWAP | 15m | Institutional reversion | RANGE | ✅ |
-| 5 | Mini Medallion | 15m | 10-signal composite alpha | All | ✅ |
-| 6 | Structure-Break Retest | 15m | Donchian break + retest rejection | TREND | ✅ |
-| 7 | Fibonacci Retracement | 5m | Golden-zone pullback (50–61.8 %) | All | ✅ |
-| 8 | Descending Channel Breakout | 5m | LR channel + higher-low shift | TREND | ✅ |
-| 9 | SMC Order Block | 5m | 5-phase ICT state machine + FVG | All | ✅ |
-| 10 | Asia Range Fade | 15m | UTC 09–14 low-vol fade | RANGE | ✅ |
-| 11 | Continuation Breakout | 5m | Wyckoff stair-step | TREND | ✅ |
-| 12 | Supply / Demand | 5m | Impulse-zone retest | — | ❌ disabled |
-| 13 | Mean Reversion | 5m | Pure z-score (baseline) | — | ❌ disabled |
+| 1 | Kalman Regime | 15m | XAUUSD | Trend / OU mean-rev hybrid | ✅ |
+| 2 | Momentum | 5m | XAUUSD | ROC + ADX confirmation | ✅ |
+| 3 | VWAP | 15m | XAUUSD | Institutional reversion | ✅ |
+| 4 | Structure-Break Retest | 15m | XAUUSD | Donchian break + retest rejection | ✅ |
+| 5 | Fibonacci Retracement | 5m | XAUUSD | Golden-zone pullback (50–61.8 %) | ✅ |
+| 6 | SMC Order Block | 5m | XAUUSD | 5-phase ICT state machine + FVG | ✅ |
+| 7 | Asia Range Fade | 15m | XAUUSD | UTC 09–14 low-vol fade | ✅ |
+| 8 | London Breakout | 5m | USDJPY | Asia-range first-break | ✅ |
+| 9 | Monday Drift | 15m | GBPUSD / AUDUSD | Anti-USD Monday hold (SMA-gated) | ✅ |
+| 10 | Squeeze Breakout | 15m | XAUUSD | Volatility coil → expansion, HTF-trend gated | ✅ |
+| 11 | Stoch Pullback | 15m | XAUUSD | EMA-trend + Stochastic pullback | ✅ |
+| 12 | Index Overnight | 15m | US30 | "Turnaround-Tuesday" overnight drift | ✅ |
+| 13 | Wednesday Drift | 15m | AUDJPY | Mid-week JPY-weakness carry drift | ✅ |
+
+> Raw signals from #2–#7 are post-filtered by a **ConfluenceGate** (only Kalman, London Breakout, and the calendar/standalone edges fire solo). Strategies #8–#13 carry hard in-code symbol gates, so they only ever trade their listed instrument. The six legacy strategies (Breakout, Mini Medallion, Supply/Demand, Descending Channel, Continuation Breakout, Mean Reversion) were retired in June 2026 after failing the walk-forward deploy gate.
 
 ## 📈 Backtest results (audit-v3 budget run)
 
@@ -53,6 +55,24 @@ All four strategies were run on the same period (Jan 2025 → Mar 2026, XAUUSD 5
 | Mini Medallion v1 | −3.44% | 0.85 | 668 | −4.07% |
 
 Mini Medallion v1 lost money and was disabled, then re-enabled as v5 with retuned parameters (51 % WR, PF 1.31, 6.9 % annualised on a fresh 12-month sample). The audit-driven discipline is documented in [Section 18 of the paper](RESEARCH_PAPER.md#18-empirical-lessons).
+
+### Latest strategy backtests — #10–13 (Jun 2026)
+
+Production-engine runs (`run_backtest.py --timeframe 15m`, 2.5 y Dukascopy history) for the four newest strategies, each on its in-code-gated live symbol. Full reports with charts and gate breakdowns: **[reports/new_strategies_backtest_2026-06-27.md](reports/new_strategies_backtest_2026-06-27.md)**.
+
+| # | Strategy | Symbol | Trades | Win % | PF | Return | Max DD |
+|---|---|---|---:|---:|---:|---:|---:|
+| 10 | Squeeze Breakout | XAUUSD | 283 | 36.7 % | **1.50** | +27.27 % | −5.76 % |
+| 11 | Stoch Pullback | XAUUSD | 658 | 33.4 % | **1.22** | +20.34 % | −7.30 % |
+| 12 | Index Overnight | US30 | 123 | 58.5 % | **1.78** | +0.30 % | −0.06 % |
+| 13 | Wednesday Drift | AUDJPY | 126 | 60.3 % | **1.67** | +0.42 % | −0.14 % |
+
+| | |
+|---|---|
+| ![Squeeze Breakout equity](reports/backtest_squeeze_breakout_2026-06-27/equity_curves.png) | ![Stoch Pullback equity](reports/backtest_stoch_pullback_2026-06-27/equity_curves.png) |
+| ![Index Overnight equity](reports/backtest_index_overnight_2026-06-27/equity_curves.png) | ![Wednesday Drift equity](reports/backtest_wednesday_drift_2026-06-27/equity_curves.png) |
+
+These are risk-bypassed (strategy-native SL/TP) and graded against the `backtest.md` §1 gates — they ship as low-correlation **diversifiers**, not stand-alone gate-passers. Index Overnight and Wednesday Drift are once-a-week calendar edges (small absolute $ at placeholder sizing; read them on PF and drawdown). The first two run on gold and partially correlate with the Kalman book.
 
 ## 🏗️ Architecture
 
@@ -350,4 +370,4 @@ MT5 Common Files auto-detects to `~/Library/Application Support/net.metaquotes.w
 
 ---
 
-*Last updated: April 2026 — Windows 11 first-class, macOS/Linux via Wine.*
+*Last updated: June 2026 — current 13-strategy roster, backtests #10–13 added; Windows 11 first-class, macOS/Linux via Wine.*
