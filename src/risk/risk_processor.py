@@ -74,7 +74,29 @@ class RiskProcessor:
         sl = None
         tp = None
 
-        if strategy_name == 'kalman_regime':
+        # ── Uniform fixed-SL + RR-TP policy (2026-06-30) ──────────────────
+        # When a strategy's config block sets `sl_points`, the SL is that exact
+        # fixed point distance (the user's inputted value) and the TP is
+        # SL × `rr` for a clean 1:1 / 1:2 / 1:3. We flag preserve_structural_sl/tp
+        # so the execution-layer BudgetSL/BudgetTP do NOT rewrite the geometry,
+        # and the liquidity-adjustment block below skips it so the R:R stays
+        # exact. The four calendar/drift strategies are no-TP by design and are
+        # excluded — they keep their dedicated branch. Any block WITHOUT
+        # `sl_points` falls through to the existing per-strategy ATR branches
+        # (fully backward compatible).
+        _NO_TP_STRATS = {'london_breakout', 'monday_drift',
+                         'index_overnight', 'wednesday_drift'}
+        sl_points_cfg = strat_cfg.get('sl_points')
+
+        if sl_points_cfg is not None and strategy_name not in _NO_TP_STRATS:
+            sl_dist = Decimal(str(sl_points_cfg))
+            rr = Decimal(str(strat_cfg.get('rr', 2.0)))
+            sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
+            tp = entry + sl_dist * rr if side == OrderSide.BUY else entry - sl_dist * rr
+            signal.metadata['preserve_structural_sl'] = True
+            signal.metadata['preserve_structural_tp'] = True
+
+        elif strategy_name == 'kalman_regime':
             # SL = sl_atr_multiplier × ATR (as configured).
             # TP = tp_atr_multiplier × ATR — the configured ATR multiple is the
             # primary TP driver so the backtest grid's tp_atr_multiplier sweep is
@@ -383,7 +405,12 @@ class RiskProcessor:
         # that any SL widening past PDL/PDH collapses RR below the floor and
         # causes the signal to be rejected. Keeping kalman on its raw stops
         # preserves the geometry the backtest validated.
-        if sl is not None and tp is not None and strategy_name != 'kalman_regime':
+        # Signals on the fixed-SL + RR policy (preserve_structural_sl) keep their
+        # exact 1:N geometry — skip the liquidity nudge that would otherwise widen
+        # the SL / tighten the TP and break the configured R:R.
+        if (sl is not None and tp is not None
+                and strategy_name != 'kalman_regime'
+                and not signal.metadata.get('preserve_structural_sl')):
             liq_levels = signal.metadata.get('liquidity_levels') or {}
             if liq_levels:
                 from ..monitoring.liquidity_levels import adjust_stops_for_liquidity
