@@ -330,6 +330,31 @@ class ExecutionEngine:
                     lot=float(position_size),
                 )
 
+                # ── RR TP: take-profit rides off the budget SL at the configured
+                # reward:risk (1:1 / 1:2 / 1:3). The user's start-script max-loss
+                # defines the SL distance above; the TP is rr × that distance, so
+                # the realized R:R is exact regardless of which strategy fired.
+                # `reward_risk_ratio` is set by RiskProcessor (per-strategy `rr`
+                # overriding the global `risk.reward_risk_ratio`, default 2.0).
+                # A fixed-dollar take_profit_usd, if set, still overrides this in
+                # the BudgetTP block below (unless the strategy preserves its TP).
+                _rr = Decimal(str(signal.metadata.get('reward_risk_ratio', 2.0) or 0))
+                if _rr > 0:
+                    old_tp = signal.take_profit
+                    signal.take_profit = (
+                        entry_d + budget_sl_dist * _rr if signal.side == OrderSide.BUY
+                        else entry_d - budget_sl_dist * _rr
+                    )
+                    self.logger.info(
+                        "[BudgetSL] TP set to R:R × budget SL",
+                        strategy=signal.strategy_name,
+                        symbol=signal.symbol.ticker,
+                        old_tp=float(old_tp) if old_tp else None,
+                        new_tp=float(signal.take_profit),
+                        rr=float(_rr),
+                        sl_distance=float(budget_sl_dist),
+                    )
+
             # ── Budget TP: fixed "take profit per trade" target ───────────────
             # Mirror of Budget SL above. When the user sets a per-trade TP budget
             # in runtime_setup, rewrite the strategy's structural TP so every

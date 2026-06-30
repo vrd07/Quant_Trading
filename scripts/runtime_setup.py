@@ -3,7 +3,8 @@ Interactive runtime setup. Prompts the user for:
   1. Which symbols to trade + broker ticker (e.g. XAUUSD.x, GOLDm)
   2. Lot size per selected symbol
   3. Max loss per trade (USD) — shows the implied stop-loss in pips per symbol
-  4. Max take profit per trade (USD) — fixed $ profit target, 0 to disable
+  4. Take-profit reward:risk ratio (TP = rr × the max-loss stop) + optional
+     fixed $ TP override (0 = use the RR)
   5. Max daily loss (USD)
   6. Max total drawdown (USD)
   7. Max daily profit (USD)
@@ -193,15 +194,38 @@ def main() -> int:
             print(f"    {tkr:12s} {user_lot} lots -> ~{pips:.0f} pip stop for ${max_loss_trade:.2f}")
     print()
 
-    # ── Max take profit per trade ──
-    print("--- Step 3: Max take profit per trade (fixed $ target) ---")
-    print("  Sets a fixed dollar profit target on EVERY trade — the bot rewrites")
-    print("  each trade's take-profit to the price that banks this much USD,")
-    print("  regardless of which strategy fired. Enter 0 to disable and let each")
-    print("  strategy keep its own ATR/structure-based TP.")
+    # ── Take-profit: reward:risk ratio ──
+    print("--- Step 3: Take-profit reward:risk ratio ---")
+    print("  Your max-loss above defines each trade's stop-loss distance; the")
+    print("  take-profit is placed at this reward:risk multiple of that stop.")
+    print("  e.g. 1.0 = 1:1, 2.0 = 1:2, 3.0 = 1:3. Applies to every strategy")
+    print("  (squeeze_breakout / stoch_pullback keep their own validated TP).")
+    default_rr = float(config["risk"].get("reward_risk_ratio", 2.0) or 2.0)
+    reward_risk_ratio = _prompt_float(
+        "  Reward:risk ratio (e.g. 1, 2, 3)",
+        default=default_rr,
+        minimum=0.1,
+    )
+    tp_usd_at_rr = max_loss_trade * reward_risk_ratio
+    print()
+    print(f"  => TP placed at 1:{reward_risk_ratio:g} — banks ~${tp_usd_at_rr:.2f} if hit (risking ${max_loss_trade:.2f})")
+    print("  Implied take-profit distance (using YOUR lot size per symbol):")
+    for tkr, scfg in selected.items():
+        user_lot = float(scfg["_user_lot"])
+        pip_usd = _usd_per_pip(scfg, user_lot)
+        if pip_usd > 0:
+            pips = tp_usd_at_rr / pip_usd
+            print(f"    {tkr:12s} {user_lot} lots -> ~{pips:.0f} pip TP (RR 1:{reward_risk_ratio:g})")
+    print()
+
+    # ── Optional: fixed $ take-profit override ──
+    print("--- Step 3b: Fixed $ take-profit override (optional) ---")
+    print("  Leave 0 to use the reward:risk TP above. If > 0, the bot instead")
+    print("  rewrites every trade's TP to bank exactly this many USD, ignoring")
+    print("  the RR ratio (strategies that keep their own TP are unaffected).")
     default_tp_usd = round(float(config["risk"].get("take_profit_usd", 0) or 0), 2)
     take_profit_usd = _prompt_float(
-        "  Max take profit per trade (USD, 0 to disable)",
+        "  Fixed take-profit per trade (USD, 0 = use RR)",
         default=default_tp_usd,
         minimum=0.0,
     )
@@ -220,7 +244,7 @@ def main() -> int:
                 f" per trade — reward-to-risk is below 1:1."
             )
     else:
-        print("  => Per-trade take-profit target disabled (strategy TP used)")
+        print("  => Fixed $ TP disabled — using the reward:risk ratio above")
     print()
 
     # ── Max daily loss ──
@@ -305,6 +329,7 @@ def main() -> int:
         "risk": {
             "risk_per_trade_pct": risk_per_trade_pct,
             "risk_per_trade_usd": max_loss_trade,
+            "reward_risk_ratio": reward_risk_ratio,
             "take_profit_usd": take_profit_usd,
             "max_daily_loss_pct": daily_pct,
             "absolute_max_loss_usd": max_daily_loss,
@@ -324,7 +349,8 @@ def main() -> int:
     print(f"   Saved overrides -> {OVERRIDE_PATH}")
     print(f"   Symbols         : {', '.join(selected.keys())}")
     print(f"   Max loss/trade  : ${max_loss_trade:.2f}")
-    print(f"   Max TP/trade    : ${take_profit_usd:.2f}" + (" (disabled)" if take_profit_usd == 0 else ""))
+    print(f"   Reward:risk     : 1:{reward_risk_ratio:g}" + (" (overridden by fixed TP)" if take_profit_usd > 0 else ""))
+    print(f"   Fixed TP/trade  : ${take_profit_usd:.2f}" + (" (disabled — using RR)" if take_profit_usd == 0 else ""))
     print(f"   Max daily loss  : ${max_daily_loss:.2f}")
     print(f"   Max drawdown    : ${max_drawdown_usd:.2f}")
     print(f"   Max daily profit: ${max_daily_profit:.2f}" + (" (disabled)" if max_daily_profit == 0 else ""))

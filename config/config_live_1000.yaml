@@ -135,6 +135,11 @@ risk:
   # execution_engine rewrites every trade's TP to bank exactly this much.
   take_profit_usd: 0
 
+  # Reward:risk for the budget TP. When the start-script max-loss (risk_per_trade_usd)
+  # drives the SL via BudgetSL, the TP is set to rr × that SL distance (1:1/1:2/1:3).
+  # Per-strategy `strategies.<name>.rr` overrides this global default.
+  reward_risk_ratio: 2.0
+
   # Per-strategy risk override (added 2026-05-06).
   # NOTE (2026-06-20): this override is effectively INERT while the XAUUSD lot
   # is pinned (symbols.XAUUSD.min_lot == max_lot == 0.01, runtime_setup-fixed):
@@ -272,7 +277,6 @@ strategies:
 
   stoch_pullback:
     enabled: false           # 2026-06-22: disabled at $1k — enforced backtest goes dormant after Q1 2025 (35 trades then halted); not a live ongoing edge at this size
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
     timeframe: 15m
     trend_ema: 50            # EMA trend filter (price side + slope)
     stoch_period: 14         # Stochastic(14,3)
@@ -375,8 +379,6 @@ strategies:
 
   vwap:
     enabled: true               # v5: VWAP band-touch + MACD crossover (2026-05-09)
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 15m
     # VWAP band gate
     band_std_mult: 2.0          # v5: 2σ — genuine extremes; 1.5σ fired too often on trend bars
@@ -401,8 +403,6 @@ strategies:
   # Momentum v3: Session-filtered, wider SL, optimized for profitability
   momentum:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 5m
     rsi_period: 14
     ema_period: 20
@@ -430,8 +430,6 @@ strategies:
   # ── SECONDARY STRATEGY ────────────────────────────────────────────────────
   kalman_regime:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 15m
     long_only: false                # Two-sided: SELL re-enabled with confidence-gated sizing
     kalman_q: 0.00001
@@ -483,8 +481,6 @@ strategies:
   # v2: +5.30%, PF 1.88, DD 1.61% — EMA trend + session filter + strength gate
   sbr:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 15m
     lookback_period: 20
     retest_tolerance_atr: 0.4
@@ -512,8 +508,6 @@ strategies:
   # 214 trades, WR 45.3%, PF 1.31, DD 1.6% on $10k.
   asia_range_fade:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 15m
     session_hours: [9, 10, 11, 12, 13]
     lookback_bars: 20
@@ -548,8 +542,6 @@ strategies:
   # Disabled by default -- run backtest first, then enable if PF > 1.3
   smc_ob:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 5m
     long_only: true
     swing_lookback: 5
@@ -594,8 +586,6 @@ strategies:
   # PF 1.75, WR 36.8%, DD 9.2%, 152 trades / 6mo on XAUUSD 5m — best risk-adjusted
   fibonacci_retracement:
     enabled: true
-    sl_points: 33.0   # 2026-06-30: fixed inputted SL (price points) — PLACEHOLDER, tune per strategy
-    rr: 2.0           # TP = sl_points * rr  (1:1 / 1:2 / 1:3)
     timeframe: 5m
     swing_lookback: 5
     min_swing_atr_mult: 3.5          # was 2.0 — only BIG swings
