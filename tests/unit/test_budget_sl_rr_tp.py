@@ -137,6 +137,47 @@ def test_rr_ratios_drive_tp(rr, tp):
     assert order.take_profit == Decimal(tp)
 
 
+CALENDAR_STRATEGIES = ["london_breakout", "monday_drift", "index_overnight", "wednesday_drift"]
+
+
+@pytest.mark.parametrize("strategy_name", CALENDAR_STRATEGIES)
+def test_calendar_strategies_flag_preserve_structural_sl(strategy_name):
+    # These strategies precompute their own structural stop (Asia-range fraction /
+    # daily-ATR multiple) and deliberately have NO take-profit — the exit is a
+    # per-strategy time stop; research shows capping TP kills the edge. RiskProcessor
+    # must mark them preserve_structural_sl, same as squeeze/stoch, or the execution
+    # engine's BudgetSL/RR-TP silently overwrites the structural stop and injects a
+    # TP that was never supposed to exist.
+    rp = RiskProcessor({"strategies": {strategy_name: {}}, "risk": {"reward_risk_ratio": 2.0}})
+    sig = Signal(
+        strategy_name=strategy_name, symbol=make_symbol("GBPUSD"), side=OrderSide.BUY,
+        strength=0.6, entry_price=Decimal("1.2500"),
+        metadata={"strategy": strategy_name, "stop_price": 1.2400},
+    )
+    rp.calculate_stops(sig)
+    assert sig.take_profit is None
+    assert sig.metadata.get("preserve_structural_sl") is True
+
+
+@pytest.mark.parametrize("strategy_name", CALENDAR_STRATEGIES)
+def test_calendar_strategies_survive_execution_engine_untouched(strategy_name):
+    cfg = {"strategies": {strategy_name: {}},
+           "risk": {"risk_per_trade_usd": 150.0, "reward_risk_ratio": 2.0}}
+    engine = make_engine(cfg)
+    sym = make_symbol("GBPUSD")
+    sig = Signal(
+        strategy_name=strategy_name, symbol=sym, side=OrderSide.BUY,
+        strength=0.6, entry_price=Decimal("1.2500"),
+        metadata={"strategy": strategy_name, "stop_price": 1.2400,
+                  "preserve_structural_sl": True},
+    )
+    order = engine.submit_signal(signal=sig, account_balance=Decimal("25000"),
+                                 account_equity=Decimal("25000"),
+                                 current_positions={}, daily_pnl=Decimal("0"))
+    assert order.stop_loss == Decimal("1.2400")   # strategy's own structural stop
+    assert order.take_profit is None              # NO TP by design — time-stop exit
+
+
 def test_squeeze_preserves_own_sl_tp():
     # squeeze sets preserve_structural_sl in its own strategy code; here we
     # simulate that via metadata. BudgetSL must NOT rewrite SL, and the RR-TP
