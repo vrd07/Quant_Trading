@@ -335,6 +335,14 @@ class RiskProcessor:
                 sl = entry - 2 * atr if side == OrderSide.BUY else entry + 2 * atr
             tp = None
 
+            # Flag so the execution-layer BudgetSL/RR-TP (2026-06-30 policy) does
+            # not overwrite this structural stop or inject a TP where none is
+            # supposed to exist — same opt-out squeeze_breakout/stoch_pullback use.
+            # Without this, BudgetSL silently replaced the Asia-range/daily-ATR
+            # stop with the dollar-budget distance and stamped an RR×SL take-profit
+            # onto a time-stop-exit strategy (caught 2026-07-01 auditing live SL/TP).
+            signal.metadata['preserve_structural_sl'] = True
+
         elif strategy_name == 'squeeze_breakout':
             # Volatility-coil breakout. The strategy precomputes SL = sl_atr_multiplier
             # × ATR and TP = SL × rr — the FIXED RR2.0 geometry is the entire edge
