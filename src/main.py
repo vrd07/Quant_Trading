@@ -2007,6 +2007,16 @@ class TradingSystem:
         except Exception as e:
             self.logger.error("Error displaying dashboard", error=str(e))
     
+    # This broker's XAUUSD contract spec (GET_SYMBOL_SPEC) reports
+    # value_per_lot=10, but real fills settle at 100 (confirmed against
+    # realized trade PnL and MT5-reconciled unrealized_pnl) — likely a
+    # tick_value/tick_size mismatch on the broker's gold quote. Trusting it
+    # silently sized every BudgetSL stop 10x too wide (2026-07-01: a live
+    # kalman position was risking ~$1,200 against a configured $120 max
+    # loss). Exclude XAUUSD from the auto-spec override; every other symbol's
+    # broker spec has been verified to match config.
+    _BROKER_SPEC_DISTRUST = {'XAUUSD'}
+
     def _load_symbols(self, apply_broker_spec: bool = False) -> list:
         """Load symbols from config.
 
@@ -2015,14 +2025,17 @@ class TradingSystem:
         value_per_lot / min_lot / max_lot / lot_step so lots are sized
         automatically — no hand-entered, possibly-wrong specs (the US30/NAS100
         placeholders). Falls back silently to config on any miss (old EA,
-        unknown symbol)."""
+        unknown symbol), and on symbols in `_BROKER_SPEC_DISTRUST` where the
+        broker spec is known to disagree with the verified config value."""
         from src.core.types import Symbol
 
         symbols = []
         for ticker, config in self.config.get('symbols', {}).items():
             if config.get('enabled', False):
                 spec = None
-                if apply_broker_spec and getattr(self, 'connector', None) is not None:
+                if (apply_broker_spec
+                        and getattr(self, 'connector', None) is not None
+                        and ticker not in self._BROKER_SPEC_DISTRUST):
                     try:
                         spec = self.connector.get_symbol_spec(ticker)
                     except Exception:
