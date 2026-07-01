@@ -4,7 +4,7 @@
 **Target instrument:** XAUUSD (spot gold), MetaTrader 5
 **Target account:** The5ers prop-firm challenge, $5,000 tier
 **Initial draft:** April 2026
-**Last updated:** May 2026
+**Last updated:** July 2026
 
 ---
 
@@ -311,6 +311,29 @@ When the Python process reconciles open positions with MT5 on reconnect, the bro
 
 ---
 
+**Lesson 19: Physically deleting kill-listed strategy files eliminates the silent re-enable risk that remains when code is present but disabled in config.**
+After six strategies (`breakout`, `mean_reversion`, `supply_demand`, `descending_channel_breakout`, `mini_medallion`, `continuation_breakout`) had been disabled in live configs for several weeks with no improvement in audit evidence, their source files were removed from the codebase entirely (2026-06-10). While `confluence_gate.py` already maintained a `KILL_LIST` set that blocks these names even if a stale config re-enables them, having the code present left an ambiguity about which config state is authoritative. Git history preserves the deleted code for reference. The lesson: a kill-list in a runtime gate is defence-in-depth; physical deletion is the primary control.
+
+**Lesson 20: Loser-profile dissection — grouping losing trades by the candidate filter's value — identifies non-overfit filters when the bad cohort is negative in both in-sample and out-of-sample windows.**
+For `squeeze_breakout`, sorting losing trades by penetration depth and ATR expansion ratio revealed two reliably unprofitable cohorts: shallow penetration below 0.1×ATR (win rate 22%, −$1,246 full-span) and weak ATR expansion between 1.02–1.05× (−$1,125, versus +$3,096 above 1.10×). Adding `min_penetration_atr` and `atr_expansion_ratio` entry gates improved profit factor from 1.12 to 1.21 on the 2026 in-sample year and from 1.05 to 1.42 on the 2025 out-of-sample year (`scripts/analyze_squeeze_losers.py`, `scripts/analyze_stoch_losers.py`, 2026-06-22). When a filter improves the out-of-sample result by a larger margin than it improves the in-sample result, the filter is unlikely to be data-mined; the reverse — IS improvement greater than OOS — is the normal signature of overfitting.
+
+**Lesson 21: A higher-timeframe trend alignment gate applied to a volatility-coil breakout strategy produced monotonic lift across both in-sample and out-of-sample periods; a session-hour filter did not.**
+The `htf_ema_period` gate for `squeeze_breakout` (default EMA400 on 15m ≈ EMA100 on 1H) restricts entries to breaks aligned with the slow EMA — BUY only when price is above, SELL only below. Sweeping EMA lengths from 100 to 600 showed strictly monotonic improvement in both the 2026 IS year and the 2025 OOS year (`scripts/research_squeeze_htf_gate.py`, 2026-06-22). Production backtest improved from PF 1.21 to PF 1.44, max drawdown from −6.25% to −5.85%, on 273 trades versus 407 pre-gate. Critically, the gated version survives `--enforce-risk` kill-switch enforcement at $5k (PF 1.44–1.61 depending on tier), while the pre-gate version throttled to near-flat (PF ~1.00). A session-hour filter was also tested on the same strategy and refuted: all-hours and session-restricted variants performed identically on gold, illustrating that not every structurally plausible gate holds empirically.
+
+**Lesson 22: Under prop-firm risk caps, minimum lot floors interact with the trailing-drawdown kill switch in a way that makes some strategies account-size-dependent.**
+`stoch_pullback` on XAUUSD passes walk-forward validation at $25k+ but halts after approximately 10 trades under `--enforce-risk` at $5k. The mechanism is not a flaw in the strategy's edge: at $5k with a $15/trade risk budget, ATR-implied lot sizes fall below MT5's minimum lot (0.02 on gold), and the system floors at min_lot. Gold's wide structural stops at min_lot risk approximately $78/trade — roughly 5× the intended budget. Three consecutive losses at that exposure consume $234 of the $250 max-drawdown limit, triggering the kill switch before positive expectancy has time to emerge. The same signals survive enforcement at $25k, where the implied lot exceeds the floor. This failure mode is invisible in flat-cost backtests and appears only when `--enforce-risk` replays the actual risk-engine veto logic. Calendar strategies (`index_overnight`, `wednesday_drift`, `london_breakout`, `monday_drift`) survive enforcement at all tiers because their time-stop exits produce smaller per-trade losses and their drawdown paths remain well below the kill-switch threshold.
+
+**Lesson 23: Broker instrument availability must be confirmed against the live MT5 account before a research-validated strategy is propagated to production configs.**
+`index_overnight` was designed to run on US30, NAS100, and GER40 based on independent statistical significance across all three indices (Turnaround Tuesday t-statistics: NAS t=2.17, US30 t=1.83, GER40 t=2.72; research PF 1.58–1.74). All three were propagated to all eight account-tier configs, regime weight tables, symbol reconciler maps, and test suites (commit `06b6233`, 2026-06-24). Within 24 hours, live broker inspection showed that NAS100 and GER40 index CFDs are not offered on the live MT5 account; the broker's "NASDAQ" group is cash equities, warrants, and ETFs, none of which carry the overnight drift. Both symbols were stripped from all configs and code (commits `a15e0fe`, `f08a53a`, 2026-06-25). The lesson: a strategy's statistical validity on historical data and its live instrument availability are independent checks; the latter must precede any config propagation, not follow it.
+
+**Lesson 24: Two correlated strategies on the same instrument can consume the max-positions budget as a single directional bet rather than as two independent trades.**
+`squeeze_breakout` and `stoch_pullback` both trade XAUUSD on 15-minute bars with the gold trend as a shared factor. Correlation analysis across 2026 return tapes showed a +0.34 pairwise correlation — the only materially off-diagonal entry in the full seven-strategy roster (`scripts/research_portfolio_correlation.py`, `scripts/handcraft_weights.py`, 2026-06-23). Applying Rob Carver's handcrafting method over the correlation-distance tree produced an Instrument Diversification Multiplier of 1.76 versus 2.09 for naive equal-weight, meaning the pair provides only 1.76 independent bets per concurrent position. A new correlation guard (risk check 18, `src/risk/risk_engine.py`, commit `f54d836`, 2026-06-23) caps concurrent open positions per correlation cluster (default cluster size 1), so the two gold breakout strategies cannot simultaneously occupy both `max_positions` slots with aligned-direction signals. This guard is baked in as a default across all configs; the cluster definition is configurable via `risk.correlation_guard`.
+
+**Lesson 25: Deriving the live stop-loss distance from a fixed config value in points rather than from the operator's dollar-risk budget caused strategies to risk 4.4× the intended per-trade maximum.**
+An intermediate implementation on 2026-06-30 added `sl_points` fields to strategy config blocks and used them as the stop distance directly (commits `99a5086`, `7136ac5`). At that parameterisation, a 33-point stop on gold at 0.2 lots risks approximately $66, while the same config's `risk_per_trade_usd: 15` intended $15 — a 4.4× overrun that bypassed the operator's start-script max-loss input entirely. The correct execution path — restored in the same-day fix (commit `eb5c15a`) — derives the stop distance at execution time as `risk_per_trade_usd / (lot × value_per_lot)` (BudgetSL) and sets TP as `reward_risk_ratio × sl_dist` immediately after BudgetSL. Strategies with validated native stops (`squeeze_breakout`, `stoch_pullback`, `london_breakout`, `monday_drift`, `index_overnight`, `wednesday_drift`) bypass BudgetSL via the `preserve_structural_sl` metadata flag and retain their precomputed levels. The generalised lesson: any execution path that has more than one mechanism for expressing a stop-loss must have a documented override precedence; without one, a later addition silently takes priority over earlier constraints.
+
+---
+
 ## 19. Limitations and Future Work
 
 - **XAUUSD concentration.** The system is designed and validated exclusively on gold. Extension to other instruments (BTC/ETH/EURUSD) requires separate regime classifier training, independent audit periods, and instrument-specific risk limits. The $250 max-drawdown constraint of the $5k tier is too tight for BTC/ETH under Kalman sizing (see Lesson 16).
@@ -325,6 +348,10 @@ When the Python process reconciles open positions with MT5 on reconnect, the bro
 
 - **No live options or hedging instruments.** Downside protection during high-impact news events relies entirely on the news blackout. Adding a systematic hedge (e.g. a gold inverse ETF) during risk-off periods would reduce drawdown path variance at the cost of implementation complexity.
 
+- **Calendar and seasonal strategies carry macro-regime decay risk without automated detection.** `monday_drift`, `london_breakout`, `index_overnight`, and `wednesday_drift` harvest statistical drift patterns present over the 2024–2026 research window — anti-USD trend, Turnaround Tuesday equity rebound, and mid-week JPY carry. These effects are correlated with the prevailing macro regime and will decay or reverse when underlying conditions change. Only `monday_drift` has an explicit regime kill-switch (daily SMA gate); the other three strategies have no macro-level protection beyond the universal kill switch. Performance decay in these strategies is currently detected only retrospectively through the weekly audit.
+
+- **Broker instrument availability is not programmatically verified during config propagation.** The NAS100 episode (Lesson 23) demonstrated that research-side instrument availability (Dukascopy historical data) and live MT5 account availability are independent dimensions. A new strategy's symbol must be confirmed available — and its contract spec (min_lot, value_per_lot, overnight financing) verified against the broker's MT5 symbol info — before config propagation. This check is currently manual via `scripts/health_check.py`; it is not enforced automatically when a new symbol block is added to a config file.
+
 ---
 
 ## 20. Conclusion
@@ -333,4 +360,4 @@ The system demonstrates that a multi-strategy quantitative trading system can be
 
 ---
 
-*End of document. Last lesson added: Lesson 18 (2026-05-30). Next scheduled review: 2026-07-01.*
+*End of document. Last lesson added: Lesson 25 (2026-07-01). Next scheduled review: 2026-08-01.*
