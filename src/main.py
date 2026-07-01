@@ -2040,6 +2040,11 @@ class TradingSystem:
                         spec = self.connector.get_symbol_spec(ticker)
                     except Exception:
                         spec = None
+                # GET_SYMBOL_SPEC has no stops-distance or spread field —
+                # always sourced from config regardless of which branch below
+                # is taken.
+                min_stops_distance = Decimal(str(config.get('min_stops_distance', 0.0)))
+                max_spread = Decimal(str(config.get('max_spread', 999.0)))
                 if spec:
                     vpl = Decimal(str(spec['value_per_lot']))
                     symbol = Symbol(
@@ -2049,6 +2054,8 @@ class TradingSystem:
                         max_lot=Decimal(str(spec.get('volume_max') or config.get('max_lot', 100.0))),
                         lot_step=Decimal(str(spec.get('volume_step') or config.get('lot_step', 0.01))),
                         value_per_lot=vpl,
+                        min_stops_distance=min_stops_distance,
+                        max_spread=max_spread,
                         leverage=Decimal(str(config.get('leverage', 1))),
                         max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
                     )
@@ -2064,6 +2071,8 @@ class TradingSystem:
                         max_lot=Decimal(str(config.get('max_lot', 100.0))),
                         lot_step=Decimal(str(config.get('lot_step', 0.01))),
                         value_per_lot=Decimal(str(config.get('value_per_lot', 1))),
+                        min_stops_distance=min_stops_distance,
+                        max_spread=max_spread,
                         leverage=Decimal(str(config.get('leverage', 1))),
                         max_notional_pct=Decimal(str(config.get('max_notional_pct', 0))),
                     )
