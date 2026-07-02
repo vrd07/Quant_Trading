@@ -84,6 +84,80 @@ def split_is_oos(daily: pd.DataFrame) -> tuple:
     return is_slice, oos_slice
 
 
+def daily_swing_trend_signals(bars: pd.DataFrame, *, donch_n: int, confirm_bars: int,
+                               atr_expansion_required: bool,
+                               htf_ema_period: int = 0,
+                               min_penetration_atr: float = 0.0,
+                               atr_period: int = ATR_PERIOD,
+                               atr_expansion_ratio: float = ATR_EXPANSION_RATIO) -> pd.DataFrame:
+    """Vectorised Donchian(N) breakout signals with optional confirmation filters.
+
+    donch_n: Donchian channel length, computed EXCLUDING the current bar
+      (.shift(1)) so a bar can't trivially "break" its own high/low.
+    confirm_bars: require the close to remain beyond the channel for this
+      many consecutive bars before firing (1 = fire on the first breakout
+      close — the un-confirmed baseline).
+    atr_expansion_required: require ATR(atr_period) >= atr_expansion_ratio *
+      ATR(atr_period) one bar ago on the firing bar (mirrors squeeze_breakout's
+      validated fakeout filter).
+    htf_ema_period: if > 0, only take breaks aligned with this EMA of daily
+      closes (BUY above / SELL below); 0 disables the filter.
+    min_penetration_atr: reject breaks that clear the channel by less than
+      this many ATRs; 0 disables the filter.
+
+    NOTE: a genuine breakout can hold `confirmed_buy`/`confirmed_sell` True
+    for many consecutive days (as long as price stays beyond the channel) —
+    this is intentional, not a bug. The simulator (Task 4) only opens a new
+    position when flat, so a multi-day-true signal does not open duplicate
+    positions; it does let the system re-enter promptly (subject to
+    `cooldown_bars`) if a chandelier stop-out happens while the breakout is
+    still structurally valid.
+    """
+    close, high, low = bars["close"], bars["high"], bars["low"]
+    atr = Indicators.atr(bars, period=atr_period)
+
+    donch_hi = high.rolling(donch_n).max().shift(1)
+    donch_lo = low.rolling(donch_n).min().shift(1)
+
+    raw_buy = close > donch_hi
+    raw_sell = close < donch_lo
+
+    confirmed_buy = raw_buy.rolling(confirm_bars).sum() >= confirm_bars
+    confirmed_sell = raw_sell.rolling(confirm_bars).sum() >= confirm_bars
+
+    if atr_expansion_required:
+        atr_expand = atr >= atr_expansion_ratio * atr.shift(1)
+    else:
+        atr_expand = pd.Series(True, index=close.index)
+
+    if htf_ema_period and htf_ema_period > 0:
+        htf = close.ewm(span=htf_ema_period, adjust=False).mean()
+        up_ok, dn_ok = close > htf, close < htf
+    else:
+        up_ok = dn_ok = pd.Series(True, index=close.index)
+
+    if min_penetration_atr and min_penetration_atr > 0:
+        deep_hi = close > donch_hi + min_penetration_atr * atr
+        deep_lo = close < donch_lo - min_penetration_atr * atr
+    else:
+        deep_hi = deep_lo = pd.Series(True, index=close.index)
+
+    buy = confirmed_buy & atr_expand & up_ok & deep_hi
+    sell = confirmed_sell & atr_expand & dn_ok & deep_lo
+
+    rows = []
+    for i in range(len(bars)):
+        b, s = bool(buy.iloc[i]), bool(sell.iloc[i])
+        if not (b or s):
+            continue
+        rows.append({
+            "bar_idx": i, "signal_ts": bars.index[i],
+            "side": "BUY" if b else "SELL",
+            "atr_at_entry": float(atr.iloc[i]),
+        })
+    return pd.DataFrame(rows)
+
+
 if __name__ == "__main__":
     daily = load_daily_bars()
     is_slice, oos_slice = split_is_oos(daily)
