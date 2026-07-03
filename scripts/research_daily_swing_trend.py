@@ -301,6 +301,44 @@ def pick_stage1_winner(results: dict, min_trades: int = 20) -> tuple:
     return max(candidates, key=lambda x: x[1]["pf"])[0]
 
 
+def run_stage2(is_bars: pd.DataFrame, stage1_winner: tuple) -> dict:
+    """Layer HTF-alignment and min-penetration filters on top of the Stage-1
+    winner, on/off only (both fixed at squeeze_breakout's validated values —
+    see Global Constraints). Returns {(htf_on, pen_on): (stats, (dd, dd_pct))}.
+    """
+    n, mult, cb, expand = stage1_winner
+    results = {}
+    for htf_on in (False, True):
+        for pen_on in (False, True):
+            sig = daily_swing_trend_signals(
+                is_bars, donch_n=n, confirm_bars=cb,
+                atr_expansion_required=expand,
+                htf_ema_period=HTF_EMA_PERIOD if htf_on else 0,
+                min_penetration_atr=MIN_PENETRATION_ATR if pen_on else 0.0,
+            )
+            trades = simulate_chandelier(is_bars, sig, atr_mult=mult,
+                                          cooldown_bars=max(cb, 1) * 2)
+            results[(htf_on, pen_on)] = (stats(trades), max_drawdown(trades, CAPITAL))
+    return results
+
+
+def pick_final_params(stage1_winner: tuple, stage2_results: dict) -> dict:
+    """Pick the Stage-2 cell with the highest PF (ties broken toward fewer
+    active filters — simpler is preferred when performance is equal)."""
+    n, mult, cb, expand = stage1_winner
+    ranked = sorted(stage2_results.items(),
+                     key=lambda kv: (kv[1][0]["pf"], not kv[0][0], not kv[0][1]),
+                     reverse=True)
+    (htf_on, pen_on), _ = ranked[0]
+    return {
+        "donch_n": n, "atr_mult": mult, "confirm_bars": cb,
+        "atr_expansion_required": expand,
+        "htf_ema_period": HTF_EMA_PERIOD if htf_on else 0,
+        "min_penetration_atr": MIN_PENETRATION_ATR if pen_on else 0.0,
+        "cooldown_bars": max(cb, 1) * 2,
+    }
+
+
 if __name__ == "__main__":
     daily = load_daily_bars()
     is_slice, oos_slice = split_is_oos(daily)
