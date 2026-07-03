@@ -339,6 +339,38 @@ def pick_final_params(stage1_winner: tuple, stage2_results: dict) -> dict:
     }
 
 
+def evaluate_final(bars: pd.DataFrame, params: dict, cost: float = COST) -> tuple:
+    """Run the fully-resolved parameter set on a given bar slice. Used for
+    both the untouched OOS validation and the cost-robustness re-run (with
+    a widened `cost`)."""
+    sig = daily_swing_trend_signals(
+        bars, donch_n=params["donch_n"], confirm_bars=params["confirm_bars"],
+        atr_expansion_required=params["atr_expansion_required"],
+        htf_ema_period=params["htf_ema_period"],
+        min_penetration_atr=params["min_penetration_atr"],
+    )
+    trades = simulate_chandelier(bars, sig, atr_mult=params["atr_mult"],
+                                  cooldown_bars=params["cooldown_bars"], cost=cost)
+    return stats(trades), max_drawdown(trades, CAPITAL)
+
+
+def yearly_breakdown(bars: pd.DataFrame, params: dict) -> dict:
+    """Per-calendar-year PF, for the gate's 'positive or flat every full
+    year' criterion."""
+    sig = daily_swing_trend_signals(
+        bars, donch_n=params["donch_n"], confirm_bars=params["confirm_bars"],
+        atr_expansion_required=params["atr_expansion_required"],
+        htf_ema_period=params["htf_ema_period"],
+        min_penetration_atr=params["min_penetration_atr"],
+    )
+    trades = simulate_chandelier(bars, sig, atr_mult=params["atr_mult"],
+                                  cooldown_bars=params["cooldown_bars"])
+    if trades.empty:
+        return {}
+    trades["year"] = pd.to_datetime(trades["exit_ts"]).dt.year
+    return {int(yr): stats(sub) for yr, sub in trades.groupby("year")}
+
+
 if __name__ == "__main__":
     daily = load_daily_bars()
     is_slice, oos_slice = split_is_oos(daily)
