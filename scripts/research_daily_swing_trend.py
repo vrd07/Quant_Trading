@@ -158,6 +158,109 @@ def daily_swing_trend_signals(bars: pd.DataFrame, *, donch_n: int, confirm_bars:
     return pd.DataFrame(rows)
 
 
+def simulate_chandelier(bars: pd.DataFrame, sig_df: pd.DataFrame, *,
+                         atr_mult: float, cooldown_bars: int,
+                         lot: float = LOT, cost: float = COST,
+                         value_per_lot: float = VALUE_PER_LOT) -> pd.DataFrame:
+    """Daily chandelier-trail simulation. One position at a time (this
+    strategy commits one XAUUSD daily slot, matching the live design's
+    single-symbol-slot scope). Entry fills at the OPEN of the bar after the
+    signal (signal confirmed on close of day t -> fill at open of day t+1).
+
+    Exit = ATR-chandelier trail only, no take-profit:
+      stop = highest-high-since-entry - atr_mult*atr_at_entry   (long)
+      stop = lowest-low-since-entry   + atr_mult*atr_at_entry   (short)
+    atr_at_entry is FROZEN at entry (matches this repo's existing
+    TrailingStopManager convention of computing the initial ATR distance
+    once and never re-deriving it mid-trade — see design spec's Risk-Engine
+    Wiring section). The trail only ever ratchets favourably.
+
+    Gap-aware: if the day's OPEN is already through the trail, fill at that
+    (worse) open price; otherwise assume the trail is hit intrabar at the
+    trail price itself. Mirrors backtest_kalman_2026_fixed.simulate's
+    gap-through-stop convention.
+    """
+    o = bars["open"].to_numpy(float)
+    h = bars["high"].to_numpy(float)
+    l = bars["low"].to_numpy(float)
+    c = bars["close"].to_numpy(float)
+    ts = bars.index
+    n = len(bars)
+
+    by_entry = defaultdict(list)
+    for _, s in sig_df.iterrows():
+        eb = int(s["bar_idx"]) + 1
+        if eb < n:
+            by_entry[eb].append(s)
+
+    pos = None
+    trades = []
+    last_exit_bar = -10 ** 9
+
+    def record(entry_ts, exit_ts, side, entry, fill, reason, bars_held):
+        sign = 1.0 if side == 1 else -1.0
+        pnl = (fill - entry) * lot * value_per_lot * sign
+        trades.append({
+            "entry_ts": entry_ts, "exit_ts": exit_ts,
+            "side": "buy" if side == 1 else "sell",
+            "entry": entry, "exit": fill, "exit_reason": reason,
+            "bars_held": bars_held, "pnl": pnl,
+        })
+
+    for i in range(n):
+        # --- Manage the open position first ---
+        if pos is not None and i > pos["entry_bar"]:
+            if pos["side"] == 1:
+                pos["extreme"] = max(pos["extreme"], h[i])
+                trail = pos["extreme"] - pos["atr_dist"]
+                if o[i] <= trail:
+                    fill, reason = o[i] - cost, "trail_gap"
+                elif l[i] <= trail:
+                    fill, reason = trail - cost, "trail"
+                else:
+                    fill = None
+            else:
+                pos["extreme"] = min(pos["extreme"], l[i])
+                trail = pos["extreme"] + pos["atr_dist"]
+                if o[i] >= trail:
+                    fill, reason = o[i] + cost, "trail_gap"
+                elif h[i] >= trail:
+                    fill, reason = trail + cost, "trail"
+                else:
+                    fill = None
+
+            if fill is not None:
+                record(pos["entry_ts"], ts[i], pos["side"], pos["entry"], fill,
+                       reason, i - pos["entry_bar"])
+                last_exit_bar = i
+                pos = None
+
+        # --- Consider a new entry only when flat, past the cooldown ---
+        if pos is None and (i - last_exit_bar) >= cooldown_bars:
+            for s in by_entry.get(i, []):
+                side = 1 if str(s["side"]).upper() == "BUY" else -1
+                entry = o[i] + cost if side == 1 else o[i] - cost
+                atr_dist = atr_mult * float(s["atr_at_entry"])
+                extreme = h[i] if side == 1 else l[i]
+                trail0 = extreme - atr_dist if side == 1 else extreme + atr_dist
+                hit = (l[i] <= trail0) if side == 1 else (h[i] >= trail0)
+                if hit:
+                    # Entry-day range already crashes through the initial trail.
+                    fill = trail0 - cost if side == 1 else trail0 + cost
+                    record(ts[i], ts[i], side, entry, fill, "trail_same_day", 0)
+                    last_exit_bar = i
+                else:
+                    pos = {"side": side, "entry": entry, "entry_bar": i,
+                           "entry_ts": ts[i], "atr_dist": atr_dist, "extreme": extreme}
+                break  # one position at a time; ignore a same-day 2nd signal
+
+    if pos is not None:
+        record(pos["entry_ts"], ts[-1], pos["side"], pos["entry"], c[-1],
+               "end_of_data", n - 1 - pos["entry_bar"])
+
+    return pd.DataFrame(trades)
+
+
 if __name__ == "__main__":
     daily = load_daily_bars()
     is_slice, oos_slice = split_is_oos(daily)
