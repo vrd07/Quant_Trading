@@ -371,9 +371,112 @@ def yearly_breakdown(bars: pd.DataFrame, params: dict) -> dict:
     return {int(yr): stats(sub) for yr, sub in trades.groupby("year")}
 
 
-if __name__ == "__main__":
+def main():
     daily = load_daily_bars()
-    is_slice, oos_slice = split_is_oos(daily)
-    print(f"Total daily bars: {len(daily)} ({daily.index.min()} -> {daily.index.max()})")
-    print(f"IN-SAMPLE:  {len(is_slice)} bars ({is_slice.index.min()} -> {is_slice.index.max()})")
-    print(f"OUT-OF-SAMPLE: {len(oos_slice)} bars ({oos_slice.index.min()} -> {oos_slice.index.max()})")
+    is_bars, oos_bars = split_is_oos(daily)
+    full_bars = pd.concat([is_bars, oos_bars])
+
+    print(f"Total: {len(daily)} bars | IS: {len(is_bars)} | OOS: {len(oos_bars)}")
+
+    stage1_results = run_stage1(is_bars)
+    winner = pick_stage1_winner(stage1_results)
+
+    L = []
+    A = L.append
+    A("# Daily Swing Trend-Follower — Research (XAUUSD)")
+    A("")
+    A("**Script:** `scripts/research_daily_swing_trend.py` · "
+      "**Spec:** `docs/superpowers/specs/2026-07-01-daily-swing-trend-design.md`")
+    A("")
+    A(f"IN-SAMPLE: {len(is_bars)} daily bars ({is_bars.index.min().date()} -> "
+      f"{is_bars.index.max().date()}). OUT-OF-SAMPLE: {len(oos_bars)} daily bars "
+      f"({oos_bars.index.min().date()} -> {oos_bars.index.max().date()}).")
+    A("")
+
+    if winner is None:
+        A("## Verdict")
+        A("")
+        A("**REJECTED at Stage 1** — no (Donchian length, ATR multiple, confirm_bars, "
+          "ATR-expansion) combination clears PF > 1.10 with >= 20 in-sample trades. "
+          "The raw Donchian-breakout + chandelier-trail system has no exploitable edge "
+          "on daily XAUUSD bars, confirmation filters included. Not shipped — same "
+          "treatment as EMA-retest / EURUSD hunt / GBPUSD hunt in CLAUDE.md.")
+        REPORT.write_text("\n".join(L))
+        print(f"\nNO EDGE — report -> {REPORT}")
+        return
+
+    stage2_results = run_stage2(is_bars, winner)
+    final = pick_final_params(winner, stage2_results)
+
+    is_stats, is_dd = evaluate_final(is_bars, final)
+    oos_stats, oos_dd = evaluate_final(oos_bars, final)
+    oos_stress_stats, oos_stress_dd = evaluate_final(oos_bars, final, cost=COST * 2)
+    yearly = yearly_breakdown(full_bars, final)
+
+    A("## Stage 1 — parameter grid (in-sample)")
+    A("")
+    A(f"Winner: Donchian({winner[0]}), ATR-mult {winner[1]}, confirm_bars {winner[2]}, "
+      f"ATR-expansion-required {winner[3]}.")
+    A("")
+    A("## Stage 2 — confirmation-filter layering (in-sample)")
+    A("")
+    A("| HTF-align | Min-penetration | N | Win% | PF | Net$ | MaxDD% |")
+    A("|---|---|---:|---:|---:|---:|---:|")
+    for (htf_on, pen_on), (s, (dd, ddp)) in stage2_results.items():
+        A(f"| {htf_on} | {pen_on} | {s['n']} | {s['wr']:.1f}% | {s['pf']:.2f} | "
+          f"{s['net']:+,.0f} | {ddp:.1f}% |")
+    A("")
+    A(f"**Final parameters:** `{final}`")
+    A("")
+    A("## Walk-forward result")
+    A("")
+    A("| Slice | N | Win% | PF | Net$ | MaxDD% |")
+    A("|---|---:|---:|---:|---:|---:|")
+    A(f"| In-sample | {is_stats['n']} | {is_stats['wr']:.1f}% | {is_stats['pf']:.2f} | "
+      f"{is_stats['net']:+,.0f} | {is_dd[1]:.1f}% |")
+    A(f"| Out-of-sample | {oos_stats['n']} | {oos_stats['wr']:.1f}% | {oos_stats['pf']:.2f} | "
+      f"{oos_stats['net']:+,.0f} | {oos_dd[1]:.1f}% |")
+    A(f"| OOS, 2x cost | {oos_stress_stats['n']} | {oos_stress_stats['wr']:.1f}% | "
+      f"{oos_stress_stats['pf']:.2f} | {oos_stress_stats['net']:+,.0f} | "
+      f"{oos_stress_dd[1]:.1f}% |")
+    A("")
+    A("## Per-year breakdown (full span)")
+    A("")
+    A("| Year | N | Win% | PF | Net$ |")
+    A("|---|---:|---:|---:|---:|")
+    for yr in sorted(yearly):
+        s = yearly[yr]
+        A(f"| {yr} | {s['n']} | {s['wr']:.1f}% | {s['pf']:.2f} | {s['net']:+,.0f} |")
+    A("")
+
+    # ---- Verdict against the 4-part gate ----
+    gate_pf = is_stats["pf"] > 1.3 and oos_stats["pf"] > 1.3
+    gate_years = all(s["pf"] >= 1.0 or s["net"] >= 0 for s in yearly.values())
+    gate_dd = max(abs(is_dd[1]), abs(oos_dd[1])) <= 5.0   # config_live_5000.yaml max_drawdown_pct (0.05)
+    gate_cost = oos_stress_stats["pf"] > 1.3
+
+    A("## Verdict")
+    A("")
+    A(f"- PF > 1.3 both IS and OOS: {'PASS' if gate_pf else 'FAIL'} "
+      f"(IS {is_stats['pf']:.2f}, OOS {oos_stats['pf']:.2f})")
+    A(f"- Positive/flat every calendar year: {'PASS' if gate_years else 'FAIL'}")
+    A(f"- Max drawdown within $5k live cap (<=5%): {'PASS' if gate_dd else 'FAIL'} "
+      f"(IS {is_dd[1]:.1f}%, OOS {oos_dd[1]:.1f}%)")
+    A(f"- Cost-robust at 2x cost, OOS PF > 1.3: {'PASS' if gate_cost else 'FAIL'} "
+      f"(OOS-stress PF {oos_stress_stats['pf']:.2f})")
+    A("")
+    if gate_pf and gate_years and gate_dd and gate_cost:
+        A("✅ **CLEARS THE GATE.** Proceed to the separate live-implementation plan "
+          "(strategy class, risk-engine wiring, chandelier trail-state persistence, "
+          "confidence_flip exemption, config rollout) using these validated parameters.")
+    else:
+        A("❌ **DOES NOT CLEAR THE GATE.** Not shipped. Document as a rejected research "
+          "spike in CLAUDE.md (same treatment as EMA-retest / EURUSD / GBPUSD hunts) and "
+          "save a `project_*` memory noting the outcome.")
+
+    REPORT.write_text("\n".join(L))
+    print(f"\nReport -> {REPORT}")
+
+
+if __name__ == "__main__":
+    main()
