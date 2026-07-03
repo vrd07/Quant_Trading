@@ -261,6 +261,46 @@ def simulate_chandelier(bars: pd.DataFrame, sig_df: pd.DataFrame, *,
     return pd.DataFrame(trades)
 
 
+STAGE1_GRID = {
+    "donch_n": [20, 40, 55],
+    "atr_mult": [2.0, 3.0, 4.0],
+    "confirm_bars": [1, 2, 3],
+    "atr_expansion_required": [False, True],
+}
+
+
+def run_stage1(is_bars: pd.DataFrame) -> dict:
+    """Grid-search Stage-1 params on the in-sample slice only. Returns
+    {(donch_n, atr_mult, confirm_bars, atr_expansion_required): (stats, (dd, dd_pct))}.
+    """
+    results = {}
+    for n in STAGE1_GRID["donch_n"]:
+        for mult in STAGE1_GRID["atr_mult"]:
+            for cb in STAGE1_GRID["confirm_bars"]:
+                for expand in STAGE1_GRID["atr_expansion_required"]:
+                    sig = daily_swing_trend_signals(
+                        is_bars, donch_n=n, confirm_bars=cb,
+                        atr_expansion_required=expand,
+                    )
+                    trades = simulate_chandelier(
+                        is_bars, sig, atr_mult=mult, cooldown_bars=max(cb, 1) * 2,
+                    )
+                    key = (n, mult, cb, expand)
+                    results[key] = (stats(trades), max_drawdown(trades, CAPITAL))
+    return results
+
+
+def pick_stage1_winner(results: dict, min_trades: int = 20) -> tuple:
+    """Most-robust candidate: among cells with PF > 1.10 and N >= min_trades,
+    the one with the highest PF (same selection discipline
+    research_squeeze_breakout.py used)."""
+    candidates = [(k, s) for k, (s, _) in results.items()
+                  if s["pf"] > 1.10 and s["n"] >= min_trades]
+    if not candidates:
+        return None
+    return max(candidates, key=lambda x: x[1]["pf"])[0]
+
+
 if __name__ == "__main__":
     daily = load_daily_bars()
     is_slice, oos_slice = split_is_oos(daily)
