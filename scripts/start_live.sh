@@ -8,6 +8,8 @@
 #   chmod +x scripts/start_live.sh
 #   ./scripts/start_live.sh              # interactive (default)
 #   ./scripts/start_live.sh --force      # skip confirmations (for cron/restart)
+#   ./scripts/start_live.sh --gui        # native macOS dialogs for all inputs
+#                                        # (what scripts/QuantBot.command uses)
 # ============================================================
 
 set -euo pipefail
@@ -22,13 +24,28 @@ ACTIVE_CONFIG="${ACTIVE_CONFIG:-config/config_live_10000.yaml}"
 
 CONFIG=""
 FORCE=false
+GUI=false
 
 # Parse args
 for arg in "$@"; do
     case $arg in
         --force) FORCE=true ;;
+        --gui)   GUI=true ;;
     esac
 done
+
+# ── Native-dialog helpers (--gui mode, macOS osascript) ──────
+# Fall back to the terminal prompts automatically when osascript
+# is unavailable (Linux, SSH session without a GUI, etc.).
+have_dialogs() { [ "$GUI" = true ] && command -v osascript >/dev/null 2>&1; }
+
+# dlg_yn "message" "Yes|No default button" → rc 0 if user clicked Yes.
+# \n inside the message renders as a line break in the dialog.
+dlg_yn() {
+    local out
+    out=$(osascript -e "display dialog \"$1\" with title \"Quant Trading Bot\" buttons {\"No\", \"Yes\"} default button \"$2\"" 2>/dev/null) || return 1
+    [[ "$out" == *"button returned:Yes"* ]]
+}
 
 # Activate venv
 if [ -d "venv" ]; then
@@ -52,6 +69,27 @@ fi
 # ── Account Selection ───────────────────────────────────────
 if [ "$FORCE" = true ]; then
     CONFIG="$ACTIVE_CONFIG"
+elif have_dialogs; then
+    ACTIVE_STEM="$(basename "$ACTIVE_CONFIG" .yaml)"
+    CHOICE=$(osascript <<OSA 2>/dev/null || true
+set opts to {"Use ACTIVE_CONFIG (${ACTIVE_STEM})", "\$100", "\$1,000", "\$5,000", "\$10,000", "\$25,000", "\$50,000", "\$100,000"}
+set pick to choose from list opts with title "Quant Trading Bot" with prompt "Select account size:" default items {item 1 of opts}
+if pick is false then return "CANCEL"
+return item 1 of pick
+OSA
+)
+    case "$CHOICE" in
+        "CANCEL"|"")  echo "  Launch cancelled from account picker."; exit 0 ;;
+        '$100')       CONFIG="config/config_live_100.yaml" ;;
+        '$1,000')     CONFIG="config/config_live_1000.yaml" ;;
+        '$5,000')     CONFIG="config/config_live_5000.yaml" ;;
+        '$10,000')    CONFIG="config/config_live_10000.yaml" ;;
+        '$25,000')    CONFIG="config/config_live_25000.yaml" ;;
+        '$50,000')    CONFIG="config/config_live_50000.yaml" ;;
+        '$100,000')   CONFIG="config/config_live_100000.yaml" ;;
+        *)            CONFIG="$ACTIVE_CONFIG" ;;
+    esac
+    echo "  Account: ${CHOICE} → ${CONFIG}"
 else
     echo ""
     echo "============================================================"
@@ -145,8 +183,40 @@ echo ""
 
 # ── Runtime Risk Setup ───────────────────────────────────────
 if [ "$FORCE" = false ]; then
-    python3 scripts/runtime_setup.py --config "$CONFIG" || \
-        echo "  [WARN] Runtime setup cancelled — using config defaults."
+    if have_dialogs; then
+        # Everyday shortcut: reuse last session's runtime_overrides.yaml
+        # instead of walking the ~10 dialogs again (2-click relaunch).
+        USE_LAST=false
+        if [ -f "config/runtime_overrides.yaml" ]; then
+            LAST_SUMMARY=$(python3 - <<'PY' 2>/dev/null || true
+import yaml
+try:
+    o = yaml.safe_load(open("config/runtime_overrides.yaml")) or {}
+    r = o.get("risk") or {}
+    syms = [s for s, c in (o.get("symbols") or {}).items() if (c or {}).get("enabled")]
+    parts = [
+        "Symbols: " + (", ".join(syms) or "?"),
+        "Max loss/trade: $%s   RR 1:%s" % (r.get("risk_per_trade_usd", "?"), r.get("reward_risk_ratio", "?")),
+        "Daily loss: $%s   Max positions: %s" % (r.get("absolute_max_loss_usd", "?"), r.get("max_positions", "?")),
+    ]
+    print("\\n".join(parts), end="")  # literal \n — AppleScript line breaks
+except Exception:
+    pass
+PY
+)
+            if dlg_yn "Use last session's settings?\n\n${LAST_SUMMARY}\n\n(No = change them in the setup dialogs)" "Yes"; then
+                USE_LAST=true
+                echo "  ➜ Using last session's runtime overrides."
+            fi
+        fi
+        if [ "$USE_LAST" = false ]; then
+            python3 scripts/runtime_setup.py --config "$CONFIG" --ui dialogs || \
+                echo "  [WARN] Runtime setup cancelled — using config defaults."
+        fi
+    else
+        python3 scripts/runtime_setup.py --config "$CONFIG" || \
+            echo "  [WARN] Runtime setup cancelled — using config defaults."
+    fi
 fi
 
 # ── Step 1: Health Check ─────────────────────────────────────
@@ -162,7 +232,12 @@ else
     echo "  ✗ Health check FAILED — fix issues above before trading"
     echo ""
     if [ "$FORCE" = false ]; then
-        exit 1
+        if have_dialogs && dlg_yn "Health check FAILED.\n\nFix the issues shown in the Terminal window before trading.\n\nContinue anyway? (NOT recommended)" "No"; then
+            echo "  Continuing despite health-check failure (user override)."
+            echo ""
+        else
+            exit 1
+        fi
     else
         echo "  --force flag set, continuing despite health check failure..."
         echo ""
@@ -202,12 +277,21 @@ if python3 scripts/check_regime_health.py; then
 else
     echo ""
     if [ "$FORCE" = false ]; then
-        printf "  Continue with degraded regime ML? [y/N]: "
-        read -r REGIME_CONTINUE
-        case "${REGIME_CONTINUE:-N}" in
-            y|Y|yes|YES) echo "  Continuing as requested." ;;
-            *) echo "  Aborting. Fix the regime CSV (see scripts/refresh_historical_data.py)."; exit 1 ;;
-        esac
+        if have_dialogs; then
+            if dlg_yn "Regime ML health check is DEGRADED.\n\nStrategies would run on stale/default regime weights.\n\nContinue anyway?" "No"; then
+                echo "  Continuing as requested."
+            else
+                echo "  Aborting. Fix the regime CSV (see scripts/refresh_historical_data.py)."
+                exit 1
+            fi
+        else
+            printf "  Continue with degraded regime ML? [y/N]: "
+            read -r REGIME_CONTINUE
+            case "${REGIME_CONTINUE:-N}" in
+                y|Y|yes|YES) echo "  Continuing as requested." ;;
+                *) echo "  Aborting. Fix the regime CSV (see scripts/refresh_historical_data.py)."; exit 1 ;;
+            esac
+        fi
     else
         echo "  --force flag set, continuing despite degraded regime ML..."
     fi

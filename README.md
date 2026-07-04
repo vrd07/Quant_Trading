@@ -18,7 +18,7 @@
 - **A 16-step risk engine** that has absolute veto power over every order. No order reaches MT5 without passing kill-switch, circuit-breaker, hour-blackout, daily-loss budget, drawdown, exposure, and per-trade-risk checks. Any breach trips a one-way kill switch that requires manual reset.
 - **A nightly ML regime classifier** (RandomForest + Markov chain smoother + RL-lite performance feedback) that rewrites strategy weights once per UTC day so the system adapts to TREND / RANGE / VOLATILE regimes without code changes.
 - **Crash-safe state management** — every state mutation is serialised to disk every 10 seconds; a power outage at 03:00 UTC produces a recoverable system at 03:01 UTC.
-- **Cross-platform** — runs on Windows natively and on macOS / Linux via Wine-hosted MT5; the file-based bridge speaks the same protocol on every OS.
+- **Cross-platform** — first-class on Windows 11 **and** macOS (official MetaTrader 5 desktop app, one double-clickable launcher with native dialogs); Linux via Wine-hosted MT5. The file-based bridge speaks the same protocol on every OS.
 - **Audit-driven, not vibes-driven** — every parameter in the live config is annotated with the backtest or production-audit decision that produced it.
 
 ## 📊 The strategy stack
@@ -112,21 +112,28 @@ These are risk-bypassed (strategy-native SL/TP) and graded against the `backtest
 
 ---
 
-## 🚀 Quick Start (Windows 11, non-technical users)
-
-> The setup guide below is written for non-technical users running the bot on a fresh Windows 11 PC. No coding knowledge needed — just follow each step in order.
-
----
-
 ## 🗂️ What This Bot Does
 
 This is an **automated gold (XAUUSD) trading bot** built for the **The5ers $5,000 prop firm challenge**. It:
 
-- Connects to MetaTrader 5 (MT5) on your PC
+- Connects to MetaTrader 5 (MT5) on your PC or Mac
 - Automatically analyzes gold prices 24/7
 - Places and manages trades using multiple strategies
 - Enforces strict risk rules (daily loss limits, trailing stops, etc.)
 - Targets a **$400 profit** while staying within a **5% daily loss** and **10% drawdown** limit
+
+---
+
+## 🚀 Quick Start — pick your OS
+
+Both guides below are written for non-technical users. No coding knowledge needed — just follow each step in order.
+
+- 🪟 **Windows 11** → continue reading below
+- 🍎 **macOS** → jump to [Quick Start (macOS)](#-quick-start-macos-non-technical-users)
+
+---
+
+## 🪟 Quick Start (Windows 11, non-technical users)
 
 ---
 
@@ -338,6 +345,8 @@ Quant_Trading/
 ├── scripts/
 │   ├── start_live.bat           ← Double-click to start (Windows)
 │   ├── start_live.ps1           ← PowerShell launcher
+│   ├── QuantBot.command         ← Double-click to start (macOS)
+│   ├── start_live.sh            ← Terminal launcher (macOS/Linux); --gui = dialogs
 │   ├── health_check.py          ← Run this before every session
 │   ├── view_journal.py          ← See your trade history
 │   └── analyze_logs.py          ← See strategy performance
@@ -355,19 +364,170 @@ If something doesn't work, take a screenshot of the error message in the black w
 
 ---
 
-## 🍎 macOS / Linux Notes (Secondary)
+## 🍎 Quick Start (macOS, non-technical users)
 
-The bot also runs under Wine-hosted MT5. Setup is the same in spirit, but commands differ:
+> Written for a Mac (Apple Silicon M1–M4 or Intel) using the **official MetaTrader 5 desktop app for macOS** — you download one normal `.dmg`, no Wine setup of your own. Just follow each step in order.
+
+---
+
+### 🖥️ Step 1 — What You Need
+
+| Requirement | Where to Get It |
+|---|---|
+| A Mac (Apple Silicon or Intel) | Your current Mac |
+| Internet connection | Your router/WiFi |
+| MetaTrader 5 for Mac | [Download here](https://www.metatrader5.com/en/download) |
+| A The5ers MT5 account | [The5ers website](https://the5ers.com/) |
+| Python 3.11+ | [Download here](https://www.python.org/downloads/macos/) |
+| Git | Comes with Apple's Command Line Tools — macOS offers to install them automatically |
+
+---
+
+### 🐍 Step 2 — Install Python
+
+1. Go to [python.org/downloads/macos](https://www.python.org/downloads/macos/)
+2. Download the **macOS 64-bit universal2 installer** for Python 3.11+
+3. Open the downloaded `.pkg` and click through the installer
+
+**Verify it worked:** press `Cmd + Space`, type `Terminal`, press Enter. Then type:
+```
+python3 --version
+```
+You should see something like `Python 3.11.9`.
+
+---
+
+### 📥 Step 3 — Download the Bot
+
+In the same Terminal window, type these commands one at a time, pressing **Enter** after each:
+
+```
+cd ~/Documents
+git clone https://github.com/vrd07/Quant_Trading.git
+cd Quant_Trading
+```
+
+> If macOS pops up *"The 'git' command requires the command line developer tools"* — click **Install**, wait for it to finish, then run the `git clone` command again.
+
+---
+
+### 📉 Step 4 — Install & Set Up MetaTrader 5
+
+1. Download **MetaTrader 5 for Mac** from [metatrader5.com](https://www.metatrader5.com/en/download) and drag it into **Applications**
+2. Open MT5 and **log in with your The5ers account credentials**
+3. Install the EA bridge:
+   - In MT5, click **File → Open Data Folder**
+   - Navigate to `MQL5 → Experts`
+   - Copy `mt5_bridge/EA_FileBridge.mq5` from the bot folder (in `~/Documents/Quant_Trading`) into this `Experts` folder
+   - Restart MT5 so the EA appears in the **Navigator** panel
+4. Go to **Tools → Options → Expert Advisors** and tick:
+   - ✅ Allow automated trading
+   - ✅ Allow DLL imports
+5. In the **Navigator** panel, expand **Expert Advisors**, find `EA_FileBridge`, and drag it onto the **gold chart** — ⚠️ use your broker's exact ticker (often suffixed, e.g. `XAUUSDs`, not plain `XAUUSD`)
+6. Click **OK** in the dialog — you should see a smiley face 🙂 in the top-right of the chart
+
+> **No path editing needed:** the bot auto-detects the MT5 Common Files folder at `~/Library/Application Support/net.metaquotes.wine.metatrader5/…` (the official Mac app manages this internally).
+
+---
+
+### ▶️ Step 5 — One-Click Setup & Launch
+
+1. In Finder, open `Documents → Quant_Trading → scripts`
+2. **Double-click `QuantBot.command`**
+
+> **First time only:** if macOS warns about an unidentified developer, **right-click the file → Open → Open**. If Terminal says "permission denied", run once in Terminal: `chmod +x ~/Documents/Quant_Trading/scripts/QuantBot.command`
+
+**What happens on the first run:**
+- It creates the Python environment and installs every required package automatically (2–3 minutes of scrolling text — normal)
+- It offers to put a **"Quant Trading Bot" shortcut on your Desktop** — from then on, launching is one double-click from the Desktop
+
+**Every launch, native macOS dialogs walk you through the setup:**
+
+1. **Account size** — pick from a list ($100 … $100,000), or keep the last-used config
+2. **"Use last session's settings?"** — say Yes and you skip straight to launch (the everyday case is 2 clicks)
+3. Otherwise the setup dialogs ask, one at a time:
+   - which **symbols** to trade + your broker's exact **ticker** + **lot size** per symbol
+   - **max loss per trade ($)** — this becomes each trade's stop-loss budget
+   - **reward:risk ratio** (e.g. 2 = the take-profit banks 2× what you risk)
+   - **max daily loss, max drawdown, daily profit target ($)**
+   - **max open positions** and the **directional lock** (no-hedge rule)
+4. A **summary dialog** shows everything → click **Save & Start**
+5. The pre-flight health check, news fetch, and regime classifier run, then the bot starts with the live-monitor and sentiment pop-ups
+
+> Keep the Terminal window open while trading — closing it stops the bot. The launcher runs the bot under `caffeinate`, so your Mac won't go to sleep mid-trade.
+
+---
+
+### 🏥 Step 6 — Health Check (Run Before Every Session)
+
+The launcher runs this automatically, but you can run it by hand any time:
+
+```
+cd ~/Documents/Quant_Trading
+./venv/bin/python3 scripts/health_check.py --config config/config_live_5000.yaml
+```
+
+All lines should say `✅ PASS`. If you see `❌ FAIL`, do not run the bot until it's fixed.
+
+---
+
+### 📋 Step 7 — View Your Trades
+
+```
+cd ~/Documents/Quant_Trading
+./venv/bin/python3 scripts/view_journal.py
+```
+
+---
+
+### 🔴 How to Stop the Bot (macOS)
+
+- **Cleanly:** click the Terminal window running the bot and press `Ctrl + C` (yes, Ctrl — not Cmd). The bot saves its state and exits; the monitor pop-ups close with it.
+- **Emergency:** close the Terminal window.
+
+---
+
+### 🔄 Auto-Start at Login (Optional, macOS)
+
+The repo ships launchd job definitions in `scripts/launchd/`. For a hands-off start you can also run the launcher non-interactively:
+
+```
+./scripts/start_live.sh --force
+```
+
+> ⚠️ **macOS privacy (TCC) gotcha:** launchd jobs touching a repo under `~/Documents` need **Full Disk Access** granted to the venv's `python3` (System Settings → Privacy & Security → Full Disk Access), otherwise they fail silently.
+
+---
+
+### 🆘 Common Problems & Fixes (macOS)
+
+| Problem | Fix |
+|---|---|
+| *"QuantBot.command can't be opened — unidentified developer"* | Right-click the file → **Open** → **Open** (one-time) |
+| Terminal says `permission denied` | `chmod +x scripts/QuantBot.command` |
+| `python3: command not found` | Install Python from [python.org](https://www.python.org/downloads/macos/) |
+| No dialogs appear | Read the Terminal window — it prints the same questions and any error |
+| Health check shows MT5 status file missing | Make sure MT5 is open and EA_FileBridge shows the 🙂 on its chart |
+| EA shows 🙁 (sad face) | Tools → Options → Expert Advisors → enable automated trading |
+| A symbol never trades | The EA only streams quotes for charts it's attached to — open a chart of that exact ticker and attach the EA (the summary dialog reminds you which) |
+| `Operation not permitted` errors | System Settings → Privacy & Security → **Full Disk Access** → add Terminal (and the venv `python3` for launchd jobs) |
+| Bot stops when the Mac sleeps | Shouldn't happen (`caffeinate` is built into the launcher) — check Energy Saver settings if it does |
+
+---
+
+## 🐧 Linux Notes (Secondary)
+
+Linux runs the bot against Wine-hosted MT5. Same flow as macOS but terminal-only:
 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-bash scripts/start_live.sh            # instead of start_live.bat
+bash scripts/start_live.sh            # terminal prompts (no --gui on Linux)
 ```
 
-MT5 Common Files auto-detects to `~/Library/Application Support/net.metaquotes.wine.metatrader5/...` on macOS and `~/.wine/drive_c/users/...` on Linux. See `mt5_bridge/README_SETUP.md` for a more thorough beginner guide.
+MT5 Common Files auto-detects to `~/.wine/drive_c/users/...`. See `mt5_bridge/README_SETUP.md` for a more thorough guide.
 
 ---
 
-*Last updated: June 2026 — current 13-strategy roster, backtests #10–13 added; Windows 11 first-class, macOS/Linux via Wine.*
+*Last updated: July 2026 — current 13-strategy roster, backtests #10–13; Windows 11 and macOS first-class (one-click `QuantBot.command` launcher with native dialogs), Linux via Wine.*

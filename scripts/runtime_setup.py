@@ -15,12 +15,20 @@ on top of the selected config by src/main.py at startup.
 
 Usage:
     python scripts/runtime_setup.py --config config/config_live_50000.yaml
+    python scripts/runtime_setup.py --config ... --ui dialogs   # native macOS dialogs
+
+In dialogs mode every prompt becomes a native macOS dialog (osascript) and a
+final summary dialog must be confirmed BEFORE the overrides file is written;
+Cancel in any dialog exits 1 without writing (launcher falls back to config
+defaults). Falls back to terminal prompts if osascript is unavailable.
 """
 
 from __future__ import annotations
 
 import argparse
 import copy
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -29,13 +37,68 @@ import yaml
 
 OVERRIDE_PATH = Path("config/runtime_overrides.yaml")
 
+DIALOG_TITLE = "Quant Trading Bot"
+
+# UI backend: "terminal" (default) or "dialogs" (native macOS via osascript).
+UI = "terminal"
+
+
+class DialogCancelled(Exception):
+    """User pressed Cancel in a native dialog — abort without writing overrides."""
+
+
+def _as_quote(s: str) -> str:
+    """Escape a Python string into an AppleScript double-quoted literal.
+
+    Real newlines must become the \\n escape — an AppleScript string literal
+    cannot span physical lines.
+    """
+    s = s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+    return '"' + s + '"'
+
+
+def _osascript(script: str) -> str:
+    result = subprocess.run(
+        ["osascript", "-e", script], capture_output=True, text=True
+    )
+    if result.returncode != 0:
+        # osascript exits non-zero when the user hits Cancel (error -128).
+        raise DialogCancelled(result.stderr.strip())
+    return result.stdout.rstrip("\n")
+
+
+def _dlg_text(prompt: str, default: str, error: str = "") -> str:
+    body = (error + "\n\n" if error else "") + prompt
+    out = _osascript(
+        f"display dialog {_as_quote(body)} default answer {_as_quote(default)} "
+        f"with title {_as_quote(DIALOG_TITLE)} "
+        f'buttons {{"Cancel", "OK"}} default button "OK"'
+    )
+    marker = "text returned:"
+    return out.split(marker, 1)[1] if marker in out else ""
+
+
+def _dlg_yn(prompt: str, default: bool) -> bool:
+    out = _osascript(
+        f"display dialog {_as_quote(prompt)} "
+        f"with title {_as_quote(DIALOG_TITLE)} "
+        f'buttons {{"No", "Yes"}} '
+        f"default button {_as_quote('Yes' if default else 'No')}"
+    )
+    return "button returned:Yes" in out
+
 
 def _prompt_str(prompt: str, default: str) -> str:
+    if UI == "dialogs":
+        raw = _dlg_text(prompt.strip(), default).strip()
+        return raw or default
     raw = input(f"{prompt} [default: {default}]: ").strip()
     return raw or default
 
 
 def _prompt_yn(prompt: str, default: bool) -> bool:
+    if UI == "dialogs":
+        return _dlg_yn(prompt.strip(), default)
     d = "Y/n" if default else "y/N"
     raw = input(f"{prompt} [{d}]: ").strip().lower()
     if raw == "":
@@ -44,6 +107,21 @@ def _prompt_yn(prompt: str, default: bool) -> bool:
 
 
 def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> float:
+    if UI == "dialogs":
+        error = ""
+        while True:
+            raw = _dlg_text(prompt.strip(), f"{default:g}", error).strip()
+            if raw == "":
+                return default
+            try:
+                val = float(raw)
+            except ValueError:
+                error = f"'{raw}' is not a number — try again."
+                continue
+            if minimum is not None and val < minimum:
+                error = f"Must be >= {minimum:g} — try again."
+                continue
+            return val
     while True:
         raw = input(f"{prompt} [default: {default}]: ").strip()
         if raw == "":
@@ -60,6 +138,21 @@ def _prompt_float(prompt: str, default: float, minimum: float | None = None) -> 
 
 
 def _prompt_int(prompt: str, default: int, minimum: int | None = None) -> int:
+    if UI == "dialogs":
+        error = ""
+        while True:
+            raw = _dlg_text(prompt.strip(), str(default), error).strip()
+            if raw == "":
+                return default
+            try:
+                val = int(raw)
+            except ValueError:
+                error = f"'{raw}' is not a whole number — try again."
+                continue
+            if minimum is not None and val < minimum:
+                error = f"Must be >= {minimum} — try again."
+                continue
+            return val
     while True:
         raw = input(f"{prompt} [default: {default}]: ").strip()
         if raw == "":
@@ -82,7 +175,19 @@ def _usd_per_pip(symbol_cfg: dict, lot_size: float) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", required=True, help="Base config file (for defaults)")
+    parser.add_argument(
+        "--ui",
+        choices=["terminal", "dialogs"],
+        default="terminal",
+        help="Prompt backend: terminal input() or native macOS dialogs (osascript)",
+    )
     args = parser.parse_args()
+
+    global UI
+    UI = args.ui
+    if UI == "dialogs" and shutil.which("osascript") is None:
+        print("  [WARN] osascript not found — falling back to terminal prompts.")
+        UI = "terminal"
 
     cfg_path = Path(args.config)
     if not cfg_path.exists():
@@ -341,6 +446,34 @@ def main() -> int:
         },
     }
 
+    # In dialog mode the user confirms a summary BEFORE anything is written;
+    # Cancel raises DialogCancelled → exit 1 with no overrides file touched.
+    if UI == "dialogs":
+        summary_lines = [
+            f"Symbols: {', '.join(selected.keys())}",
+            f"Max loss/trade: ${max_loss_trade:.2f}",
+            f"Reward:risk: 1:{reward_risk_ratio:g}"
+            + (" (overridden by fixed TP)" if take_profit_usd > 0 else ""),
+            f"Fixed TP/trade: ${take_profit_usd:.2f}"
+            + (" (disabled — using RR)" if take_profit_usd == 0 else ""),
+            f"Max daily loss: ${max_daily_loss:.2f}",
+            f"Max drawdown: ${max_drawdown_usd:.2f}",
+            f"Max daily profit: ${max_daily_profit:.2f}"
+            + (" (disabled)" if max_daily_profit == 0 else ""),
+            f"Max positions: {max_positions}",
+            "Directional lock: " + ("ON (no hedging)" if directional_lock else "OFF (hedging allowed)"),
+            "",
+            "REMINDER: the EA only streams quotes for charts it is attached to.",
+            "Open a chart of each ticker above and drag EA_FileBridge onto it:",
+        ] + [f"  • {tkr}" for tkr in selected.keys()]
+        out = _osascript(
+            f"display dialog {_as_quote(chr(10).join(summary_lines))} "
+            f"with title {_as_quote(DIALOG_TITLE + ' — Confirm Settings')} "
+            f'buttons {{"Cancel", "Save & Start"}} default button "Save & Start"'
+        )
+        if "button returned:Save & Start" not in out:
+            raise DialogCancelled("summary dialog dismissed")
+
     OVERRIDE_PATH.parent.mkdir(parents=True, exist_ok=True)
     with OVERRIDE_PATH.open("w") as f:
         yaml.safe_dump(overrides, f, sort_keys=False)
@@ -376,4 +509,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except DialogCancelled:
+        print("  Setup cancelled from dialog — no overrides written.")
+        sys.exit(1)
