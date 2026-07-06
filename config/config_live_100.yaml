@@ -91,6 +91,24 @@ symbols:
     min_stops_distance: 1.0
     max_spread: 3.5
 
+  NAS100:
+    enabled: true
+    # ema200_nasdaq ONLY. Broker lists NASDAQ-100 under its own ticker — set it
+    # from the start script (rewrites this block's key + the strategy's
+    # allowed_symbols). ⚠️ VERIFY contract spec vs broker (MT5 → Symbols →
+    # Specification): min_lot / value_per_lot drive sizing & the drawdown cap.
+    strategy_whitelist: [ema200_nasdaq]
+    pip_value: 1.0
+    min_lot: 0.01
+    max_lot: 10.0
+    lot_step: 0.01
+    value_per_lot: 1            # USD per 1.0 index-point per 1.0 lot — VERIFY
+    commission_per_lot: 0.0
+    leverage: 20               # indices ~1:20 — VERIFY
+    max_notional_pct: 4.0
+    min_stops_distance: 1.0
+    max_spread: 8.0
+
   US30:
     enabled: true
     # index_overnight ONLY — the rest of the roster is gold/FX-validated; the
@@ -287,6 +305,34 @@ strategies:
     session_end_hour: 21     # through NY (exclusive). 0/24 = all hours
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]
+
+  bos_structure:
+    enabled: true
+    timeframe: 15m
+    pivot_bars: 5            # fractal width — N=5 validated (N=3 noise, N=7 weaker)
+    rr: 2.0                  # TP = rr × structural SL (research best cell, 2026-07-07)
+    buffer_atr: 0.10         # stop buffer beyond the entry pivot, ATR-scaled
+    min_stop_pts: 2.0        # reject if structural stop tighter than this
+    atr_period: 14
+    cooldown_bars: 5
+    timeframe_minutes: 15
+    allowed_symbols: [XAUUSD]  # hard gate — US30 FAILED the same research (PF 1.05)
+
+  ema200_nasdaq:
+    enabled: true
+    timeframe: 5m
+    ema_period: 200
+    anchor_hour_utc: 13        # 19:10 IST anchor candle (IST has no DST)
+    anchor_minute_utc: 40
+    entry_end_hour_utc: 15     # trigger must CLOSE by 15:40 UTC (21:10 IST)
+    entry_end_minute_utc: 40
+    rr: 2.0                    # spec RR 1:2
+    min_stop_pts: 1.0
+    timeframe_minutes: 5
+    # Broker's NASDAQ-100 ticker — set from the start script (runtime_setup);
+    # NAS100 is the research/Dukascopy default. ⚠️ research PF 1.04 — shipped by
+    # user decision 2026-07-07, tune later.
+    allowed_symbols: [NAS100]
 
   wednesday_drift:
     enabled: true
@@ -613,7 +659,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -621,7 +667,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -629,7 +675,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -637,7 +683,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -645,7 +691,7 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
