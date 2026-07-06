@@ -227,6 +227,7 @@ def main() -> int:
 
     selected: dict[str, dict] = {}  # broker_ticker -> symbol cfg (with lot_size applied)
     disabled_bases: list[str] = []
+    renames: dict[str, str] = {}    # base ticker -> broker ticker (when re-keyed)
 
     # ── Per-symbol: select + rename + lot size ──
     print("--- Step 1: Select symbols to trade ---")
@@ -274,6 +275,7 @@ def main() -> int:
 
         if broker_ticker != base_ticker:
             disabled_bases.append(base_ticker)
+            renames[base_ticker] = broker_ticker
         print()
 
     if not selected:
@@ -429,6 +431,22 @@ def main() -> int:
         clean = {k: v for k, v in scfg.items() if not k.startswith("_")}
         symbols_override[tkr] = clean
 
+    # Symbol-gated strategies match on allowed_symbols PREFIXES. When a base
+    # ticker was re-keyed to a broker ticker with a different prefix (e.g.
+    # NAS100 -> USTEC), rewrite the strategy's allowed_symbols so its gate
+    # follows the rename — otherwise it silently never fires.
+    strategies_override: dict[str, dict] = {}
+    if renames:
+        for strat_name, strat_cfg in (config.get("strategies") or {}).items():
+            if not isinstance(strat_cfg, dict):
+                continue
+            allowed = strat_cfg.get("allowed_symbols")
+            if not isinstance(allowed, list):
+                continue
+            rewritten = [renames.get(s, s) for s in allowed]
+            if rewritten != allowed:
+                strategies_override[strat_name] = {"allowed_symbols": rewritten}
+
     overrides = {
         "symbols": symbols_override,
         "risk": {
@@ -445,6 +463,8 @@ def main() -> int:
             "directional_lock": directional_lock,
         },
     }
+    if strategies_override:
+        overrides["strategies"] = strategies_override
 
     # In dialog mode the user confirms a summary BEFORE anything is written;
     # Cancel raises DialogCancelled → exit 1 with no overrides file touched.

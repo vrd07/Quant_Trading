@@ -54,10 +54,12 @@ from src.strategies.squeeze_breakout_strategy import SqueezeBreakoutStrategy
 from src.strategies.stoch_pullback_strategy import StochPullbackStrategy
 from src.strategies.index_overnight_strategy import IndexOvernightStrategy
 from src.strategies.wednesday_drift_strategy import WednesdayDriftStrategy
+from src.strategies.bos_structure_strategy import BOSStructureStrategy
+from src.strategies.ema200_nasdaq_strategy import EMA200NasdaqStrategy
 from src.core.types import Symbol
 import yaml
 
-STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'stoch_pullback', 'index_overnight', 'wednesday_drift', 'all']
+STRATEGY_CHOICES = ['momentum', 'vwap', 'kalman_regime', 'sbr', 'asia_range_fade', 'smc_ob', 'fibonacci_retracement', 'london_breakout', 'monday_drift', 'squeeze_breakout', 'stoch_pullback', 'index_overnight', 'wednesday_drift', 'bos_structure', 'ema200_nasdaq', 'all']
 
 STRATEGY_CLASS_MAP = {
     'momentum': MomentumStrategy,
@@ -185,6 +187,14 @@ def create_strategy(strategy_name: str, symbol: Symbol, config: dict):
         cfg = dict(strats.get('wednesday_drift', {}))
         cfg['enabled'] = True  # Force-enable for backtest
         return WednesdayDriftStrategy(symbol, cfg)
+    elif strategy_name == 'bos_structure':
+        cfg = dict(strats.get('bos_structure', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return BOSStructureStrategy(symbol, cfg)
+    elif strategy_name == 'ema200_nasdaq':
+        cfg = dict(strats.get('ema200_nasdaq', {}))
+        cfg['enabled'] = True  # Force-enable for backtest
+        return EMA200NasdaqStrategy(symbol, cfg)
     else:
         raise ValueError(f"Unknown strategy: {strategy_name}")
 
