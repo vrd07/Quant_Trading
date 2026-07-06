@@ -158,3 +158,11 @@ the run halts after 18 trades at PF 0.41. The repo gate requires clearing PF ~1.
 on BOTH walk-forward years; this clears neither. Note 2025's PF 1.41 coincides
 with the strongest one-way NASDAQ leg (16.8k->30k full-span) — the "edge" is
 regime beta, not the EMA200 anchor rule.
+
+## Production-engine backtest (2026-07-07, run_backtest --timeframe 5m --slippage strict, $5k config)
+
+- **Raw:** PF 0.58, −$2,143.95 (−42.88%), 527 trades, WR 28.7%, MaxDD −42.93%.
+- **--enforce-risk:** PF 0.19, −$254.05 (−5.08%), 23 trades — trailing-DD kill switch halts the run.
+- Note the strict fill tables carry NO NAS100 spread/slippage entries (zero cost charged),
+  so these production numbers are OPTIMISTIC. Confirms the research FAIL verdict; the
+  strategy is implemented and wired live BY USER DECISION (2026-07-07, "tune later").

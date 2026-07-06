@@ -324,3 +324,16 @@ Median stop distance 13.6 pts (p25 8.3 / p75 24.6) -> median risk ~$27/trade at
   cannot de-risk into a drawdown. PF to the halt was 1.51 (+$596).
 - **US30: FAIL.** Best cell marginal (PF 1.05 full, 1.13/1.06 by year), most of
   the grid <=1.0, enforced run PF 0.73 and halted. No edge worth pursuing.
+
+## Production-engine backtest (2026-07-07, run_backtest --timeframe 15m --slippage strict, $5k config)
+
+- **Raw:** PF 1.06, +$364.78 (+7.30%), 239 trades, WR 31.8%, MaxDD −23.47%.
+- **--enforce-risk:** PF 1.36, +$301.24 (+6.02%), 51 trades, WR 41.2%, MaxDD −5.87% — survives the risk engine.
+- **Implementation-parity diagnostic:** the live class's sliding 1000-bar window reproduces
+  the research signals (windowed sim: 235 signals, PF 1.59 / 2025 1.54 / 2026 1.64 vs
+  full-history 241 signals, PF 1.60/1.56/1.64 under identical fills). The raw production
+  gap vs research (1.06 vs 1.60) is ENGINE trade management: up to 2 concurrent positions
+  take the marginal re-arm signals a one-position sim skips (239 vs 172 trades), plus the
+  strict fill model charges ~0.45-0.5/side on gold vs the research 0.20 (research holds
+  PF 1.52 at 0.60/side, so costs alone are not the story). Tuning targets for later:
+  cooldown_bars / one-position-per-sequence latch / max concurrent exposure for this stream.
