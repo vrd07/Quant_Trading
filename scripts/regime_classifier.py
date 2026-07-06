@@ -265,6 +265,8 @@ STRATEGY_WEIGHTS = {
         "stoch_pullback": 0.70,  # stochastic trend-continuation pullback; regime-agnostic (own EMA-trend + stoch + breakout gate governs)
         "index_overnight": 0.70,  # calendar-structural (Tuesday index night drift); regime-agnostic — fires once/week on its own latch
         "wednesday_drift": 0.70,  # calendar-structural (AUDJPY mid-week risk-on drift); regime-agnostic — fires once/week on its own latch
+        "bos_structure":  0.70,  # SMC CHOCH→BOS×2→pullback (2026-07-07 research: PF 1.56/1.64 both yrs); regime-agnostic — own structure machine governs
+        "ema200_nasdaq":  0.70,  # NASDAQ 13:40 UTC EMA200 anchor break; regime-agnostic — own anchor/window gate governs (user-shipped, research PF 1.04)
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -280,6 +282,8 @@ STRATEGY_WEIGHTS = {
         "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
+        "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
+        "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -295,6 +299,8 @@ STRATEGY_WEIGHTS = {
         "stoch_pullback": 0.70,  # same in all regimes — edge is the trend-pullback structure, not the regime
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
+        "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
+        "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
     },
 }
 

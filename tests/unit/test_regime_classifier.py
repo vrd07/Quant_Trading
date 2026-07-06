@@ -296,6 +296,7 @@ class TestDynamicWeighting:
             "asia_range_fade", "smc_ob", "fibonacci_retracement",
             "london_breakout", "monday_drift", "squeeze_breakout",
             "stoch_pullback", "index_overnight", "wednesday_drift",
+            "bos_structure", "ema200_nasdaq",
         }
         for regime in REGIMES:
             keys = set(STRATEGY_WEIGHTS[regime].keys())
