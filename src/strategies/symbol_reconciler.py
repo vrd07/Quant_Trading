@@ -25,6 +25,8 @@ _STRATEGY_SYMBOLS: Dict[str, List[str]] = {
     'squeeze_breakout': ['XAUUSD'],
     'stoch_pullback':  ['XAUUSD'],
     'kalman_regime':   ['XAUUSD'],
+    'bos_structure':   ['XAUUSD'],
+    'ema200_nasdaq':   ['NAS100'],  # broker's NASDAQ-100 ticker is user-set via start script
 }
 
 # Day-gated strategies → weekday they fire (Mon=0 .. Sun=6), for reminders.
