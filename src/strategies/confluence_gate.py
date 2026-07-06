@@ -54,7 +54,7 @@ from ..core.constants import MarketRegime, OrderSide
 from ..core.types import Signal
 
 
-SOLO_ALLOWED: frozenset = frozenset({"kalman_regime", "london_breakout", "monday_drift", "squeeze_breakout", "stoch_pullback", "index_overnight", "wednesday_drift"})
+SOLO_ALLOWED: frozenset = frozenset({"kalman_regime", "london_breakout", "monday_drift", "squeeze_breakout", "stoch_pullback", "index_overnight", "wednesday_drift", "bos_structure", "ema200_nasdaq"})
 FILTER_ONLY: frozenset = frozenset({
     "momentum",
     "asia_range_fade",
