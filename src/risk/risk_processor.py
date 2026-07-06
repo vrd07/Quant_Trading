@@ -364,13 +364,14 @@ class RiskProcessor:
                 sl = entry - sl_dist if side == OrderSide.BUY else entry + sl_dist
                 tp = entry + sl_dist * rr if side == OrderSide.BUY else entry - sl_dist * rr
 
-        elif strategy_name == 'stoch_pullback':
-            # Stochastic trend-continuation pullback. The strategy precomputes a
-            # STRUCTURAL stop (just behind the consolidation range) and TP = rr ×
-            # that stop distance (RR2.0 = the edge). Honor the precomputed stops
-            # verbatim; the strategy also sets metadata['preserve_structural_sl']
-            # so the execution-layer BudgetSL does not shrink this stop to the
-            # dollar budget (which would break the RR geometry).
+        elif strategy_name in ('stoch_pullback', 'bos_structure', 'ema200_nasdaq'):
+            # Structural-stop + fixed-RR strategies: stoch_pullback (consolidation
+            # range), bos_structure (entry pullback pivot), ema200_nasdaq (anchor
+            # candle extreme). Each precomputes its stop and TP = rr × stop
+            # distance — that geometry IS the validated/specified edge. Honor the
+            # precomputed stops verbatim; each also sets
+            # metadata['preserve_structural_sl'] so the execution-layer BudgetSL
+            # does not shrink the stop to the dollar budget (which would break RR).
             precomputed_sl = signal.metadata.get('stop_price')
             precomputed_tp = signal.metadata.get('take_profit_price')
             if precomputed_sl is not None and precomputed_tp is not None:
