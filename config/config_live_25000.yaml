@@ -247,6 +247,8 @@ risk:
       wednesday_drift:
         time_stop_minutes: 1440   # enter ~Tue 20:00 UTC → flat ~Wed 20:00 (session close)
         disable_be_lock: true     # BE/lock tightening destroys a mid-week drift hold
+      bos_structure:
+        disable_be_lock: true     # BE/lock tightening breaks the structural RR2.0 geometry
     breakeven_atr_mult: 1.2
     lock_atr_mult: 2.0
     lock_fraction: 0.5
@@ -311,12 +313,22 @@ strategies:
   bos_structure:
     enabled: true
     timeframe: 15m
-    pivot_bars: 5            # fractal width — N=5 validated (N=3 noise, N=7 weaker)
-    rr: 2.0                  # TP = rr × structural SL (research best cell, 2026-07-07)
+    # SPEC-STRICT cell (2026-07-07 tuning post-mortem): every frequency
+    # relaxation (pivot 3/4, arm 1, multi-shot, break entries) FAILED the
+    # production engine (PF 0.66-0.88, see reports/bos_structure_research.md) —
+    # the edge only exists in the selective one-position stream. Keep the two
+    # validated fixes: trailing_stop disable_be_lock + single_position latch.
+    pivot_bars: 5            # fractal width — N=5 validated (3/4 relaxations died in-engine)
+    arm_after_bos: 2         # spec: arm entries after the SECOND BOS
+    one_shot: true           # one entry per BOS
+    entry_on_break: false    # pullback-pivot entries only
+    single_position: true    # ⚠️ REQUIRED: virtual one-position latch — the edge only
+                             # exists one-trade-at-a-time (see strategy docstring)
+    rr: 2.0                  # TP = rr × structural SL
     buffer_atr: 0.10         # stop buffer beyond the entry pivot, ATR-scaled
     min_stop_pts: 2.0        # reject if structural stop tighter than this
     atr_period: 14
-    cooldown_bars: 5
+    cooldown_bars: 0         # research sim has no cooldown; engine governs overlap
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]  # hard gate — US30 FAILED the same research (PF 1.05)
 
