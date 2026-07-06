@@ -103,8 +103,16 @@ def find_pivots(bars: pd.DataFrame, n: int):
     return piv
 
 
-def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0):
-    """Walk bars; emit entries per the CHOCH → BOS#1 → BOS#2 → pullback-pivot spec.
+def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
+                arm_after_bos=2, one_shot=True, entry_on_break=False):
+    """Walk bars; emit entries per the CHOCH → BOS×`arm_after_bos` → pullback spec.
+
+    Relaxation knobs (2026-07-07 frequency tuning, user request):
+      arm_after_bos  — BOS count needed before pullback entries arm (spec: 2).
+      one_shot       — True: one entry per BOS (spec); False: EVERY qualifying
+                       pullback pivot while the sequence stays armed.
+      entry_on_break — also enter ON each armed BOS break itself (stop = last
+                       pullback pivot in the trend direction).
 
     Returns DataFrame: bar_idx (signal bar = pivot confirm bar), side, stop_price.
     """
@@ -137,7 +145,8 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0)
                     if stop > c[i]:
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
                                          side="SELL", stop_price=stop))
-                        armed = False
+                        if one_shot:
+                            armed = False
             else:
                 prev_lp, last_lp = last_lp, price
                 cur_sl = price
@@ -148,7 +157,8 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0)
                     if stop < c[i]:
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
                                          side="BUY", stop_price=stop))
-                        armed = False
+                        if one_shot:
+                            armed = False
 
         # 2) close-based structure breaks
         if cur_sh is not None and c[i] > cur_sh:
@@ -157,8 +167,12 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0)
                 bos_count += 1
                 if bos_count == 1:
                     trend = 1
-                if bos_count >= 2:
+                if bos_count >= arm_after_bos:
                     armed = True
+                    if entry_on_break and last_lp is not None and last_lp < c[i]:
+                        stop = last_lp - max(buffer_atr * atr[i], min_stop * 0.5)
+                        rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
+                                         side="BUY", stop_price=stop))
             elif trend <= 0:                   # break against prevailing trend
                 seq_dir, bos_count, armed = 1, 0, False       # CHOCH up
         if cur_sl is not None and c[i] < cur_sl:
@@ -167,8 +181,12 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0)
                 bos_count += 1
                 if bos_count == 1:
                     trend = -1
-                if bos_count >= 2:
+                if bos_count >= arm_after_bos:
                     armed = True
+                    if entry_on_break and last_hp is not None and last_hp > c[i]:
+                        stop = last_hp + max(buffer_atr * atr[i], min_stop * 0.5)
+                        rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
+                                         side="SELL", stop_price=stop))
             elif trend >= 0:
                 seq_dir, bos_count, armed = -1, 0, False      # CHOCH down
 

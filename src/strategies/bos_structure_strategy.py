@@ -45,8 +45,29 @@ class BOSStructureStrategy(BaseStrategy):
 
     def __init__(self, symbol: Symbol, config: Dict[str, Any]):
         super().__init__(symbol, config)
-        self.pivot_bars = int(config.get('pivot_bars', 5))    # N=5 validated; 3 is noise
+        self.pivot_bars = int(config.get('pivot_bars', 5))    # spec default; relaxed=3
         self.rr = float(config.get('rr', 2.0))                # TP = rr × structural SL
+        # Frequency-relaxation knobs (2026-07-07 tuning pass, user request for
+        # ~2 trades/day on $50k; sweep in research_bos_structure.py):
+        #   arm_after_bos 2 = the original spec ("wait for second BOS");
+        #     1 = arm on the first BOS (relaxed).
+        #   one_shot True = one entry per BOS (spec); False = every qualifying
+        #     pullback pivot fires while the sequence stays armed (relaxed).
+        #   entry_on_break False = pullback entries only (spec); True = ALSO
+        #     enter on each armed BOS break itself (stop = last trend pivot).
+        # Relaxed cell (pivot 3 / arm 1 / one_shot False / break False / RR 2.0):
+        # 578 trades (~1.5/day one-position sim), PF 1.25 full, 1.27/1.23 both yrs.
+        self.arm_after_bos = int(config.get('arm_after_bos', 2))
+        self.one_shot = bool(config.get('one_shot', True))
+        self.entry_on_break = bool(config.get('entry_on_break', False))
+        # ⚠️ THE EDGE ONLY EXISTS UNDER ONE-POSITION-AT-A-TIME DISCIPLINE
+        # (2026-07-07 production-engine post-mortem: the engine takes every
+        # overlapping same-sequence signal → 1686 trades, PF 0.87, −99%; the
+        # one-position research stream is PF 1.30 norm-sized). single_position
+        # replays a VIRTUAL position over the window after each emitted signal
+        # and suppresses new signals until that trade's SL or TP would have
+        # resolved — deterministic from bars, mirrors the research simulator.
+        self.single_position = bool(config.get('single_position', True))
         self.buffer_atr = float(config.get('buffer_atr', 0.10))
         self.min_stop_pts = float(config.get('min_stop_pts', 2.0))
         self.atr_period = int(config.get('atr_period', 14))
@@ -117,7 +138,8 @@ class BOSStructureStrategy(BaseStrategy):
                         if stop > c[i]:
                             out.append(dict(bar_idx=i, side=OrderSide.SELL,
                                             stop=stop, bos_count=bos_count))
-                            armed = False
+                            if self.one_shot:
+                                armed = False
                 else:
                     prev_lp, last_lp = last_lp, price
                     cur_sl = price
@@ -127,16 +149,24 @@ class BOSStructureStrategy(BaseStrategy):
                         if stop < c[i]:
                             out.append(dict(bar_idx=i, side=OrderSide.BUY,
                                             stop=stop, bos_count=bos_count))
-                            armed = False
+                            if self.one_shot:
+                                armed = False
 
+            buf = max(self.buffer_atr * (atr_arr[i] if atr_arr[i] > 0 else 0.0),
+                      self.min_stop_pts * 0.5)
             if cur_sh is not None and c[i] > cur_sh:       # close-break up
                 cur_sh = None                              # consumed until new SH
                 if seq_dir == 1:
                     bos_count += 1
                     if bos_count == 1:
                         trend = 1
-                    if bos_count >= 2:
+                    if bos_count >= self.arm_after_bos:
                         armed = True
+                        if (self.entry_on_break and last_lp is not None
+                                and last_lp < c[i]):
+                            out.append(dict(bar_idx=i, side=OrderSide.BUY,
+                                            stop=last_lp - buf,
+                                            bos_count=bos_count))
                 elif trend <= 0:
                     seq_dir, bos_count, armed = 1, 0, False        # CHOCH up
             if cur_sl is not None and c[i] < cur_sl:       # close-break down
@@ -145,11 +175,64 @@ class BOSStructureStrategy(BaseStrategy):
                     bos_count += 1
                     if bos_count == 1:
                         trend = -1
-                    if bos_count >= 2:
+                    if bos_count >= self.arm_after_bos:
                         armed = True
+                        if (self.entry_on_break and last_hp is not None
+                                and last_hp > c[i]):
+                            out.append(dict(bar_idx=i, side=OrderSide.SELL,
+                                            stop=last_hp + buf,
+                                            bos_count=bos_count))
                 elif trend >= 0:
                     seq_dir, bos_count, armed = -1, 0, False       # CHOCH down
         return out
+
+    def _one_position_filter(self, bars: pd.DataFrame,
+                             signals: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """Keep only the signals a one-position-at-a-time account would take.
+
+        Each kept signal opens a VIRTUAL trade at the next bar's open with the
+        signal's structural SL and TP = rr × stop distance; subsequent signals
+        are dropped until that trade resolves (SL-first intrabar tie-break,
+        same as the research simulator). A trade still open at the window end
+        keeps suppressing — matching a real open position."""
+        o = bars['open'].to_numpy(float)
+        h = bars['high'].to_numpy(float)
+        l = bars['low'].to_numpy(float)
+        n = len(bars)
+        kept: List[Dict[str, Any]] = []
+        busy_until = -1          # bar index when the virtual trade resolved
+        open_ended = False       # virtual trade never resolved in-window
+        for s in signals:
+            i = s['bar_idx']
+            if open_ended or i < busy_until:
+                continue
+            kept.append(s)
+            eb = i + 1
+            if eb >= n:          # fired on the last bar — nothing to replay
+                open_ended = True
+                continue
+            entry = o[eb]
+            stop = float(s['stop'])
+            long = s['side'] == OrderSide.BUY
+            dist = (entry - stop) if long else (stop - entry)
+            if dist <= 0:        # degenerate after next-bar gap; treat as flat
+                busy_until = eb
+                continue
+            tp = entry + self.rr * dist if long else entry - self.rr * dist
+            resolved = False
+            for j in range(eb, n):
+                if long:
+                    if l[j] <= stop or h[j] >= tp:      # SL-first same bar
+                        resolved = True
+                else:
+                    if h[j] >= stop or l[j] <= tp:
+                        resolved = True
+                if resolved:
+                    busy_until = j + 1
+                    break
+            if not resolved:
+                open_ended = True
+        return kept
 
     # ------------------------------------------------------------------
     def on_bar(self, bars: pd.DataFrame) -> Optional[Signal]:
@@ -161,6 +244,8 @@ class BOSStructureStrategy(BaseStrategy):
 
         atr = Indicators.atr(bars, period=self.atr_period)
         signals = self._walk_structure(bars, atr)
+        if self.single_position:
+            signals = self._one_position_filter(bars, signals)
         last_idx = len(bars) - 1
         fired = [s for s in signals if s['bar_idx'] == last_idx]
         if not fired:
