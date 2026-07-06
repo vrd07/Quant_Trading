@@ -29,6 +29,8 @@ from .squeeze_breakout_strategy import SqueezeBreakoutStrategy
 from .stoch_pullback_strategy import StochPullbackStrategy
 from .index_overnight_strategy import IndexOvernightStrategy
 from .wednesday_drift_strategy import WednesdayDriftStrategy
+from .bos_structure_strategy import BOSStructureStrategy
+from .ema200_nasdaq_strategy import EMA200NasdaqStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -50,6 +52,8 @@ class StrategyManager:
         'stoch_pullback': StochPullbackStrategy,     # XAUUSD-only (self-gated on symbol)
         'index_overnight': IndexOvernightStrategy,   # US30/NAS100-only (self-gated on symbol)
         'wednesday_drift': WednesdayDriftStrategy,    # AUDJPY-only (self-gated on symbol)
+        'bos_structure':  BOSStructureStrategy,      # XAUUSD-only (self-gated on symbol)
+        'ema200_nasdaq':  EMA200NasdaqStrategy,      # NASDAQ-100 only (configurable ticker)
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):
