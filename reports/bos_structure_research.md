@@ -337,3 +337,54 @@ Median stop distance 13.6 pts (p25 8.3 / p75 24.6) -> median risk ~$27/trade at
   strict fill model charges ~0.45-0.5/side on gold vs the research 0.20 (research holds
   PF 1.52 at 0.60/side, so costs alone are not the story). Tuning targets for later:
   cooldown_bars / one-position-per-sequence latch / max concurrent exposure for this stream.
+
+### Production engine, 2026 YTD only (--start 2026-01-01, strict, $5k)
+- Raw: PF 0.91, −$256 (−5.13%), 73 trades, WR 27.4%, MaxDD −22.4%.
+- --enforce-risk: PF 0.15, −$282 (−5.65%), 7 trades — kill switch trips in week 1-2.
+- Contrast: research sim 2026 = PF 1.64 on the SAME signal set (parity verified).
+  The engine's extra concurrent re-arm entries + strict costs flip 2026 negative;
+  production profits in the full-span run came from 2025. Tuning lever: restrict
+  this stream to one open position / longer cooldown to match the research
+  one-position selection.
+
+## Tuning pass (2026-07-07, user request: fewer rules / ~2 trades/day / $50k)
+
+**Verdict: every frequency relaxation FAILED the production engine; 2 trades/day
+with positive expectancy does not exist in this strategy family. Two genuine
+fixes were found and shipped instead.**
+
+Relaxation grid (pivot 3/4/5 × arm-after-BOS 1/2 × one-shot on/off × break-entry
+on/off × RR 1.5/2.0), evaluated three ways:
+1. Fixed-lot research sim: best cell pivot3/arm1/multi-shot = 578 trades
+   (1.5/day), PF 1.25/1.27/1.23 — LOOKED shippable.
+2. Engine-realistic (equal-$-risk sizing + 0.45/side): that cell collapses to
+   PF 1.02 (no edge — its profit was fixed-lot weighting of wide-stop trades);
+   best surviving cell pivot4/arm1/multi/break PF 1.30 norm.
+3. PRODUCTION ENGINE ($50k strict): relaxed cells PF 0.66-0.88, up to −99%
+   (1026-1686 trades) — the engine takes every overlapping same-sequence
+   signal; the correlated cluster entries are the bleed.
+
+Fixes shipped (kept with the SPEC-STRICT cell, pivot 5 / arm 2 / one-shot):
+- `risk.trailing_stop.strategy_overrides.bos_structure.disable_be_lock: true`
+  — default BE/lock tightening was scratching the RR2.0 winners (production WR
+  27%→39% once removed).
+- `strategies.bos_structure.single_position: true` — in-strategy VIRTUAL
+  one-position latch (replays each emitted signal's SL/TP over the window and
+  suppresses new signals until it resolves). The edge only exists in the
+  one-position stream; this enforces it regardless of engine max_positions.
+
+### $50k production results, spec cell + fixes (strict fills)
+| Run | Trades | WR | PF | Net | MaxDD |
+|---|---|---|---|---|---|
+| Full-span raw | 169 | 39.1% | **1.24** | **+$6,548 (+13.1%)** | −10.5% |
+| Full-span --enforce-risk | 56 | 28.6% | 0.56 | −$1,882 (−3.8%) | −4.6% (halted Jun-Jul 2025) |
+| 2026 YTD raw | 55 | 41.8% | **1.26** | **+$3,643 (+7.3%)** | −8.2% |
+| 2026 YTD --enforce-risk | 6 | 33% | 0.55 | −$268 (−0.5%) | −1.2% (throttled to 6 trades) |
+
+Pre-fix baselines for comparison: full-span raw PF 1.06, 2026 raw PF 0.91 —
+the fixes are worth ~+0.2 PF and flip 2026 positive. Frequency of the shipped
+config: ~2.4 trades/week.
+
+Open problem (next research candidate): the risk engine throttles the enforced
+runs (6 trades in 2026) — same pattern squeeze_breakout had PRE-HTF-gate; a
+directional/HTF alignment filter is the historically-proven remedy.

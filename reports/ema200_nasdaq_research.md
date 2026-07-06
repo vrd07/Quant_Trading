@@ -166,3 +166,9 @@ regime beta, not the EMA200 anchor rule.
 - Note the strict fill tables carry NO NAS100 spread/slippage entries (zero cost charged),
   so these production numbers are OPTIMISTIC. Confirms the research FAIL verdict; the
   strategy is implemented and wired live BY USER DECISION (2026-07-07, "tune later").
+
+### Production engine, 2026 YTD only (--start 2026-01-01, strict, $5k)
+- Raw: PF 0.52, −$698 (−13.96%), 111 trades, WR 27.0%, MaxDD −14.4%.
+- --enforce-risk: PF 0.43, −$242 (−4.84%), 28 trades — kill switch halt.
+- Matches the research year map (2026 PF 0.79 raw): 2026 is a losing year for
+  this rule in every harness.
