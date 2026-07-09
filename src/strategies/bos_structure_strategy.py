@@ -68,6 +68,12 @@ class BOSStructureStrategy(BaseStrategy):
         # and suppresses new signals until that trade's SL or TP would have
         # resolved — deterministic from bars, mirrors the research simulator.
         self.single_position = bool(config.get('single_position', True))
+        # HTF side-alignment gate (squeeze_breakout recipe, validated for BOS
+        # 2026-07-08): BUY only above the slow EMA, SELL only below — side-only,
+        # no slope term. EMA(600) on 15m ≈ EMA150 1H; norm-sized research PF
+        # improves BOTH years (2025 1.16→1.28, 2026 1.30→1.38); 400–600 plateau,
+        # 800 degrades. Set 0 to disable.
+        self.htf_ema_period = int(config.get('htf_ema_period', 600))
         self.buffer_atr = float(config.get('buffer_atr', 0.10))
         self.min_stop_pts = float(config.get('min_stop_pts', 2.0))
         self.atr_period = int(config.get('atr_period', 14))
@@ -112,6 +118,12 @@ class BOSStructureStrategy(BaseStrategy):
         entry signals it would have emitted (mirrors research_bos_structure.py)."""
         c = bars['close'].to_numpy(float)
         atr_arr = atr.to_numpy(float)
+        if self.htf_ema_period > 0:
+            htf = (bars['close'].ewm(span=self.htf_ema_period, adjust=False)
+                   .mean().to_numpy(float))
+            allow = lambda i, buy: (c[i] > htf[i]) if buy else (c[i] < htf[i])
+        else:
+            allow = lambda i, buy: True
         by_bar: Dict[int, List[Tuple[str, float]]] = {}
         for cb, kind, price in self._find_pivots(bars):
             by_bar.setdefault(cb, []).append((kind, price))
@@ -133,7 +145,8 @@ class BOSStructureStrategy(BaseStrategy):
                     prev_hp, last_hp = last_hp, price
                     cur_sh = price
                     if (armed and seq_dir == -1 and prev_hp is not None
-                            and price < prev_hp):          # lower-high pullback
+                            and price < prev_hp
+                            and allow(i, False)):          # lower-high pullback
                         stop = price + buf
                         if stop > c[i]:
                             out.append(dict(bar_idx=i, side=OrderSide.SELL,
@@ -144,7 +157,8 @@ class BOSStructureStrategy(BaseStrategy):
                     prev_lp, last_lp = last_lp, price
                     cur_sl = price
                     if (armed and seq_dir == 1 and prev_lp is not None
-                            and price > prev_lp):          # higher-low pullback
+                            and price > prev_lp
+                            and allow(i, True)):           # higher-low pullback
                         stop = price - buf
                         if stop < c[i]:
                             out.append(dict(bar_idx=i, side=OrderSide.BUY,
@@ -163,7 +177,7 @@ class BOSStructureStrategy(BaseStrategy):
                     if bos_count >= self.arm_after_bos:
                         armed = True
                         if (self.entry_on_break and last_lp is not None
-                                and last_lp < c[i]):
+                                and last_lp < c[i] and allow(i, True)):
                             out.append(dict(bar_idx=i, side=OrderSide.BUY,
                                             stop=last_lp - buf,
                                             bos_count=bos_count))
@@ -178,7 +192,7 @@ class BOSStructureStrategy(BaseStrategy):
                     if bos_count >= self.arm_after_bos:
                         armed = True
                         if (self.entry_on_break and last_hp is not None
-                                and last_hp > c[i]):
+                                and last_hp > c[i] and allow(i, False)):
                             out.append(dict(bar_idx=i, side=OrderSide.SELL,
                                             stop=last_hp + buf,
                                             bos_count=bos_count))

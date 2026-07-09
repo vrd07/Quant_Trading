@@ -104,7 +104,8 @@ def find_pivots(bars: pd.DataFrame, n: int):
 
 
 def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
-                arm_after_bos=2, one_shot=True, entry_on_break=False):
+                arm_after_bos=2, one_shot=True, entry_on_break=False,
+                htf_ema_period=0):
     """Walk bars; emit entries per the CHOCH → BOS×`arm_after_bos` → pullback spec.
 
     Relaxation knobs (2026-07-07 frequency tuning, user request):
@@ -118,6 +119,13 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
     """
     c = bars.close.to_numpy(float)
     atr = atr14(bars).to_numpy(float)
+    # HTF side-alignment gate (squeeze_breakout recipe): BUY only above the slow
+    # EMA, SELL only below. Side-only — no slope term (slope overfits IS).
+    if htf_ema_period > 0:
+        htf = bars.close.ewm(span=htf_ema_period, adjust=False).mean().to_numpy(float)
+        allow = lambda i, s: (c[i] > htf[i]) if s == "BUY" else (c[i] < htf[i])
+    else:
+        allow = lambda i, s: True
     pivots = find_pivots(bars, pivot_n)
     by_bar = {}
     for cb, kind, price, xb in pivots:
@@ -140,7 +148,7 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
                 cur_sh = price
                 # pullback entry: lower-high pivot while armed short
                 if (armed and seq_dir == -1 and prev_hp is not None
-                        and price < prev_hp):
+                        and price < prev_hp and allow(i, "SELL")):
                     stop = price + max(buffer_atr * atr[i], min_stop * 0.5)
                     if stop > c[i]:
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
@@ -152,7 +160,7 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
                 cur_sl = price
                 # pullback entry: higher-low pivot while armed long
                 if (armed and seq_dir == 1 and prev_lp is not None
-                        and price > prev_lp):
+                        and price > prev_lp and allow(i, "BUY")):
                     stop = price - max(buffer_atr * atr[i], min_stop * 0.5)
                     if stop < c[i]:
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
@@ -169,7 +177,8 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
                     trend = 1
                 if bos_count >= arm_after_bos:
                     armed = True
-                    if entry_on_break and last_lp is not None and last_lp < c[i]:
+                    if (entry_on_break and last_lp is not None
+                            and last_lp < c[i] and allow(i, "BUY")):
                         stop = last_lp - max(buffer_atr * atr[i], min_stop * 0.5)
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
                                          side="BUY", stop_price=stop))
@@ -183,7 +192,8 @@ def bos_signals(bars: pd.DataFrame, pivot_n: int, buffer_atr=0.10, min_stop=2.0,
                     trend = -1
                 if bos_count >= arm_after_bos:
                     armed = True
-                    if entry_on_break and last_hp is not None and last_hp > c[i]:
+                    if (entry_on_break and last_hp is not None
+                            and last_hp > c[i] and allow(i, "SELL")):
                         stop = last_hp + max(buffer_atr * atr[i], min_stop * 0.5)
                         rows.append(dict(bar_idx=i, signal_ts=bars.index[i],
                                          side="SELL", stop_price=stop))
