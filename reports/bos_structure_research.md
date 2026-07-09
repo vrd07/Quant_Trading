@@ -388,3 +388,36 @@ config: ~2.4 trades/week.
 Open problem (next research candidate): the risk engine throttles the enforced
 runs (6 trades in 2026) — same pattern squeeze_breakout had PRE-HTF-gate; a
 directional/HTF alignment filter is the historically-proven remedy.
+
+## HTF alignment gate + enforce-mode fixes (2026-07-08/09)
+
+**HTF side-alignment gate SHIPPED** (`htf_ema_period: 600`, squeeze recipe: BUY
+above / SELL below EMA600 on 15m, side-only, no slope). Research sweep (norm-
+sized $ risk, cost 0.45/side): both years improve — 2025 1.16→1.28, 2026
+1.30→1.38, full 1.21→1.31; plateau 400–600, degrades at 800.
+
+$50k production, HTF-gated (strict): full-span raw **PF 1.29 +13.2% DD −10.0%**
+(125 trades); 2026 raw **PF 1.28 +6.7%** (43 trades).
+
+**Enforce-mode root cause found — NOT signal quality.** Instrumenting
+`RiskEngine.validate_order` showed the 6-trade throttle was pre-trade vetoes:
+(a) sizer/validator mismatch — the sizer's structural-stop lots (+rounding
+overshoot) produce $110–230 risk vs a $119.70 operator cap → near-every trade
+rejected by a hair; FIXED via `risk.strategy_risk_overrides.bos_structure.
+risk_per_trade_pct: 0.0048` (cap sits ABOVE sizer output — kalman pattern);
+(b) the $50k config's own $295/day budget (85% gate = $250.75) rightly blocks
+the wide-stop tail (min-lot worst-case $300–900) — intended, kept.
+⚠️ Residual engine oddity: on some wide-stop signals the sizer produces
+outsized lots ($600–900 worst-case, far above the $240 target) — worth its own
+audit; those orders are blocked by the daily budget today.
+
+Enforced after fixes: 2026 **PF 1.11 +$131 DD −2.2% (12 trades) — first
+positive enforced result** (was PF 0.55 −$268); full-span PF 0.97 −0.5%
+DD −4.71%, 73 trades, **no kill-switch halt** (was PF 0.56, halted Jun–Jul
+2025). Stop-width research: capping stop dist ≤75pts is free (PF unchanged);
+≤50pts costs edge (PF 1.31→1.21) — the daily-budget block of the wide tail is
+an acceptable stand-in.
+
+Bottom line: the strategy is budget-limited on this account profile — the
+user's $300/day cap admits only the narrow-stop subset (~2/week enforced).
+Raising the $50k daily-loss settings is a user risk decision, not a code fix.
