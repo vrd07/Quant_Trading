@@ -165,6 +165,13 @@ risk:
   # the operator cap silently rejects the high-vol kalman trades.
   # Other strategies still follow the global cap.
   strategy_risk_overrides:
+    bos_structure:
+      risk_per_trade_pct: 0.0048 # cap must sit ABOVE what the sizer actually produces
+                                 # (structural stops + lot rounding overshoot ≈ $110-230
+                                 # on $50k) or the validator rejects nearly every trade
+                                 # (kalman had the same silent-rejection issue). The
+                                 # daily worst-case budget still blocks the wide-stop
+                                 # tail — that's intended (found 2026-07-08/09).
     wednesday_drift:
       risk_per_trade_pct: 0.01   # 1% of balance — auto-scales (AUDJPY Wed drift, sweep-tuned like index_overnight)
     index_overnight:
@@ -322,6 +329,8 @@ strategies:
     entry_on_break: false    # pullback-pivot entries only
     single_position: true    # ⚠️ REQUIRED: virtual one-position latch — the edge only
                              # exists one-trade-at-a-time (see strategy docstring)
+    htf_ema_period: 600      # HTF side-alignment gate (BUY above / SELL below EMA600 15m
+                             # ≈ EMA150 1H); both research yrs improve; 0 = off (2026-07-08)
     rr: 2.0                  # TP = rr × structural SL
     buffer_atr: 0.10         # stop buffer beyond the entry pivot, ATR-scaled
     min_stop_pts: 2.0        # reject if structural stop tighter than this
@@ -331,7 +340,9 @@ strategies:
     allowed_symbols: [XAUUSD]  # hard gate — US30 FAILED the same research (PF 1.05)
 
   ema200_nasdaq:
-    enabled: true
+    enabled: false   # DISABLED 2026-07-08 — negative expectancy in every framing
+                     # (prod PF 0.58; RR1:1 last-12mo -$13.6k at $150 risk). See
+                     # reports/ema200_nasdaq_research.md; v2 redesign under research.
     timeframe: 5m
     ema_period: 200
     anchor_hour_utc: 13        # 19:10 IST anchor candle (IST has no DST)
@@ -707,7 +718,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-07-07_news.csv
+    csv_path: news/2026-07-10_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
