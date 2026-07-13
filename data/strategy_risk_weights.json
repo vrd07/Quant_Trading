@@ -1,8 +1,10 @@
 {
-  "generated": "2026-07-09T19:15:01.343495+00:00",
+  "generated": "2026-07-13T19:15:05.267649+00:00",
   "journal": "/Users/varadbandekar/Documents/Quant_trading/data/logs/trade_journal_config_live_50000.csv",
   "window_days": 45,
   "min_trades": 8,
   "sharpe_floor": 0.0,
-  "weights": {}
+  "weights": {
+    "kalman_regime": 1.0
+  }
 }
