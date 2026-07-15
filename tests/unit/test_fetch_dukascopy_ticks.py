@@ -5,7 +5,13 @@ from datetime import date, datetime, timezone
 import pandas as pd
 import pytest
 
-from scripts.fetch_dukascopy_ticks import TICK_RECORD, day_path, decode_bi5
+from scripts.fetch_dukascopy_ticks import (
+    TICK_RECORD,
+    TickFetchError,
+    day_path,
+    decode_bi5,
+    ensure_ticks,
+)
 
 
 def test_decode_bi5_two_ticks():
@@ -33,3 +39,20 @@ def test_decode_bi5_empty_hour():
 def test_day_path_layout(tmp_path):
     p = day_path("XAUUSD", date(2026, 7, 1), ticks_dir=tmp_path)
     assert p == tmp_path / "XAUUSD" / "2026-07-01.parquet"
+
+
+def test_ensure_ticks_skips_holed_day_on_fetch_error(tmp_path, monkeypatch):
+    """A transient fetch failure must not write a partial Parquet, and must
+    not be cached as 'done' — ensure_ticks should skip the day and return []."""
+    import scripts.fetch_dukascopy_ticks as fdt
+
+    def _boom(symbol, day, point, workers=6):
+        raise TickFetchError(f"{day} 00h: simulated network failure")
+
+    monkeypatch.setattr(fdt, "fetch_day_ticks", _boom)
+
+    day = date(2026, 7, 1)  # Wednesday — not the Saturday-skip branch
+    paths = fdt.ensure_ticks("XAUUSD", day, day, point=0.001, ticks_dir=tmp_path)
+
+    assert paths == []
+    assert not (tmp_path / "XAUUSD" / f"{day.isoformat()}.parquet").exists()

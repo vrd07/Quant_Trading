@@ -40,6 +40,12 @@ TICK_RECORD = struct.Struct(">IIIff")  # offset_ms, ask_pts, bid_pts, ask_vol, b
 TICKS_DIR = PROJECT_ROOT / "data" / "ticks"
 
 
+class TickFetchError(Exception):
+    """Raised when an hour's ticks could not be fetched after all retries
+    (transient network error) — distinct from "hour not published" (404 /
+    empty body), which is a legitimate None return."""
+
+
 def decode_bi5(raw: bytes, base_ts: datetime, point: float) -> pd.DataFrame:
     """Decode one LZMA hour-of-ticks blob. Pure; empty input -> empty frame."""
     data = lzma.decompress(raw) if raw else b""
@@ -68,13 +74,11 @@ def fetch_hour(symbol: str, day: date, hour: int, point: float,
             if e.code == 404:
                 return None  # hour not published
             if attempt == retries - 1:
-                print(f"  ⚠️ {day} {hour:02d}h fetch failed: {e}")
-                return None
+                raise TickFetchError(f"{day} {hour:02d}h: {e}") from e
             time.sleep(2 * (attempt + 1))
         except Exception as e:
             if attempt == retries - 1:
-                print(f"  ⚠️ {day} {hour:02d}h fetch failed: {e}")
-                return None
+                raise TickFetchError(f"{day} {hour:02d}h: {e}") from e
             time.sleep(2 * (attempt + 1))
     if not raw:
         return None  # closed-market hour — empty body
@@ -105,7 +109,12 @@ def ensure_ticks(symbol: str, start: date, end: date, point: float | None = None
         if day.weekday() != 5:  # Saturday: FX closed all day
             p = day_path(symbol, day, ticks_dir)
             if not p.exists():
-                df = fetch_day_ticks(symbol, day, point, workers)
+                try:
+                    df = fetch_day_ticks(symbol, day, point, workers)
+                except TickFetchError as err:
+                    print(f"  ⚠️ skipping {day}: {err}")
+                    day += timedelta(days=1)
+                    continue
                 if df is not None:
                     p.parent.mkdir(parents=True, exist_ok=True)
                     df.to_parquet(p, index=False)

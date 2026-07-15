@@ -18,3 +18,5 @@ psutil>=5.9.0
 
 # Tick data storage
 pyarrow>=15.0.0            # tick Parquet store (order-flow research)
+plotly>=5.18.0             # research viewers (orderflow_viewer, kalman_sim)
+dash>=2.14.0               # research viewers (orderflow_viewer, kalman_sim)
