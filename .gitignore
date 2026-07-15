@@ -28,6 +28,7 @@ data/logs/
 data/state/
 data/metrics/
 data/backtests/
+data/ticks/
 data/indicators_test.csv
 reports/
 .claude/scheduled_tasks.lock

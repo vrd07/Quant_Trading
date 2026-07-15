@@ -15,3 +15,6 @@ pytz>=2023.3
 
 # Cross-platform process management (used by scripts/force_cleanup.py)
 psutil>=5.9.0
+
+# Tick data storage
+pyarrow>=15.0.0            # tick Parquet store (order-flow research)
