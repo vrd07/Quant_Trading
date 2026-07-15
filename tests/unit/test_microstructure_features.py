@@ -89,3 +89,46 @@ class TestVolumeAtPrice:
         assert 3300.0 in nodes["hvn"]
         assert 3302.0 in nodes["lvn"]
         assert 3304.0 not in nodes["hvn"] and 3304.0 not in nodes["lvn"]
+
+
+class TestDetectorsI:
+    def test_delta_divergence_bearish(self):
+        # price grinds to new highs while delta bleeds -> bearish divergence
+        idx = pd.date_range("2026-07-01 09:00", periods=30, freq="5min", tz="UTC")
+        bars = pd.DataFrame({"open": 0.0, "high": 0.0, "low": 0.0,
+                             "close": np.linspace(3300, 3329, 30), "ticks": 10}, index=idx)
+        delta_bars = pd.DataFrame({"delta": -1.0,
+                                   "cum_delta": np.linspace(-1, -30, 30)}, index=idx)
+        events = ft.delta_divergence(bars, delta_bars, lookback=5)
+        assert events and all(e.kind == "bearish_divergence" for e in events)
+        assert all(e.strength > 0 for e in events)
+
+    def test_delta_divergence_none_when_confirmed(self):
+        # price and delta rise together -> no divergence either way
+        idx = pd.date_range("2026-07-01 09:00", periods=30, freq="5min", tz="UTC")
+        bars = pd.DataFrame({"open": 0.0, "high": 0.0, "low": 0.0,
+                             "close": np.linspace(3300, 3329, 30), "ticks": 10}, index=idx)
+        delta_bars = pd.DataFrame({"delta": 1.0,
+                                   "cum_delta": np.linspace(1, 30, 30)}, index=idx)
+        assert ft.delta_divergence(bars, delta_bars, lookback=5) == []
+
+    def test_absorption_flags_one_sided_flow_in_tight_band(self):
+        quiet = make_ticks([3300.0] * 10, start="2026-07-01 09:00")          # flow 0
+        # 3 sawtooth cycles: 9 downticks of 0.01 then one +0.09 -> net flow -48, range 0.09
+        saw = []
+        px = 3300.0
+        for _ in range(3):
+            for _ in range(9):
+                px -= 0.01
+                saw.append(px)
+            px += 0.09
+            saw.append(px)
+        absorb = make_ticks(saw, start="2026-07-01 09:02")
+        trend = make_ticks(list(np.arange(3300.0, 3301.5, 0.05)),
+                           start="2026-07-01 09:04")                          # wide range
+        events = ft.absorption_zones(pd.concat([quiet, absorb, trend]),
+                                     bucket="2min", band_pts=0.3, flow_pctile=50.0)
+        assert len(events) == 1
+        e = events[0]
+        assert e.kind == "absorption_of_selling"
+        assert e.ts == pd.Timestamp("2026-07-01 09:02", tz="UTC")

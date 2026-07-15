@@ -113,3 +113,44 @@ def profile_nodes(vap: pd.DataFrame, hvn_pctile: float = 85.0,
     lo = np.percentile(active, lvn_pctile)
     return {"hvn": [float(p) for p in active.index[active >= hi]],
             "lvn": [float(p) for p in active.index[active <= lo]]}
+
+
+# ------------------------------------------------------- event detectors
+
+def delta_divergence(bars: pd.DataFrame, delta_bars: pd.DataFrame,
+                     lookback: int = 20) -> list[FlowEvent]:
+    """Price makes a new lookback high/low that cumulative delta does not
+    confirm. Strength = size of the unconfirmed delta gap."""
+    close = bars["close"]
+    cd = delta_bars["cum_delta"].reindex(bars.index).ffill()
+    roll_hi, roll_lo = close.rolling(lookback).max(), close.rolling(lookback).min()
+    cd_hi, cd_lo = cd.rolling(lookback).max(), cd.rolling(lookback).min()
+    bear = (close >= roll_hi) & (cd < cd_hi)
+    bull = (close <= roll_lo) & (cd > cd_lo)
+    events = [FlowEvent(ts, float(close.loc[ts]), float(cd_hi.loc[ts] - cd.loc[ts]),
+                        "bearish_divergence") for ts in bars.index[bear]]
+    events += [FlowEvent(ts, float(close.loc[ts]), float(cd.loc[ts] - cd_lo.loc[ts]),
+                         "bullish_divergence") for ts in bars.index[bull]]
+    return sorted(events, key=lambda e: e.ts)
+
+
+def absorption_zones(df: pd.DataFrame, bucket: str = "2min", band_pts: float = 0.5,
+                     flow_pctile: float = 90.0) -> list[FlowEvent]:
+    """Heavy one-sided signed flow while mid stays pinned inside band_pts:
+    someone is absorbing at that level. Heavy selling absorbed = bid strength."""
+    flow = signed_flow(df).resample(bucket).sum()
+    hi = df["mid"].resample(bucket).max()
+    lo = df["mid"].resample(bucket).min()
+    px = df["mid"].resample(bucket).mean()
+    valid = flow.dropna()
+    if valid.empty:
+        return []
+    thresh = float(np.nanpercentile(np.abs(valid), flow_pctile))
+    if thresh <= 0:
+        return []
+    mask = (np.abs(flow) >= thresh) & ((hi - lo) <= band_pts)
+    events = []
+    for ts in flow.index[mask.fillna(False)]:
+        kind = "absorption_of_selling" if flow.loc[ts] < 0 else "absorption_of_buying"
+        events.append(FlowEvent(ts, float(px.loc[ts]), float(abs(flow.loc[ts])), kind))
+    return events
