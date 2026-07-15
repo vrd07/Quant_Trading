@@ -154,3 +154,81 @@ def absorption_zones(df: pd.DataFrame, bucket: str = "2min", band_pts: float = 0
         kind = "absorption_of_selling" if flow.loc[ts] < 0 else "absorption_of_buying"
         events.append(FlowEvent(ts, float(px.loc[ts]), float(abs(flow.loc[ts])), kind))
     return events
+
+
+def imbalance_events(df: pd.DataFrame, freq: str = "5min", price_bin: float = 0.5,
+                     ratio: float = 3.0,
+                     min_activity: float | None = None) -> list[FlowEvent]:
+    """Footprint-style stacked imbalance: within one bar and one price bin,
+    one side's flow >= ratio x the other. min_activity=None -> median filter."""
+    sign = sign_ticks(df)
+    act = df["bid_vol"] + df["ask_vol"]
+    tmp = pd.DataFrame({
+        "buy": act.where(sign > 0, 0.0),
+        "sell": act.where(sign < 0, 0.0),
+        "pbin": (df["mid"] / price_bin).round() * price_bin,
+    })
+    g = tmp.groupby([pd.Grouper(freq=freq), "pbin"])[["buy", "sell"]].sum()
+    total = g["buy"] + g["sell"]
+    if min_activity is None:
+        active = total[total > 0]
+        min_activity = float(active.median()) if not active.empty else 0.0
+    eps = 1e-9
+    events = []
+    for (ts, price), row in g[total >= min_activity].iterrows():
+        if row["buy"] >= ratio * (row["sell"] + eps):
+            events.append(FlowEvent(ts, float(price),
+                                    min(row["buy"] / (row["sell"] + eps), 99.0),
+                                    "imbalance_buy"))
+        elif row["sell"] >= ratio * (row["buy"] + eps):
+            events.append(FlowEvent(ts, float(price),
+                                    min(row["sell"] / (row["buy"] + eps), 99.0),
+                                    "imbalance_sell"))
+    return events
+
+
+def sweep_events(df: pd.DataFrame, swing: str = "30min", bucket: str = "10s",
+                 burst_pctile: float = 95.0, revert_s: int = 60) -> list[FlowEvent]:
+    """Quote-rate burst that pierces the prior swing high/low and closes back
+    beyond it within revert_s: a stop-run / sweep proxy."""
+    mid = df["mid"]
+    rate = mid.resample(bucket).count()
+    b_hi, b_lo = mid.resample(bucket).max(), mid.resample(bucket).min()
+    b_close = mid.resample(bucket).last()
+    active = rate[rate > 0]
+    if active.empty:
+        return []
+    thresh = float(np.nanpercentile(active, burst_pctile))
+    swing_n = max(int(pd.Timedelta(swing) / pd.Timedelta(bucket)), 1)
+    swing_hi = b_hi.rolling(swing_n, min_periods=1).max().shift(1)
+    swing_lo = b_lo.rolling(swing_n, min_periods=1).min().shift(1)
+    fwd = max(int(pd.Timedelta(seconds=revert_s) / pd.Timedelta(bucket)), 1)
+    future_close = b_close.ffill().shift(-fwd)
+    up = (rate >= thresh) & (b_hi > swing_hi) & (future_close < swing_hi)
+    dn = (rate >= thresh) & (b_lo < swing_lo) & (future_close > swing_lo)
+    events = [FlowEvent(ts, float(b_hi.loc[ts]), float(rate.loc[ts] / max(thresh, 1.0)),
+                        "sweep_high") for ts in rate.index[up.fillna(False)]]
+    events += [FlowEvent(ts, float(b_lo.loc[ts]), float(rate.loc[ts] / max(thresh, 1.0)),
+                         "sweep_low") for ts in rate.index[dn.fillna(False)]]
+    return sorted(events, key=lambda e: e.ts)
+
+
+def liquidity_withdrawal(df: pd.DataFrame, bucket: str = "1min",
+                         spread_pctile: float = 95.0, rate_drop: float = 0.5,
+                         rate_window: int = 30) -> list[FlowEvent]:
+    """Spread blowout + quote-rate collapse vs recent median = liquidity
+    pulled (pre-news / thin book warning)."""
+    spread = df["spread"].resample(bucket).mean()
+    rate = df["mid"].resample(bucket).count()
+    px = df["mid"].resample(bucket).last().ffill()
+    med_rate = rate.rolling(rate_window, min_periods=5).median()
+    s = spread.dropna()
+    if s.empty:
+        return []
+    s_thresh = float(np.nanpercentile(s, spread_pctile))
+    if s_thresh <= 0:
+        return []
+    mask = (spread >= s_thresh) & (rate <= rate_drop * med_rate)
+    return [FlowEvent(ts, float(px.loc[ts]), float(spread.loc[ts] / s_thresh),
+                      "liquidity_withdrawal")
+            for ts in spread.index[mask.fillna(False)]]

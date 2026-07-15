@@ -132,3 +132,38 @@ class TestDetectorsI:
         e = events[0]
         assert e.kind == "absorption_of_selling"
         assert e.ts == pd.Timestamp("2026-07-01 09:02", tz="UTC")
+
+
+class TestDetectorsII:
+    def test_imbalance_buy_at_price_bin(self):
+        # 20 straight upticks inside one 0.5 price bin, one 5m bar
+        df = make_ticks([3300.00 + 0.01 * i for i in range(20)])
+        events = ft.imbalance_events(df, freq="5min", price_bin=0.5, ratio=3.0)
+        assert len(events) == 1
+        assert events[0].kind == "imbalance_buy"
+        assert events[0].price == pytest.approx(3300.0)
+
+    def test_sweep_high_burst_pierce_revert(self):
+        # 30 min of 1 tick/10s at 3300, one 50-tick burst spiking to 3300.5,
+        # then 3 quiet minutes back below the old high
+        quiet = make_ticks([3300.0] * 180, freq="10s", start="2026-07-01 09:00")
+        burst = make_ticks(list(np.linspace(3300.0, 3300.5, 50)),
+                           freq="200ms", start="2026-07-01 09:30")
+        after = make_ticks([3299.95] * 18, freq="10s", start="2026-07-01 09:31")
+        events = ft.sweep_events(pd.concat([quiet, burst, after]),
+                                 swing="30min", bucket="10s",
+                                 burst_pctile=99.0, revert_s=60)
+        assert [e.kind for e in events] == ["sweep_high"]
+        assert events[0].price == pytest.approx(3300.5)
+
+    def test_liquidity_withdrawal_wide_spread_low_rate(self):
+        normal = make_ticks([3300.0] * 600, freq="6s", start="2026-07-01 09:00")   # 10/min, spread 0.1
+        thin = make_ticks([3300.0] * 10, freq="30s", start="2026-07-01 10:00")     # 2/min
+        thin["ask"] = thin["mid"] + 0.25
+        thin["bid"] = thin["mid"] - 0.25
+        thin["spread"] = thin["ask"] - thin["bid"]
+        events = ft.liquidity_withdrawal(pd.concat([normal, thin]), bucket="1min",
+                                         spread_pctile=90.0, rate_drop=0.5)
+        assert events
+        assert all(e.kind == "liquidity_withdrawal" for e in events)
+        assert all(e.ts >= pd.Timestamp("2026-07-01 10:00", tz="UTC") for e in events)
