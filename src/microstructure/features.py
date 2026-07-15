@@ -85,3 +85,31 @@ def bar_delta(df: pd.DataFrame, freq: str = "5min") -> pd.DataFrame:
     delta = signed_flow(df).resample(freq).sum()
     delta = delta[resample_bars(df, freq).index.intersection(delta.index)]
     return pd.DataFrame({"delta": delta, "cum_delta": delta.cumsum()})
+
+
+# ------------------------------------------------------ heatmap / profile
+
+def volume_at_price(df: pd.DataFrame, price_bin: float = 0.5,
+                    time_bin: str = "15min") -> pd.DataFrame:
+    """2-D activity histogram (price x time): the heatmap layer.
+    Values are quoted-liquidity-weighted tick activity — a proxy, not depth."""
+    tmp = pd.DataFrame({
+        "activity": df["bid_vol"] + df["ask_vol"],
+        "pbin": (df["mid"] / price_bin).round() * price_bin,
+    })
+    vap = (tmp.groupby([pd.Grouper(freq=time_bin), "pbin"])["activity"]
+              .sum().unstack(0).fillna(0.0))
+    return vap.sort_index()
+
+
+def profile_nodes(vap: pd.DataFrame, hvn_pctile: float = 85.0,
+                  lvn_pctile: float = 15.0) -> dict[str, list[float]]:
+    """Collapse the heatmap to a profile; return high/low-volume node prices."""
+    profile = vap.sum(axis=1)
+    active = profile[profile > 0]
+    if active.empty:
+        return {"hvn": [], "lvn": []}
+    hi = np.percentile(active, hvn_pctile)
+    lo = np.percentile(active, lvn_pctile)
+    return {"hvn": [float(p) for p in active.index[active >= hi]],
+            "lvn": [float(p) for p in active.index[active <= lo]]}

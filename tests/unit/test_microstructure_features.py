@@ -65,3 +65,27 @@ class TestLoadTicks:
         from datetime import date
         with pytest.raises(FileNotFoundError):
             ft.load_ticks("XAUUSD", date(2026, 1, 1), date(2026, 1, 2), ticks_dir=tmp_path)
+
+
+class TestVolumeAtPrice:
+    def test_histogram_buckets_price_and_time(self):
+        # 09:00 block trades at ~3300.0; 09:20 block at ~3305.0
+        a = make_ticks([3300.0] * 10, start="2026-07-01 09:00")
+        b = make_ticks([3305.0] * 10, start="2026-07-01 09:20")
+        df = pd.concat([a, b])
+        vap = ft.volume_at_price(df, price_bin=0.5, time_bin="15min")
+        assert 3300.0 in vap.index and 3305.0 in vap.index
+        t0, t1 = pd.Timestamp("2026-07-01 09:00", tz="UTC"), pd.Timestamp("2026-07-01 09:15", tz="UTC")
+        assert vap.loc[3300.0, t0] == pytest.approx(20.0)   # 10 ticks * (1+1) vol
+        assert vap.loc[3305.0, t1] == pytest.approx(20.0)
+        assert vap.loc[3305.0, t0] == pytest.approx(0.0)
+
+    def test_profile_nodes_hvn_lvn(self):
+        heavy = make_ticks([3300.0] * 50, start="2026-07-01 09:00")
+        light = make_ticks([3302.0] * 2, start="2026-07-01 09:05")
+        mid_ = make_ticks([3304.0] * 10, start="2026-07-01 09:10")
+        vap = ft.volume_at_price(pd.concat([heavy, light, mid_]), price_bin=0.5, time_bin="15min")
+        nodes = ft.profile_nodes(vap, hvn_pctile=80.0, lvn_pctile=40.0)
+        assert 3300.0 in nodes["hvn"]
+        assert 3302.0 in nodes["lvn"]
+        assert 3304.0 not in nodes["hvn"] and 3304.0 not in nodes["lvn"]
