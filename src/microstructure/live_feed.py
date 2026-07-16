@@ -167,8 +167,12 @@ class StatusTap:
         with self._lock:
             pending, self._unspilled = self._unspilled, []
         if pending:
-            day = datetime.now(timezone.utc).date()
-            append_spill(pending, spill_path(self.symbol, day, self.live_dir))
+            groups: dict[date, list[tuple[str, float, float]]] = {}
+            for row in pending:
+                day = datetime.fromisoformat(row[0]).date()
+                groups.setdefault(day, []).append(row)
+            for day, rows in groups.items():
+                append_spill(rows, spill_path(self.symbol, day, self.live_dir))
         self._last_spill = time.time()
 
     def preload_spill(self, day: date) -> int:

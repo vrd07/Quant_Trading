@@ -87,12 +87,26 @@ class TestStatusTap:
     def test_spill_and_preload_roundtrip(self, tmp_path):
         quotes = {"XAUUSDs": {"bid": 3300.0, "ask": 3300.2}}
         tap = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
-        now = pd.Timestamp("2026-07-16 09:00:00", tz="UTC")
+        now = pd.Timestamp("2020-01-01 09:00:00", tz="UTC")
         tap.sample(now=now)
         tap.spill()
         tap2 = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
-        n = tap2.preload_spill(date(2026, 7, 16))
+        n = tap2.preload_spill(date(2020, 1, 1))
         assert n == 1 and len(tap2.rows_df()) == 1
+
+    def test_spill_splits_across_midnight(self, tmp_path):
+        quotes = {"XAUUSDs": {"bid": 3300.0, "ask": 3300.2}}
+        tap = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
+        before = pd.Timestamp("2020-01-01 23:59:59", tz="UTC")
+        after = pd.Timestamp("2020-01-02 00:00:01", tz="UTC")
+        tap.sample(now=before)
+        tap.sample(now=after)
+        tap.spill()
+        p_before = lf.spill_path("XAUUSD", date(2020, 1, 1), live_dir=tmp_path)
+        p_after = lf.spill_path("XAUUSD", date(2020, 1, 2), live_dir=tmp_path)
+        assert p_before.exists() and p_after.exists()
+        assert len(lf.load_spill("XAUUSD", date(2020, 1, 1), live_dir=tmp_path)) == 1
+        assert len(lf.load_spill("XAUUSD", date(2020, 1, 2), live_dir=tmp_path)) == 1
 
 
 class TestDukaBackfill:
