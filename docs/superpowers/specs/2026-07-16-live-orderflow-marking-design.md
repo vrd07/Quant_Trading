@@ -43,9 +43,13 @@ Three units, one-way deps: `live_feed.py` (I/O + state) → `live_marks.py`
   to `data/ticks_live/{SYMBOL}/{YYYY-MM-DD}.csv` (append mode) every ~60 s.
   Crash/restart re-reads the CSV. Flat quotes are recorded (tick rule handles
   them). Broker symbol `XAUUSDs` maps to `XAUUSD`. Start is idempotent.
-- **`build_live_day(symbol, day) -> pd.DataFrame`**: `ensure_ticks` for today
-  (unpublished hours simply absent — existing behavior), load today's Parquet,
-  find last published hour boundary, append tap rows strictly after it.
+- **Backfill + stitcher**: `ensure_ticks` must NOT be called for the current
+  day (it would cache a partial day Parquet in the immutable `data/ticks/`
+  store that never self-heals). Instead a `DukaBackfill` fetches completed
+  hours individually via `fetch_hour`, caches non-empty hours as per-hour
+  Parquets under `data/ticks_live/`, and retries unpublished hours at most
+  every ~10 min. `stitch_day(duka, tap)` then finds the last published
+  timestamp and appends tap rows strictly after it.
   Overwrite `bid_vol/ask_vol = 0.5` across the WHOLE merged frame
   (count-weighted flow everywhere — no scale cliff at the stitch boundary).
   Output = `load_ticks` shape (mid/spread derived) so detectors run unchanged.
@@ -85,7 +89,7 @@ Three units, one-way deps: `live_feed.py` (I/O + state) → `live_marks.py`
   `build_figure` + the two new layers → feed panel (scrolling table, newest
   first: `emitted_at | bar | kind | price | strength`, colored by side).
 - Status strip: tap freshness (red when `mt5_status.json` stale — e.g. MT5
-  closed), last backfilled hour, per-kind counts today.
+  closed), last backfilled hour, tick and signal counts today.
 - Degradation is visible, never silent: stale tap → red badge, backfill keeps
   working; Dukascopy failure → tap segment extends further back. No crashes.
 
