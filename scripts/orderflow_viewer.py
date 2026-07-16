@@ -44,8 +44,13 @@ MARK_STYLE = {
     "liquidity_withdrawal": dict(symbol="line-ns-open", color="#7f7f7f"),
 }
 
-LIVE_PARAM_KEYS = ("lookback", "band_pts", "flow_pctile", "ratio",
-                   "burst_pctile", "spread_pctile", "price_bin")
+KIND_GROUP = {
+    "bearish_divergence": "divergence", "bullish_divergence": "divergence",
+    "absorption_of_selling": "absorption", "absorption_of_buying": "absorption",
+    "imbalance_buy": "imbalance", "imbalance_sell": "imbalance",
+    "sweep_high": "sweep", "sweep_low": "sweep",
+    "liquidity_withdrawal": "withdrawal",
+}
 _LIVE: dict = {"tap": None, "backfill": None, "feed": None, "day": None}
 
 
@@ -133,10 +138,13 @@ def build_figure(df, timeframe, show, p, events=None) -> go.Figure:
         fig.add_hline(y=y, line=dict(color="rgba(128,128,128,0.4)", width=1, dash="dot"),
                       row=1, col=1)
 
+    live_events = events is not None
     if events is None:
         events = _detect(df, bars, delta, show, {**p, "timeframe": timeframe})
+    draw_events = ([e for e in events if KIND_GROUP.get(e.kind) in show]
+                   if live_events else events)
     by_kind = {}
-    for e in events:
+    for e in draw_events:
         by_kind.setdefault(e.kind, []).append(e)
     for kind, evs in by_kind.items():
         style = MARK_STYLE[kind]
