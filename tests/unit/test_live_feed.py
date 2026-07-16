@@ -1,5 +1,5 @@
 """Unit tests for src/microstructure/live_feed.py — no network, no MT5."""
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pandas as pd
 import pytest
@@ -61,3 +61,69 @@ class TestStitchDay:
                            pd.DataFrame(columns=["ts", "bid", "ask"]))
         assert df.empty
         assert list(df.columns) == ["bid", "ask", "bid_vol", "ask_vol", "mid", "spread"]
+
+
+class TestStatusTap:
+    def test_sample_records_prefix_matched_quote(self, tmp_path):
+        quotes = {"XAUUSDs": {"bid": 3300.0, "ask": 3300.2}}
+        tap = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
+        now = pd.Timestamp("2026-07-16 09:00:00", tz="UTC")
+        assert tap.sample(now=now) is True
+        df = tap.rows_df()
+        assert len(df) == 1 and df["bid"].iloc[0] == pytest.approx(3300.0)
+        assert tap.staleness_s() < 5.0
+
+    def test_sample_skips_none_missing_and_bad_quotes(self, tmp_path):
+        tap = lf.StatusTap("XAUUSD", read_status=lambda: None, live_dir=tmp_path)
+        assert tap.sample() is False
+        tap2 = lf.StatusTap("XAUUSD", read_status=lambda: {"EURUSD": {"bid": 1, "ask": 1.1}},
+                            live_dir=tmp_path)
+        assert tap2.sample() is False
+        tap3 = lf.StatusTap("XAUUSD", read_status=lambda: {"XAUUSDs": {"bid": 0, "ask": 0}},
+                            live_dir=tmp_path)
+        assert tap3.sample() is False
+        assert tap3.rows_df().empty
+
+    def test_spill_and_preload_roundtrip(self, tmp_path):
+        quotes = {"XAUUSDs": {"bid": 3300.0, "ask": 3300.2}}
+        tap = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
+        now = pd.Timestamp("2026-07-16 09:00:00", tz="UTC")
+        tap.sample(now=now)
+        tap.spill()
+        tap2 = lf.StatusTap("XAUUSD", read_status=lambda: quotes, live_dir=tmp_path)
+        n = tap2.preload_spill(date(2026, 7, 16))
+        assert n == 1 and len(tap2.rows_df()) == 1
+
+
+class TestDukaBackfill:
+    def _fake_fetch(self, calls):
+        def fetch(symbol, day, hour, point):
+            calls.append(hour)
+            if hour == 0:
+                return pd.DataFrame({
+                    "ts": pd.date_range(f"{day} 00:00", periods=3, freq="1s", tz="UTC"),
+                    "bid": 3300.0, "ask": 3300.2, "bid_vol": 1.0, "ask_vol": 1.0,
+                })
+            return None  # not published yet
+        return fetch
+
+    def test_refresh_fetches_only_completed_hours_and_caches(self, tmp_path):
+        calls: list[int] = []
+        bf = lf.DukaBackfill("XAUUSD", date(2026, 7, 16), live_dir=tmp_path,
+                             fetch_hour_fn=self._fake_fetch(calls))
+        now = datetime(2026, 7, 16, 2, 30, tzinfo=timezone.utc)
+        df = bf.refresh(now)
+        assert sorted(set(calls)) == [0, 1]          # hour 2 not complete yet
+        assert len(df) == 3 and bf.published_hours() == [0]
+        assert (tmp_path / "XAUUSD" / "duka_2026-07-16_00.parquet").exists()
+
+    def test_refresh_throttles_retries_but_rereads_cache(self, tmp_path):
+        calls: list[int] = []
+        bf = lf.DukaBackfill("XAUUSD", date(2026, 7, 16), live_dir=tmp_path,
+                             retry_min=10.0, fetch_hour_fn=self._fake_fetch(calls))
+        now = datetime(2026, 7, 16, 2, 30, tzinfo=timezone.utc)
+        bf.refresh(now)
+        n_first = len(calls)
+        df = bf.refresh(now)                          # immediate second refresh
+        assert len(calls) == n_first                  # no new network attempts
+        assert len(df) == 3                           # cached hour still served
