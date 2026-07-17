@@ -86,3 +86,52 @@ def label_event(mids: pd.Series, direction: str, atr_val: float,
     return {"direction": direction, "outcome": outcome,
             "R_net": gross_R - cost_R, "bars_held": exit_i,
             "mae": mae, "mfe": mfe}
+
+
+MIN_CELL_N = 30
+
+
+def _cell_stats(kind: str, direction: str, rows: list[dict],
+                boundary_ts) -> dict:
+    r = np.array([e["R_net"] for e in rows], dtype=float)
+    is_r = np.array([e["R_net"] for e in rows if e["ts"] <= boundary_ts])
+    oos_r = np.array([e["R_net"] for e in rows if e["ts"] > boundary_ts])
+    wins = r[r > 0].sum()
+    losses = -r[r < 0].sum()
+    pf = float(wins / losses) if losses > 0 else float("inf")
+    sd = float(r.std(ddof=1)) if len(r) > 1 else 0.0
+    t_stat = float(r.mean() / (sd / np.sqrt(len(r)))) if sd > 0 else 0.0
+    exp_is = float(is_r.mean()) if len(is_r) else 0.0
+    exp_oos = float(oos_r.mean()) if len(oos_r) else 0.0
+    n_is, n_oos = len(is_r), len(oos_r)
+    if n_is < MIN_CELL_N or n_oos < MIN_CELL_N:
+        verdict = "thin"
+    elif exp_is > 0 and exp_oos > 0 and t_stat > 2:
+        verdict = "CANDIDATE"
+    elif exp_is > 0 or exp_oos > 0:
+        verdict = "one-sided"
+    else:
+        verdict = "dead"
+    return {"kind": kind, "direction": direction, "n": len(r),
+            "n_is": n_is, "n_oos": n_oos, "expectancy": float(r.mean()),
+            "exp_is": exp_is, "exp_oos": exp_oos,
+            "win_rate": float((r > 0).mean()), "profit_factor": pf,
+            "total_R": float(r.sum()), "t_stat": t_stat,
+            "median_bars": float(np.median([e["bars_held"] for e in rows])),
+            "verdict": verdict}
+
+
+def summarize(events: list[dict], split_frac: float = 0.7) -> dict:
+    """Per (kind, direction) triple-barrier stats with a global time IS/OOS
+    split and a CANDIDATE/one-sided/thin/dead verdict per cell."""
+    if not events:
+        return {"boundary_ts": None, "cells": []}
+    ts_sorted = sorted(e["ts"] for e in events)
+    boundary_ts = ts_sorted[min(int(len(ts_sorted) * split_frac),
+                                len(ts_sorted) - 1)]
+    groups: dict[tuple, list[dict]] = {}
+    for e in events:
+        groups.setdefault((e["kind"], e["direction"]), []).append(e)
+    cells = [_cell_stats(k, d, rows, boundary_ts) for (k, d), rows in groups.items()]
+    cells.sort(key=lambda c: c["total_R"], reverse=True)
+    return {"boundary_ts": boundary_ts, "cells": cells}
