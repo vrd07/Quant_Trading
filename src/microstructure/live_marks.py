@@ -67,8 +67,11 @@ class SignalFeed:
         self._seen: set[tuple] = set()
         if self.path is not None and self.path.exists():
             for line in self.path.read_text().splitlines():
-                d = json.loads(line)
-                entry = FeedEntry(**d)
+                try:
+                    d = json.loads(line)
+                    entry = FeedEntry(**d)
+                except (json.JSONDecodeError, TypeError):
+                    continue  # corrupt/truncated jsonl line — skip, don't crash
                 self.entries.append(entry)
                 self._seen.add(self._key_from(entry.kind, entry.bar_ts, entry.price))
 

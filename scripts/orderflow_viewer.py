@@ -14,6 +14,7 @@ for spot gold. Sliders re-run detectors instantly; tick loads are cached.
 """
 import argparse
 import sys
+import threading
 from datetime import date, timedelta
 from functools import lru_cache
 from pathlib import Path
@@ -52,6 +53,11 @@ KIND_GROUP = {
     "liquidity_withdrawal": "withdrawal",
 }
 _LIVE: dict = {"tap": None, "backfill": None, "feed": None, "day": None}
+# Flask 3.1 runs the dev server threaded by default, and dcc.Interval fires
+# every 20s while a first backfill can take minutes — serialize the whole
+# LIVE branch (including _ensure_live's start-once window) so concurrent
+# callback invocations can't race each other.
+_LIVE_LOCK = threading.Lock()
 
 
 def _ensure_live(symbol: str):
@@ -244,27 +250,29 @@ def make_app(symbol: str) -> Dash:
                       spread_pctile=spread_pctile, price_bin=price_bin)
         show = show or []
         if mode == "LIVE":
-            tap, backfill, feed = _ensure_live(symbol)
-            now = pd.Timestamp.now(tz="UTC")
-            df = lfeed.stitch_day(backfill.refresh(now.to_pydatetime()),
-                                  tap.rows_df())
-            stale = tap.staleness_s()
-            badge_style = {"color": "#d62728" if stale > 15 else "#2ca02c"}
-            hours = backfill.published_hours()
-            status = html.Span([
-                html.B("LIVE ", style=badge_style),
-                f"tap {'∞' if stale == float('inf') else f'{stale:.0f}s'} | "
-                f"backfill→{(f'{hours[-1]:02d}h' if hours else '—')} | "
-                f"{len(df):,} ticks | feed {len(feed.entries)}",
-            ], style=badge_style if stale > 15 else None)
-            if df.empty:
-                return (go.Figure(layout=dict(
-                    title="LIVE: no data yet — is MT5 running? (backfill lags 1-2h)")),
-                    _feed_table(feed.entries), status)
-            events = lmarks.closed_candle_events(df, timeframe, params, now)
-            feed.ingest(events, now)
-            fig = build_figure(df, timeframe, show, params, events=events)
-            return fig, _feed_table(feed.entries), status
+            with _LIVE_LOCK:
+                tap, backfill, feed = _ensure_live(symbol)
+                now = pd.Timestamp.now(tz="UTC")
+                df = lfeed.stitch_day(backfill.refresh(now.to_pydatetime()),
+                                      tap.rows_df())
+                stale = tap.staleness_s()
+                badge_style = {"color": "#d62728" if stale > lfeed.STALE_AFTER_S
+                               else "#2ca02c"}
+                hours = backfill.published_hours()
+                status = html.Span([
+                    html.B("LIVE ", style=badge_style),
+                    f"tap {'∞' if stale == float('inf') else f'{stale:.0f}s'} | "
+                    f"backfill→{(f'{hours[-1]:02d}h' if hours else '—')} | "
+                    f"{len(df):,} ticks | feed {len(feed.entries)}",
+                ], style=badge_style if stale > lfeed.STALE_AFTER_S else None)
+                if df.empty:
+                    return (go.Figure(layout=dict(
+                        title="LIVE: no data yet — is MT5 running? (backfill lags 1-2h)")),
+                        _feed_table(feed.entries), status)
+                events = lmarks.closed_candle_events(df, timeframe, params, now)
+                feed.ingest(events, now)
+                fig = build_figure(df, timeframe, show, params, events=events)
+                return fig, _feed_table(feed.entries), status
         df = _ticks(symbol, start[:10], end[:10])
         return (build_figure(df, timeframe, show, params),
                 "(feed active in LIVE mode)", "")

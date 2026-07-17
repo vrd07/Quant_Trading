@@ -24,6 +24,17 @@ sys.path.insert(0, str(REPO_ROOT))
 sys.path.insert(0, str(REPO_ROOT / "mt5_bridge"))
 
 
+def read_snapshot(path: Path) -> dict | None:
+    """Read+parse one probe snapshot. The EA writes UTF-16LE with a BOM
+    (MQL5 FileOpen with FILE_TXT, no FILE_ANSI) so this must decode as
+    utf-16, not utf-8. Returns None on any read/parse failure (including
+    a mid-write race, which the next heartbeat will win)."""
+    try:
+        return json.loads(path.read_text(encoding="utf-16"))
+    except (json.JSONDecodeError, OSError, UnicodeError):
+        return None
+
+
 def classify_snapshots(snapshots: list[dict]) -> str:
     """Pure verdict logic over parsed probe snapshots."""
     with_levels = [s for s in snapshots if s.get("levels")]
@@ -57,10 +68,9 @@ def main() -> int:
             continue
         if mtime > last_mtime:
             last_mtime = mtime
-            try:
-                snapshots.append(json.loads(probe.read_text()))
-            except (json.JSONDecodeError, OSError):
-                pass  # mid-write race — next heartbeat wins
+            snap = read_snapshot(probe)
+            if snap is not None:
+                snapshots.append(snap)
         time.sleep(1)
 
     if not snapshots:

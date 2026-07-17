@@ -1,5 +1,7 @@
 """Unit tests for the DOM-probe verdict classifier — no MT5."""
-from scripts.check_dom_probe import classify_snapshots
+import json
+
+from scripts.check_dom_probe import classify_snapshots, read_snapshot
 
 
 def _snap(levels):
@@ -31,3 +33,23 @@ def test_real_depth_when_many_levels_changing():
             for j in range(5)
         ]))
     assert classify_snapshots(snaps) == "REAL DEPTH"
+
+
+def test_read_snapshot_decodes_utf16le_with_bom(tmp_path):
+    # The EA writes UTF-16LE with a BOM (MQL5 FileOpen FILE_TXT, no
+    # FILE_ANSI). Regression: probe.read_text() (utf-8 default) raised
+    # an uncaught UnicodeDecodeError on the BOM.
+    snap = _snap([{"type": 1, "price": 3300.2, "volume": 1.0}])
+    p = tmp_path / "mt5_dom_probe.json"
+    p.write_bytes(json.dumps(snap).encode("utf-16"))
+    assert read_snapshot(p) == snap
+
+
+def test_read_snapshot_returns_none_on_truncated_file(tmp_path):
+    p = tmp_path / "mt5_dom_probe.json"
+    p.write_bytes(b'{"ts": "2026.07.16 10:00:00", "sym')
+    assert read_snapshot(p) is None
+
+
+def test_read_snapshot_returns_none_on_missing_file(tmp_path):
+    assert read_snapshot(tmp_path / "does_not_exist.json") is None

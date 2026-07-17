@@ -231,7 +231,7 @@ class DukaBackfill:
         self.day = day
         self.live_dir = live_dir or LIVE_DIR
         self.retry_min = retry_min
-        self._point = DEFAULT_POINTS.get(symbol, 0.001)
+        self._point = DEFAULT_POINTS[symbol]
         if fetch_hour_fn is None:
             from scripts.fetch_dukascopy_ticks import fetch_hour
             fetch_hour_fn = fetch_hour
@@ -264,8 +264,19 @@ class DukaBackfill:
                 continue
             if df is not None and not df.empty:
                 p.parent.mkdir(parents=True, exist_ok=True)
-                df.to_parquet(p, index=False)
-        frames = [pd.read_parquet(self.hour_path(h)) for h in self.published_hours()]
+                tmp = p.with_suffix(".parquet.tmp")
+                df.to_parquet(tmp, index=False)
+                tmp.rename(p)
+        frames = []
+        for h in self.published_hours():
+            p = self.hour_path(h)
+            try:
+                frames.append(pd.read_parquet(p))
+            except Exception:
+                # torn/corrupt hour file (e.g. killed mid-write) — drop it so
+                # the next refresh re-fetches instead of bricking forever.
+                p.unlink(missing_ok=True)
+                continue
         if not frames:
             return pd.DataFrame(columns=["ts", "bid", "ask", "bid_vol", "ask_vol"])
         return pd.concat(frames, ignore_index=True).sort_values("ts").reset_index(drop=True)

@@ -1,7 +1,6 @@
 """Unit tests for src/microstructure/live_marks.py — synthetic frames only."""
 import json
 
-import numpy as np
 import pandas as pd
 import pytest
 
@@ -69,6 +68,16 @@ class TestSignalFeed:
     def test_no_path_in_memory_only(self):
         feed = lm.SignalFeed(None)
         assert len(feed.ingest(self._events())) == 1
+
+    def test_skips_corrupt_jsonl_line(self, tmp_path):
+        p = tmp_path / "sig.jsonl"
+        valid = json.dumps(dict(emitted_at="2026-07-16T09:05:01+00:00",
+                                bar_ts="2026-07-16T09:00:00+00:00",
+                                kind="imbalance_buy", price=3300.0, strength=5.0))
+        p.write_text(valid + "\n" + '{"emitted_at": "2026-07-16T09:05', encoding="utf-8")
+        feed = lm.SignalFeed(p)
+        assert len(feed.entries) == 1
+        assert feed.entries[0].kind == "imbalance_buy"
 
 
 class TestDefendedLevels:
