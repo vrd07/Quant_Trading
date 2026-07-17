@@ -39,13 +39,14 @@ void WriteBook()
       for(int i = 0; i < ArraySize(book); i++)
       {
          if(i > 0) json += ",";
+         double vol = (book[i].volume_real > 0.0) ? book[i].volume_real : (double)book[i].volume;
          json += "{\"type\":" + IntegerToString(book[i].type) +
                  ",\"price\":" + DoubleToString(book[i].price, _Digits) +
-                 ",\"volume\":" + DoubleToString((double)book[i].volume, 2) + "}";
+                 ",\"volume\":" + DoubleToString(vol, 2) + "}";
       }
    }
    json += "]}";
-   int h = FileOpen(OutFile, FILE_WRITE|FILE_TXT|FILE_COMMON);
+   int h = FileOpen(OutFile, FILE_WRITE|FILE_TXT|FILE_COMMON|FILE_SHARE_READ|FILE_SHARE_WRITE);
    if(h != INVALID_HANDLE)
    {
       FileWriteString(h, json);
