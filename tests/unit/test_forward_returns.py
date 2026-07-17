@@ -1,8 +1,8 @@
 """Unit tests for src/microstructure/forward_returns.py — synthetic, no I/O."""
-import numpy as np
 import pandas as pd
 import pytest
 
+from scripts.analyze_signal_forward_returns import confirm_lag, label_all
 from src.microstructure import forward_returns as fr
 
 
@@ -126,3 +126,62 @@ class TestSummarize:
         bad = self._events("sweep_high", "short", [-1.0] * 10, start="2026-07-01")
         cells = fr.summarize(good + bad)["cells"]
         assert cells[0]["total_R"] >= cells[1]["total_R"]
+
+
+class TestConfirmLag:
+    def test_confirm_lag_per_kind(self):
+        cfg = fr.LabelConfig()
+        assert confirm_lag("bearish_divergence", cfg) == pd.Timedelta("15min")
+        assert confirm_lag("bullish_divergence", cfg) == pd.Timedelta("15min")
+        assert confirm_lag("imbalance_buy", cfg) == pd.Timedelta("15min")
+        assert confirm_lag("imbalance_sell", cfg) == pd.Timedelta("15min")
+        assert confirm_lag("absorption_of_selling", cfg) == pd.Timedelta("2min")
+        assert confirm_lag("absorption_of_buying", cfg) == pd.Timedelta("2min")
+        assert confirm_lag("sweep_high", cfg) == pd.Timedelta("70s")
+        assert confirm_lag("sweep_low", cfg) == pd.Timedelta("70s")
+        assert confirm_lag("liquidity_withdrawal", cfg) == pd.Timedelta(0)
+
+
+class TestLabelAllEntryLag:
+    """label_all must enter on the LAGGED ts (confirm_lag), not the raw
+    left-edge event.ts -- otherwise the tool trades on data not yet knowable
+    (look-ahead bias)."""
+
+    def _synthetic_df(self):
+        # 20 completed 15min bars of ticks so the (period=14, then shift(1))
+        # causal ATR has a valid value at the last bar; the LAST bar has only
+        # a single tick at its own start with nothing after it, so a raw
+        # (unlagged) entry at event.ts would see data, but the lagged entry
+        # (event.ts + confirm_lag) falls off the end of the tick history.
+        start = pd.Timestamp("2026-07-16 09:00", tz="UTC")
+        n_bars = 20
+        rows = []
+        for i in range(n_bars - 1):
+            bar_start = start + i * pd.Timedelta("15min")
+            for offset, px in ((0, 100.0 + (i % 3) * 0.1), (300, 100.2 + (i % 3) * 0.1)):
+                ts = bar_start + pd.Timedelta(seconds=offset)
+                rows.append({"ts": ts, "bid": px - 0.01, "ask": px + 0.01,
+                             "bid_vol": 1.0, "ask_vol": 1.0})
+        last_bar_start = start + (n_bars - 1) * pd.Timedelta("15min")
+        rows.append({"ts": last_bar_start, "bid": 99.99, "ask": 100.01,
+                     "bid_vol": 1.0, "ask_vol": 1.0})
+        df = pd.DataFrame(rows).set_index("ts")
+        df["mid"] = (df["bid"] + df["ask"]) / 2.0
+        return df, last_bar_start
+
+    def test_label_all_entry_is_lagged(self):
+        df, last_bar_start = self._synthetic_df()
+        cfg = fr.LabelConfig()
+        events = [{"ts": last_bar_start, "kind": "sweep_high", "price": 100.0}]
+
+        # Sanity: the raw event ts has data (a naive unlagged implementation
+        # would happily enter here) ...
+        assert not df["mid"].loc[last_bar_start:].empty
+        # ... but the lagged entry ts (ts + 70s confirm_lag for sweeps) does
+        # not -- it falls past the end of the synthetic tick history.
+        assert df["mid"].loc[last_bar_start + pd.Timedelta("70s"):].empty
+
+        out = label_all(df, events, cfg)
+        # label_all must have used the lagged ts (empty path -> skipped),
+        # proving it does not enter on the un-knowable raw event.ts.
+        assert out == []

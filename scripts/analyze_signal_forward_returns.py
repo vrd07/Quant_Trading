@@ -44,15 +44,40 @@ def reconstruct_events(df: pd.DataFrame, timeframe: str) -> list[dict]:
     return [{"ts": e.ts, "kind": e.kind, "price": float(e.price)} for e in evs]
 
 
+def confirm_lag(kind: str, cfg: fr.LabelConfig) -> pd.Timedelta:
+    """Delay from a detector's left-edge event ts to when the signal is actually
+    knowable (bar/bucket complete; sweeps need the post-burst reversion window)."""
+    if kind in ("bearish_divergence", "bullish_divergence",
+                "imbalance_buy", "imbalance_sell"):
+        return pd.Timedelta(cfg.timeframe)          # 15m bar must close
+    if kind in ("absorption_of_selling", "absorption_of_buying"):
+        return pd.Timedelta("2min")                 # absorption bucket
+    if kind in ("sweep_high", "sweep_low"):
+        return pd.Timedelta("70s")                  # 10s burst bucket + 60s revert window
+    return pd.Timedelta(0)
+
+
 def label_all(df: pd.DataFrame, events: list[dict], cfg: fr.LabelConfig) -> list[dict]:
-    """Attach a triple-barrier outcome to each directional event."""
+    """Attach a triple-barrier outcome to each directional event.
+
+    Entries are lagged per-kind (confirm_lag) so a signal is only tradeable
+    once it is actually knowable — pandas resample labels bars/buckets by
+    their LEFT edge, so event.ts is the bar START, not its close. ATR is
+    looked up from the PREVIOUS completed bar (strictly causal). A same-kind
+    cooldown prevents overlapping "trades" from inflating n via serial
+    correlation.
+    """
     bars = ft.resample_bars(df, cfg.timeframe)
-    atr_series = fr.atr(bars, period=14)
+    atr_series = fr.atr(bars, period=14).shift(1)
     mids = df["mid"]
     out = []
-    for e in events:
+    cooldown_until: dict[str, pd.Timestamp] = {}
+    for e in sorted(events, key=lambda e: e["ts"]):
         direction = fr.event_direction(e["kind"])
         if direction is None:
+            continue
+        entry_ts = e["ts"] + confirm_lag(e["kind"], cfg)
+        if entry_ts < cooldown_until.get(e["kind"], entry_ts):
             continue
         bar_ts = e["ts"].floor(cfg.timeframe)
         if bar_ts not in atr_series.index:
@@ -60,11 +85,14 @@ def label_all(df: pd.DataFrame, events: list[dict], cfg: fr.LabelConfig) -> list
         atr_val = atr_series.loc[bar_ts]
         if pd.isna(atr_val) or atr_val <= 0:
             continue
-        path = mids.loc[e["ts"]:]
+        path = mids.loc[entry_ts:]
+        if path.empty:
+            continue
         lab = fr.label_event(path, direction, float(atr_val), cfg)
         if lab is None:
             continue
         out.append({"ts": e["ts"], "kind": e["kind"], **lab})
+        cooldown_until[e["kind"]] = entry_ts + cfg.max_hold_bars * pd.Timedelta(cfg.timeframe)
     return out
 
 
@@ -87,7 +115,8 @@ def load_live_events(symbol: str) -> list[dict]:
 
 def _table(cells: list[dict]) -> str:
     hdr = (f"| {'kind':22} | {'dir':5} | {'n':>4} | {'exp_R':>6} | {'PF':>5} "
-           f"| {'win%':>5} | {'totR':>7} | {'t':>5} | {'IS':>6} | {'OOS':>6} | verdict |")
+           f"| {'win%':>5} | {'totR':>7} | {'t':>5} | {'IS':>6} | {'OOS':>6} "
+           f"| {'mae':>6} | {'mfe':>6} | {'medTk':>6} | verdict |")
     sep = "|" + "|".join("-" * len(c) for c in hdr.split("|")[1:-1]) + "|"
     rows = [hdr, sep]
     for c in cells:
@@ -96,7 +125,8 @@ def _table(cells: list[dict]) -> str:
             f"| {c['kind']:22} | {c['direction']:5} | {c['n']:>4} | "
             f"{c['expectancy']:>6.2f} | {pf:>5} | {c['win_rate']*100:>4.0f}% | "
             f"{c['total_R']:>7.1f} | {c['t_stat']:>5.2f} | {c['exp_is']:>6.2f} | "
-            f"{c['exp_oos']:>6.2f} | {c['verdict']} |")
+            f"{c['exp_oos']:>6.2f} | {c['mean_mae']:>6.2f} | {c['mean_mfe']:>6.2f} | "
+            f"{c['median_ticks']:>6.1f} | {c['verdict']} |")
     return "\n".join(rows)
 
 

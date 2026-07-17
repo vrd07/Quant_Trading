@@ -117,7 +117,9 @@ def _cell_stats(kind: str, direction: str, rows: list[dict],
             "exp_is": exp_is, "exp_oos": exp_oos,
             "win_rate": float((r > 0).mean()), "profit_factor": pf,
             "total_R": float(r.sum()), "t_stat": t_stat,
-            "median_bars": float(np.median([e["bars_held"] for e in rows])),
+            "median_ticks": float(np.median([e["bars_held"] for e in rows])),
+            "mean_mae": float(np.mean([e.get("mae", 0.0) for e in rows])),
+            "mean_mfe": float(np.mean([e.get("mfe", 0.0) for e in rows])),
             "verdict": verdict}
 
 
