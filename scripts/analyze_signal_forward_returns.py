@@ -78,10 +78,10 @@ def load_live_events(symbol: str) -> list[dict]:
         for line in p.read_text().splitlines():
             try:
                 d = json.loads(line)
-            except json.JSONDecodeError:
+                evs.append({"ts": pd.Timestamp(d["bar_ts"]), "kind": d["kind"],
+                            "price": float(d["price"])})
+            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
                 continue
-            evs.append({"ts": pd.Timestamp(d["bar_ts"]), "kind": d["kind"],
-                        "price": float(d["price"])})
     return evs
 
 
