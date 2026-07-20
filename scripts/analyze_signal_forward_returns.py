@@ -96,6 +96,27 @@ def label_all(df: pd.DataFrame, events: list[dict], cfg: fr.LabelConfig) -> list
     return out
 
 
+def baseline_cells(df: pd.DataFrame, cfg: fr.LabelConfig,
+                   split_frac: float = 0.7) -> list[dict]:
+    """Drift control: label UNCONDITIONAL entries (every bar close, no signal)
+    through the identical barrier/cooldown machinery.
+
+    A directional sample period pays a naked long or short regardless of any
+    mark, so a cell's expectancy is only evidence of signal to the extent it
+    EXCEEDS this baseline. Uses the divergence kinds purely to borrow their
+    long/short mapping — the events carry no detector information.
+    """
+    bars = ft.resample_bars(df, cfg.timeframe)
+    cells = []
+    for kind in ("bearish_divergence", "bullish_divergence"):
+        evs = [{"ts": ts, "kind": kind, "price": float(c)}
+               for ts, c in bars["close"].items()]
+        res = fr.summarize(label_all(df, evs, cfg), split_frac=split_frac)
+        for c in res["cells"]:
+            cells.append({**c, "kind": "baseline (every bar)"})
+    return cells
+
+
 def load_live_events(symbol: str) -> list[dict]:
     """Parse Stage-1.5 {day}_signals.jsonl feeds into [{ts, kind, price}]."""
     root = LIVE_DIR / symbol
@@ -157,6 +178,10 @@ def main() -> int:
     live_raw = load_live_events(args.symbol)
     live = fr.summarize(label_all(df, live_raw, cfg), split_frac=args.split_frac) \
         if live_raw else {"boundary_ts": None, "cells": []}
+    base = baseline_cells(df, cfg, split_frac=args.split_frac)
+    base_exp = {c["direction"]: c["expectancy"] for c in base}
+    bars_all = ft.resample_bars(df, args.timeframe)["close"]
+    drift_pct = (bars_all.iloc[-1] / bars_all.iloc[0] - 1) * 100
 
     n_dir = len(hist["cells"])
     note = (f"{n_dir} directional cells tested; at p<0.05 expect ~{0.05*n_dir:.1f} "
@@ -164,6 +189,10 @@ def main() -> int:
     print("\n=== HISTORICAL (reconstructed) ===")
     print(_table(hist["cells"]))
     print("\n" + note)
+    print(f"\n=== DRIFT CONTROL (period {drift_pct:+.2f}%) ===")
+    print(_table(base))
+    print("\nA cell is only evidence of signal to the extent it EXCEEDS the "
+          "same-direction baseline.")
     if live["cells"]:
         print("\n=== LIVE cohort (real-time, thin OOS) ===")
         print(_table(live["cells"]))
@@ -178,6 +207,12 @@ def main() -> int:
         f.write("## Historical (reconstructed from tick history)\n\n")
         f.write(_table(hist["cells"]) + "\n\n")
         f.write(note + "\n\n")
+        f.write(f"## Drift control (period {drift_pct:+.2f}%)\n\n")
+        f.write("Unconditional entries — every bar close, no signal — through the "
+                "identical barriers. A directional sample pays a naked long or short "
+                "on its own, so a cell above is evidence of signal only to the extent "
+                "it EXCEEDS its same-direction baseline.\n\n")
+        f.write(_table(base) + "\n\n")
         if live["cells"]:
             f.write("## Live cohort (Stage-1.5 feed, real-time, thin)\n\n")
             f.write(_table(live["cells"]) + "\n\n")
@@ -186,9 +221,15 @@ def main() -> int:
         if cands:
             f.write("Candidate cell(s) that survived both halves + significance:\n")
             for c in cands:
+                excess = c["expectancy"] - base_exp.get(c["direction"], 0.0)
                 f.write(f"- **{c['kind']} {c['direction']}** — exp {c['expectancy']:.2f}R, "
-                        f"PF {c['profit_factor']:.2f}, t {c['t_stat']:.2f}, n {c['n']}. "
+                        f"PF {c['profit_factor']:.2f}, t {c['t_stat']:.2f}, n {c['n']}; "
+                        f"**{excess:+.2f}R vs the same-direction drift baseline**. "
                         f"Next: full backtest.md gate before any live use.\n")
+            f.write("\n⚠️ A cell whose excess over baseline is ~0 is measuring the "
+                    "sample period's drift, not the mark. This sample spans ONE "
+                    "regime — a mark that only works in it is regime-conditional "
+                    "until tested on an opposing trend.\n")
         else:
             f.write("No cell cleared the CANDIDATE bar (n≥30/half, both halves "
                     "positive, t>2). On this sample the marks carry no tradeable "
