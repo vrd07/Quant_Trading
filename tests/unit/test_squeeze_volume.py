@@ -75,3 +75,50 @@ def test_rvol_nan_on_insufficient_history():
     ts = pd.Timestamp("2026-05-08 05:20", tz="UTC")
     assert np.isnan(sv.break_rvol(vol, ts, baseline_hours=6))
     assert np.isnan(sv.coil_rvol(vol, ts, coil_hours=2, baseline_hours=12))
+
+
+def _path(vals):
+    idx = pd.date_range("2026-05-08 10:00", periods=len(vals), freq="1min", tz="UTC")
+    return pd.Series(vals, index=idx)
+
+
+def test_label_native_buy_hits_target():
+    lab = sv.label_native(_path([2000, 2010, 2066]), "BUY",
+                          entry=2000, stop=1967, target=2066, cost_pts=0.0)
+    assert lab["outcome"] == "target"
+    assert lab["R"] == pytest.approx(2.0)
+
+
+def test_label_native_buy_hits_stop():
+    lab = sv.label_native(_path([2000, 1980, 1967]), "BUY",
+                          entry=2000, stop=1967, target=2066, cost_pts=0.0)
+    assert lab["outcome"] == "stop"
+    assert lab["R"] == pytest.approx(-1.0)
+
+
+def test_label_native_stop_before_target_is_stop():
+    # path dips to the stop, then rockets past target — the stop came first
+    lab = sv.label_native(_path([2000, 1966, 2100]), "BUY",
+                          entry=2000, stop=1967, target=2066, cost_pts=0.0)
+    assert lab["outcome"] == "stop"
+
+
+def test_label_native_sell_symmetry():
+    lab = sv.label_native(_path([2000, 1990, 1934]), "SELL",
+                          entry=2000, stop=2033, target=1934, cost_pts=0.0)
+    assert lab["outcome"] == "target"
+    assert lab["R"] == pytest.approx(2.0)
+
+
+def test_label_native_cost_reduces_R():
+    # risk = 33 pts; cost 0.5/side → 1.0 pt round trip = 1/33 R off the top
+    lab = sv.label_native(_path([2000, 2066]), "BUY",
+                          entry=2000, stop=1967, target=2066, cost_pts=0.5)
+    assert lab["R"] == pytest.approx(2.0 - (1.0 / 33.0), rel=1e-6)
+
+
+def test_label_native_timeout_marks_to_market():
+    lab = sv.label_native(_path([2000, 2016.5]), "BUY",
+                          entry=2000, stop=1967, target=2066, cost_pts=0.0)
+    assert lab["outcome"] == "timeout"
+    assert lab["R"] == pytest.approx(16.5 / 33.0, rel=1e-6)

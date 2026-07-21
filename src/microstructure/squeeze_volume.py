@@ -78,3 +78,30 @@ def coil_rvol(vol: pd.Series, break_ts: pd.Timestamp,
     if base <= 0:
         return float("nan")
     return coil / base
+
+
+def label_native(mids: pd.Series, side: str, entry: float, stop: float,
+                 target: float, cost_pts: float = 0.5, rr: float = 2.0
+                 ) -> dict | None:
+    """Fixed-geometry triple-barrier over an ordered mid path. Stop wins ties."""
+    if len(mids) == 0:
+        return None
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    cost_R = (2.0 * cost_pts) / risk
+    for px in mids.values:
+        px = float(px)
+        if side == "BUY":
+            if px <= stop:
+                return {"R": -1.0 - cost_R, "outcome": "stop"}
+            if px >= target:
+                return {"R": rr - cost_R, "outcome": "target"}
+        else:
+            if px >= stop:
+                return {"R": -1.0 - cost_R, "outcome": "stop"}
+            if px <= target:
+                return {"R": rr - cost_R, "outcome": "target"}
+    last = float(mids.iloc[-1])
+    move = (last - entry) if side == "BUY" else (entry - last)
+    return {"R": move / risk - cost_R, "outcome": "timeout"}
