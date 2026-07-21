@@ -12,6 +12,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -48,3 +49,32 @@ def load_gc_hourly(start: date, end: date, cache_dir: Path | None = None,
     cache_dir.mkdir(parents=True, exist_ok=True)
     vol.to_frame().to_parquet(cache)
     return vol
+
+
+def completed_before(vol: pd.Series, break_ts: pd.Timestamp) -> pd.Series:
+    """Hours whose full bar closed by break_ts (index label = hour start)."""
+    return vol[(vol.index + pd.Timedelta("1h")) <= break_ts]
+
+
+def break_rvol(vol: pd.Series, break_ts: pd.Timestamp,
+               baseline_hours: int = 6) -> float:
+    c = completed_before(vol, break_ts)
+    if len(c) < baseline_hours + 1:
+        return float("nan")
+    last = float(c.iloc[-1])
+    base = float(c.iloc[-(baseline_hours + 1):-1].mean())
+    if base <= 0:
+        return float("nan")
+    return last / base
+
+
+def coil_rvol(vol: pd.Series, break_ts: pd.Timestamp,
+              coil_hours: int = 2, baseline_hours: int = 12) -> float:
+    c = completed_before(vol, break_ts)
+    if len(c) < coil_hours + baseline_hours:
+        return float("nan")
+    coil = float(c.iloc[-coil_hours:].mean())
+    base = float(c.iloc[-(coil_hours + baseline_hours):-coil_hours].mean())
+    if base <= 0:
+        return float("nan")
+    return coil / base
