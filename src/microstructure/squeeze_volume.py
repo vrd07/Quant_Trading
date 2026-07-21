@@ -105,3 +105,33 @@ def label_native(mids: pd.Series, side: str, entry: float, stop: float,
     last = float(mids.iloc[-1])
     move = (last - entry) if side == "BUY" else (entry - last)
     return {"R": move / risk - cost_R, "outcome": "timeout"}
+
+
+def _bucket(trades: list[dict]) -> dict:
+    n = len(trades)
+    if n == 0:
+        return {"n": 0, "win": 0.0, "mean_R": 0.0}
+    rs = [t["R"] for t in trades]
+    return {"n": n,
+            "win": sum(1 for r in rs if r > 0) / n,
+            "mean_R": sum(rs) / n}
+
+
+def split_stats(trades: list[dict], feature: str) -> dict:
+    vals = [t for t in trades if not np.isnan(t.get(feature, float("nan")))]
+    if not vals:
+        return {"median": float("nan"), "high": _bucket([]), "low": _bucket([])}
+    median = float(np.median([t[feature] for t in vals]))
+    high = [t for t in vals if t[feature] >= median]
+    low = [t for t in vals if t[feature] < median]
+    return {"median": median, "high": _bucket(high), "low": _bucket(low)}
+
+
+def verdict(trades: list[dict], feature: str = "break_rvol",
+            margin: float = 0.15, min_n: int = 3) -> str:
+    s = split_stats(trades, feature)
+    hi, lo = s["high"], s["low"]
+    if hi["n"] >= min_n and lo["n"] >= min_n \
+            and hi["mean_R"] - lo["mean_R"] >= margin:
+        return "GREEN"
+    return "RED"

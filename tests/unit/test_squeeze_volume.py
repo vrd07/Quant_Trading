@@ -122,3 +122,43 @@ def test_label_native_timeout_marks_to_market():
                           entry=2000, stop=1967, target=2066, cost_pts=0.0)
     assert lab["outcome"] == "timeout"
     assert lab["R"] == pytest.approx(16.5 / 33.0, rel=1e-6)
+
+
+def _tr(R, side, brv, crv=1.0):
+    return {"R": R, "side": side, "break_rvol": brv, "coil_rvol": crv}
+
+
+def test_split_stats_median_and_buckets():
+    trades = [_tr(2.0, "BUY", 3.0), _tr(1.5, "BUY", 2.5),
+              _tr(-1.0, "SELL", 0.5), _tr(-1.0, "SELL", 0.7)]
+    s = sv.split_stats(trades, "break_rvol")
+    assert s["median"] == pytest.approx(1.6)  # median of [0.5,0.7,2.5,3.0]
+    assert s["high"]["n"] == 2 and s["high"]["mean_R"] == pytest.approx(1.75)
+    assert s["low"]["n"] == 2 and s["low"]["mean_R"] == pytest.approx(-1.0)
+    assert s["high"]["win"] == pytest.approx(1.0)
+    assert s["low"]["win"] == pytest.approx(0.0)
+
+
+def test_split_stats_drops_nan_feature():
+    trades = [_tr(2.0, "BUY", float("nan")), _tr(1.0, "BUY", 2.0),
+              _tr(-1.0, "SELL", 0.5)]
+    s = sv.split_stats(trades, "break_rvol")
+    assert s["high"]["n"] + s["low"]["n"] == 2
+
+
+def test_verdict_green_when_high_bucket_outperforms():
+    trades = [_tr(2.0, "BUY", 3.0), _tr(1.5, "BUY", 2.5),
+              _tr(-1.0, "SELL", 0.5), _tr(-1.0, "SELL", 0.7),
+              _tr(1.0, "BUY", 2.2), _tr(-1.0, "SELL", 0.6)]
+    assert sv.verdict(trades, "break_rvol") == "GREEN"
+
+
+def test_verdict_red_when_flat():
+    trades = [_tr(1.0, "BUY", 3.0), _tr(-1.0, "BUY", 2.5),
+              _tr(1.0, "SELL", 0.5), _tr(-1.0, "SELL", 0.7)]
+    assert sv.verdict(trades, "break_rvol") == "RED"
+
+
+def test_verdict_red_when_too_few():
+    trades = [_tr(2.0, "BUY", 3.0), _tr(-1.0, "SELL", 0.5)]
+    assert sv.verdict(trades, "break_rvol") == "RED"
