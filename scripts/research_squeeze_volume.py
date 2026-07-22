@@ -120,9 +120,10 @@ def main() -> int:
         "## Verdict", "",
         f"**{vdt}** on break_rvol.",
         "",
-        "⚠️ This sample is ~12–18 trades. A clean split can occur by chance, so "
-        "GREEN justifies BUYING multi-year GC data for a proper every-year test "
-        "— it does NOT justify any live change. RED = drop the hypothesis.",
+        f"⚠️ This sample is {len(trades)} trades over ~2.5 months — far too few "
+        "for significance. A split can occur by chance, so GREEN justifies BUYING "
+        "multi-year GC data for a proper every-year test — it does NOT justify any "
+        "live change. RED = drop the hypothesis.",
         "",
         "Caveats: GC is COMEX futures (not spot XAUUSD; ~23h session, maintenance "
         "break) — volume used only as a relative percentile. yfinance GC daily "

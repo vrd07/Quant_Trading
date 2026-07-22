@@ -33,6 +33,6 @@ Range 2026-05-08..2026-07-15 · 41 labeled squeeze breakouts (26 SELL) · native
 
 **RED** on break_rvol.
 
-⚠️ This sample is ~12–18 trades. A clean split can occur by chance, so GREEN justifies BUYING multi-year GC data for a proper every-year test — it does NOT justify any live change. RED = drop the hypothesis.
+⚠️ This sample is 41 trades over ~2.5 months — far too few for significance. A split can occur by chance, so GREEN justifies BUYING multi-year GC data for a proper every-year test — it does NOT justify any live change. RED = drop the hypothesis.
 
 Caveats: GC is COMEX futures (not spot XAUUSD; ~23h session, maintenance break) — volume used only as a relative percentile. yfinance GC daily volume is broken; hourly only. 1h volume is coarser than the 15m break; break_rvol uses the last COMPLETED hour (causal, lagged ≤1h).
