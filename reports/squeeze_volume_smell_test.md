@@ -35,4 +35,6 @@ Range 2026-05-08..2026-07-15 · 41 labeled squeeze breakouts (26 SELL) · native
 
 ⚠️ This sample is 41 trades over ~2.5 months — far too few for significance. A split can occur by chance, so GREEN justifies BUYING multi-year GC data for a proper every-year test — it does NOT justify any live change. RED = drop the hypothesis.
 
+Secondary observations (not gated — noted for the paid-data test, not acted on): the break-surge half is flat, but the coil half shows a +0.68R (high-coil) vs +0.17R (low-coil) split. Note this runs OPPOSITE to the dry-up hypothesis — HIGHER coil volume (less contraction), not more dry-up, associates with better outcomes, which reads more like an overall-activity/trend proxy than the textbook coil. The SELL-only break_rvol cut (+1.05R high vs +0.59R low) is the one cell pointing the hypothesized way on the strategy's known bleed. Both are n<30 curiosities, not findings.
+
 Caveats: GC is COMEX futures (not spot XAUUSD; ~23h session, maintenance break) — volume used only as a relative percentile. yfinance GC daily volume is broken; hourly only. 1h volume is coarser than the 15m break; break_rvol uses the last COMPLETED hour (causal, lagged ≤1h).

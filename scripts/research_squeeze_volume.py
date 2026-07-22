@@ -125,6 +125,17 @@ def main() -> int:
         "multi-year GC data for a proper every-year test — it does NOT justify any "
         "live change. RED = drop the hypothesis.",
         "",
+        "Secondary observations (not gated — noted for the paid-data test, not "
+        "acted on): the break-surge half is flat, but the coil half shows a "
+        f"{coil['high']['mean_R']:+.2f}R (high-coil) vs {coil['low']['mean_R']:+.2f}R "
+        "(low-coil) split. Note this runs OPPOSITE to the dry-up hypothesis — "
+        "HIGHER coil volume (less contraction), not more dry-up, associates with "
+        "better outcomes, which reads more like an overall-activity/trend proxy "
+        "than the textbook coil. The SELL-only break_rvol cut "
+        f"({sell_brk['high']['mean_R']:+.2f}R high vs {sell_brk['low']['mean_R']:+.2f}R "
+        "low) is the one cell pointing the hypothesized way on the strategy's "
+        "known bleed. Both are n<30 curiosities, not findings.",
+        "",
         "Caveats: GC is COMEX futures (not spot XAUUSD; ~23h session, maintenance "
         "break) — volume used only as a relative percentile. yfinance GC daily "
         "volume is broken; hourly only. 1h volume is coarser than the 15m break; "
