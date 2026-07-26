@@ -170,3 +170,9 @@ data/historical/*.bak_*
 data/historical/*.corrupt_backup_*
 data/historical/*.stale_backup_*
 data/historical/*.tmp
+
+# ============================================
+# Kronos IC smell-test (research-only, isolated env + heavy model repo)
+# ============================================
+venv_kronos/
+vendor/
