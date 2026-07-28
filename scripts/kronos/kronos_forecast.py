@@ -76,7 +76,8 @@ def run_forecast(symbol, stride, n_paths, horizon, max_windows, ctx, device, out
             acc[f"real_ret_h{k}"].append(closes[t + k] / c0 - 1.0)
 
     meta = {"symbol": symbol, "model_id": "NeoQuasar/Kronos-base", "stride": stride,
-            "n_paths": n_paths, "horizon": horizon, "temperature": 1.0, "top_p": 0.9,
+            "n_paths": n_paths, "horizon": horizon, "ctx": ctx,
+            "temperature": 1.0, "top_p": 0.9,
             "top_k": 0, "git_commit": _git_commit(), "created_at": dt.datetime.utcnow().isoformat()}
     save_cache(out, {f: np.asarray(v) for f, v in acc.items()}, meta)
     print(f"wrote {out}: {len(idxs)} windows")

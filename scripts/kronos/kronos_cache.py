@@ -11,7 +11,7 @@ ARRAY_FIELDS = [
     "real_ret_h1", "real_ret_h2", "real_ret_h3", "real_ret_h4",
     "last_close",
 ]
-META_KEYS = ["symbol", "model_id", "stride", "n_paths", "horizon",
+META_KEYS = ["symbol", "model_id", "stride", "n_paths", "horizon", "ctx",
              "temperature", "top_p", "top_k", "git_commit", "created_at"]
 
 

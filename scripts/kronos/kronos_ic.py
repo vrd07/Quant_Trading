@@ -76,8 +76,9 @@ def build_report(symbol, meta, ic_tables, sim_tables, final_verdict, reasons):
     lines = [f"# Kronos IC Smell-Test — {symbol}", "",
              f"**Verdict: {final_verdict}**", "",
              "Reasons:", *[f"- {r}" for r in reasons], "",
-             f"Model: {meta.get('model_id')} | stride {meta.get('stride')} | "
-             f"paths {meta.get('n_paths')} | commit {meta.get('git_commit')}", "",
+             f"Model: {meta.get('model_id')} | ctx {meta.get('ctx') or '?'} | "
+             f"stride {meta.get('stride')} | paths {meta.get('n_paths')} | "
+             f"commit {meta.get('git_commit')}", "",
              "## Stage 1 — Spearman IC (per horizon × year)", ""]
     years = sorted({y for t in ic_tables.values() for y in t})
     lines.append("| horizon | " + " | ".join(str(y) for y in years) + " |")

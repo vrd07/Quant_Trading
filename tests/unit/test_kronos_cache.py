@@ -21,6 +21,32 @@ def test_round_trip_preserves_all_fields(tmp_path):
     assert meta["n_paths"] == "20"
 
 
+def test_ctx_is_recorded_in_meta(tmp_path):
+    """ctx is a provenance-critical run setting: a cache built at ctx 256 must not be
+    mistaken for a spec-fidelity ctx 512 run when its IC is read months later."""
+    from kronos_cache import META_KEYS
+    assert "ctx" in META_KEYS
+    p = tmp_path / "c.npz"
+    save_cache(str(p), _synthetic(), {"symbol": "XAUUSD", "ctx": 256})
+    _, meta = load_cache(str(p))
+    assert meta["ctx"] == "256"
+
+
+def test_load_cache_tolerates_pre_ctx_caches(tmp_path):
+    """Caches written before ctx joined META_KEYS still load; ctx is simply absent."""
+    import kronos_cache as kc
+    p = tmp_path / "old.npz"
+    original = kc.META_KEYS
+    try:
+        kc.META_KEYS = [k for k in original if k != "ctx"]
+        save_cache(str(p), _synthetic(), {"symbol": "XAUUSD"})
+    finally:
+        kc.META_KEYS = original
+    _, meta = load_cache(str(p))
+    assert meta["symbol"] == "XAUUSD"
+    assert meta.get("ctx") is None
+
+
 def test_missing_field_raises(tmp_path):
     arrays = _synthetic()
     del arrays["pred_ret_h1"]
