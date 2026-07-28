@@ -59,3 +59,25 @@ def test_cost_reduces_pf():
     free = strict_fill_sim(pred, real, cost_bps=0.0, threshold=0.0)["pf"]
     costed = strict_fill_sim(pred, real, cost_bps=5.0, threshold=0.0)["pf"]
     assert costed < free
+
+
+from kronos_ic import verdict
+
+
+def test_verdict_green_when_recent_year_ic_and_pf_hold():
+    v, reasons = verdict({2024: 0.01, 2025: 0.05, 2026: 0.06},
+                         {2024: 1.0, 2025: 1.2, 2026: 1.3}, recent_year=2026)
+    assert v == "GREEN"
+
+
+def test_verdict_red_when_ic_only_in_early_year():
+    v, reasons = verdict({2024: 0.09, 2025: 0.02, 2026: 0.005},
+                         {2024: 1.5, 2025: 1.0, 2026: 0.9}, recent_year=2026)
+    assert v == "RED"
+    assert any("2026" in r for r in reasons)
+
+
+def test_verdict_red_when_recent_pf_fails_costs():
+    v, reasons = verdict({2024: 0.05, 2025: 0.05, 2026: 0.05},
+                         {2024: 1.3, 2025: 1.2, 2026: 0.95}, recent_year=2026)
+    assert v == "RED"
