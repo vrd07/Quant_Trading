@@ -176,3 +176,4 @@ data/historical/*.tmp
 # ============================================
 venv_kronos/
 vendor/
+data/kronos_cache_*.npz
