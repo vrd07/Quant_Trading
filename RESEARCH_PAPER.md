@@ -4,7 +4,7 @@
 **Target instrument:** XAUUSD (spot gold), MetaTrader 5
 **Target account:** The5ers prop-firm challenge, $5,000 tier
 **Initial draft:** April 2026
-**Last updated:** July 2026
+**Last updated:** August 2026
 
 ---
 
@@ -334,6 +334,29 @@ An intermediate implementation on 2026-06-30 added `sl_points` fields to strateg
 
 ---
 
+**Lesson 26: A structural-stop strategy that sizes lots from a per-trade USD budget silently fails the risk engine if the operator cap sits below the sizer's worst-case output.**
+The BOSStructure strategy (SMC break-of-structure sequence; added 2026-07-07, `src/strategies/bos_structure_strategy.py`) produced near-zero enforced-risk backtest trades despite positive research results: the ATR-scaled structural stop generated per-trade lot sizes of $110–230 while the operator cap was $119.70, so `RiskEngine.validate_order` rejected virtually every signal silently — no logged error, no trade. Root-cause was confirmed by instrumenting `validate_order` (2026-07-09). The fix was `risk.strategy_risk_overrides.bos_structure.risk_per_trade_pct: 0.0048` in all eight live configs, lifting the cap just above the sizer's typical output; the enforced-risk 2026 backtest moved from PF 0.56/halted to PF 1.11 (+$131, DD −2.2%), the strategy's first positive enforced result. The general form of this failure: a tight per-trade-USD cap combined with a structural stop produces silent order rejection, not reduced position size — the sizer's output is all-or-nothing against the cap.
+
+**Lesson 27: A 96-variant redesign of a rejected strategy lifted in-sample profit factor but failed the "positive every calendar year" gate due to single-year regime dependency.**
+EMA200Nasdaq was disabled in all live configs on 2026-07-08 (raw PF 0.58, enforced PF 0.19) after confirming negative expectancy in every period. A v2 redesign (`scripts/research_ema200_v2.py`, 2026-07-08) added five independent improvements: DST-aware cash-open anchor, overnight-range bias, daily-EMA20 trend filter, pullback-limit entry, and a 1×ATR stop floor. Every individual fix helped directionally, and the best combined cell lifted PF from 0.58 to 1.37. The year breakdown was 1.06 / 2.13 / 1.10 across three calendar years: 0 of 96 cells passed the gate requiring positive or flat performance in every year. Pullback-limit entry proved monotonically worse than chase entry (limit-fill adverse selection), contradicting the rationale for adding it. The NY-open anchor-break family on this instrument is not researchable further; the 2025 year dominance tracks the Nasdaq bull leg and is regime beta, not alpha.
+
+**Lesson 28: The M1 gold tick scalper family cannot reach breakeven even at institutional cost levels; the micro-reversion edge is genuine but roughly 1/14th the typical spread.**
+An exhaustive 480-cell parameter grid (`scripts/backtest_gold_tick_scalper.py`, 2026-07-29) tested burst-fade and burst-continuation scalpers on XAUUSD 1-minute Dukascopy ticks across session, trigger threshold, stop width, target, and direction axes. At the observed median spread of 0.69 pips, PF was stable at approximately 0.78 across all cells; IS and OOS halves matched within ±0.03, confirming this is measurement of stable underperformance rather than overfitting. A zero-cost limit test confirmed the ceiling: reducing the synthetic spread from 0.69 to 0.02 (better than institutional pricing) pushes PF from 0.42 to 0.979 — it asymptotes below 1.0 and never crosses. The micro-reversion tendency is real (+0.05–0.10 pips at 30 seconds, positive 9 of 9 days in forward-move analysis), but it is consumed entirely by spread and TP/SL geometry. Profitable tick-scalping on gold requires earning the spread through passive quoting with co-location priority rather than paying it on each fill.
+
+**Lesson 29: A parameter plateau measured on a contaminated sample is not evidence of robustness; only a holdout drawn from data that played no role in filter selection can detect this failure.**
+In the M1 Cardwell RSI reversal research (2026-07-29, `reports/rsi_reversal_m1_research.md`), restricting entries to 13–16 UTC produced PF 1.668 across 56 days, with all 12 neighbouring cells (time-stop × RR grid) profitable in both IS and OOS halves of that sample, and PF still 1.62 at 10× modelled slippage. This passed every standard robustness check. A true holdout of 68 days fetched after the session window was fixed showed PF 0.446, with the win rate collapsing from 51.2% to 22.1% and no session window working on the holdout data. The root cause: the 13–16 UTC session was selected by scanning all 56 days, which contaminated both halves of any split drawn from that sample simultaneously — the plateau and cost-robustness evidence were measured on contaminated data and gave false confidence. The remedy: any filter chosen by looking at data (session, side, regime, symbol) must be validated on a holdout drawn from data that existed but was withheld before the filter decision was made, not on a later split of the same sample.
+
+**Lesson 30: A "close basket when in profit" rule produces a 100% closed-trade win rate and deeply negative equity simultaneously; realized P&L and true equity diverge by the amount warehoused in floating losses.**
+A no-stop-loss basket (`scripts/research_basket_close_m1.py`, 2026-07-29) opened 0.01-lot positions at every M1 close and exited all positions when total floating P&L crossed $0.01 positive. Over 56 days, all 9,089 cycles closed green, generating +$4,192 in realised gains; concurrently, the true account equity fell to −$59,815 from −$64,007 in unrealised losses that were never booked. The mechanism: a rule that can only close when in profit cannot produce a losing closed trade by definition — it sorts outcomes rather than improving them, realizing winners and warehousing losers indefinitely. Capping position count to 5 or 20 reduced the magnitude of the loss but did not change the sign. Any evaluation framework that reports only closed-trade statistics will classify this system as a consistent winner; the assessment requires mark-to-market equity including all open positions.
+
+**Lesson 31: A pre-trained zero-shot neural network on gold shows measurable but cost-insufficient predictive signal; a structured IC pipeline now provides pre-screening before full backtest investment.**
+A two-stage IC smell-test pipeline (`scripts/kronos_smelltest.py`, commits `f74bd27`–`8f2746d`, 2026-07-28) was built to evaluate the NeoQuasar/Kronos-base model on XAUUSD and BTCUSD 15m data. Stage 1 measures Spearman IC per prediction horizon and calendar year; Stage 2 runs a strict-fill toy simulation to convert the IC signal into a profit factor. On XAUUSD, h1 IC reached 0.067 — above the 0.03 floor indicating some directional information exists — but the strict-fill PF was 0.81, below the 1.1 passing threshold (reports `reports/kronos_ic_smelltest_XAUUSD.md`, `reports/kronos_ic_smelltest_BTCUSD.md`). BTCUSD failed the IC floor outright (h3 IC 0.028). The pipeline design generalises: a model that passes Stage 1 but fails Stage 2 has real signal that the cost structure consumes entirely; a model that fails Stage 1 is uninformative regardless of exit engineering. This pipeline now serves as the mandatory pre-screen for any external ML model before committing research resources to a full backtest.
+
+**Lesson 32: A strategy's standalone edge evaluated over a period that coincides with its favourable regime will overstate durability; a multi-regime spanning window is the minimum credible bar.**
+A longer out-of-sample gate (`scripts/validate_squeeze_longoos.py`, report `reports/squeeze_breakout_longoos.md`, 2026-07-22) evaluated squeeze-breakout over 16 months (2025Q1 through 2026Q2, 569 signals). Full-span profit factor was 1.15, but only 3 of 6 quarters were profitable; 2025Q3 produced PF 0.39 (−$2,036) and the drop-best-quarter PF fell to 1.05. The earlier 2026-only validation had returned a strong positive result because 2026 happened to contain the strategy's best quarters. The correlation with KalmanRegime is structural and confirmed in both years (ρ +0.20 in 2025, +0.13 in 2026), so the strategy retains diversification value at a decay-floored weight. The lesson: a single-year or short-window validation that coincides with the strategy's favourable regime is indistinguishable from a validation of the regime itself; the "drop best quarter" robustness check does not catch this if the window contains only the good quarters.
+
+---
+
 ## 19. Limitations and Future Work
 
 - **XAUUSD concentration.** The system is designed and validated exclusively on gold. Extension to other instruments (BTC/ETH/EURUSD) requires separate regime classifier training, independent audit periods, and instrument-specific risk limits. The $250 max-drawdown constraint of the $5k tier is too tight for BTC/ETH under Kalman sizing (see Lesson 16).
@@ -352,6 +375,8 @@ An intermediate implementation on 2026-06-30 added `sl_points` fields to strateg
 
 - **Broker instrument availability is not programmatically verified during config propagation.** The NAS100 episode (Lesson 23) demonstrated that research-side instrument availability (Dukascopy historical data) and live MT5 account availability are independent dimensions. A new strategy's symbol must be confirmed available — and its contract spec (min_lot, value_per_lot, overnight financing) verified against the broker's MT5 symbol info — before config propagation. This check is currently manual via `scripts/health_check.py`; it is not enforced automatically when a new symbol block is added to a config file.
 
+- **IS/OOS splits cannot detect contamination from a prior filter-selection step.** Any hyperparameter chosen by scanning the full dataset (session window, side, regime, symbol) contaminates every split of that dataset simultaneously. The RSI M1 session-window false positive (Lesson 29) demonstrated that a plateau check, IS/OOS consistency, and cost-robustness can all produce positive readings on contaminated data. No improvement to the IS/OOS protocol repairs this; the only remedy is a holdout drawn from data that was withheld before the selection decision.
+
 ---
 
 ## 20. Conclusion
@@ -360,4 +385,4 @@ The system demonstrates that a multi-strategy quantitative trading system can be
 
 ---
 
-*End of document. Last lesson added: Lesson 25 (2026-07-01). Next scheduled review: 2026-08-01.*
+*End of document. Last lesson added: Lesson 32 (2026-07-29). Next scheduled review: 2026-09-01.*
