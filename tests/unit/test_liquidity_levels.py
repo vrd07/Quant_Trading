@@ -47,6 +47,22 @@ class TestPrimitives:
         assert out[0] == pytest.approx(1.0)
         assert np.all((out >= 0.0) & (out <= 1.0))
 
+    def test_rolling_pctile_pins_window_length_with_nonmonotonic_data(self):
+        # Monotonic data can't distinguish a genuine window boundary from an
+        # off-by-one -- every index yields 1.0 regardless of window size. This
+        # data is non-monotonic and the chosen index/window produce a real
+        # fraction that only holds for exactly this window length.
+        vals = np.array([5.0, 1.0, 4.0, 2.0, 8.0, 3.0, 9.0, 6.0])
+        out = ll.rolling_pctile(vals, window=5)
+        # window at index 5 (lo = 5-5+1 = 1) is indices[1..5] = [1,4,2,8,3];
+        # 3 of those 5 values (1, 2, 3) are <= 3.0 -> 3/5 = 0.6
+        assert out[5] == pytest.approx(0.6)
+        # pins the exact window length: window=4 drops index 1 (value 1) ->
+        # 2/4 = 0.5; window=6 adds index 0 (value 5, > 3.0, doesn't count) ->
+        # 3/6 = 0.5. An off-by-one in either direction lands on 0.5, not 0.6.
+        assert out[5] != pytest.approx(0.5)
+        assert np.all((out > 0.0) & (out <= 1.0))
+
 
 class TestPivotDetection:
     def test_pivot_is_local_max_over_2n_plus_1(self):
@@ -70,6 +86,53 @@ class TestPivotDetection:
         _, is_pl = ll.pivot_masks(np.array(highs, float), np.array(lows, float), n=5)
         assert is_pl[5]
         assert is_pl.sum() == 1
+
+    def test_pivot_false_when_left_half_has_a_higher_bar(self):
+        # 21 bars, n=5 -> the loop visits interior indices 5..15 (11 candidates,
+        # not just the single index a bare 2n+1-length array would offer).
+        # Candidate i=10 is the max of its own right half (10..15, all baseline)
+        # but the LEFT boundary bar at i-n=5 is higher -> must NOT be a pivot.
+        # This pins the left-slice bound exactly: an off-by-one that drops
+        # index i-n (e.g. high[i-n+1:i+n+1]) would exclude the 50 at index 5,
+        # leaving 20 as the truncated-window max, and wrongly mark it a pivot.
+        highs = [1.0] * 21
+        highs[5] = 50.0
+        highs[10] = 20.0
+        lows = [0.0] * 21
+        is_ph, _ = ll.pivot_masks(np.array(highs, float), np.array(lows, float), n=5)
+        assert not is_ph[10]
+
+    def test_pivot_false_when_right_half_has_a_higher_bar(self):
+        # Mirror of the above: candidate i=10 is the max of its own left half
+        # (5..10, all baseline) but the RIGHT boundary bar at i+n=15 is higher
+        # -> must NOT be a pivot. Pins the right-slice bound the same way: a
+        # mutant like high[i-n:i+n] drops index i+n and would wrongly pivot.
+        highs = [1.0] * 21
+        highs[10] = 20.0
+        highs[15] = 50.0
+        lows = [0.0] * 21
+        is_ph, _ = ll.pivot_masks(np.array(highs, float), np.array(lows, float), n=5)
+        assert not is_ph[10]
+
+    def test_pivot_low_false_when_left_half_has_a_lower_bar(self):
+        # Low-side mirror: candidate i=10 is the min of its own right half but
+        # the LEFT boundary bar at i-n=5 dips lower -> must NOT be a pivot low.
+        lows = [9.0] * 21
+        lows[5] = -50.0
+        lows[10] = -20.0
+        highs = [100.0] * 21
+        _, is_pl = ll.pivot_masks(np.array(highs, float), np.array(lows, float), n=5)
+        assert not is_pl[10]
+
+    def test_pivot_low_false_when_right_half_has_a_lower_bar(self):
+        # Low-side mirror: candidate i=10 is the min of its own left half but
+        # the RIGHT boundary bar at i+n=15 dips lower -> must NOT be a pivot low.
+        lows = [9.0] * 21
+        lows[10] = -20.0
+        lows[15] = -50.0
+        highs = [100.0] * 21
+        _, is_pl = ll.pivot_masks(np.array(highs, float), np.array(lows, float), n=5)
+        assert not is_pl[10]
 
 
 class TestSweepIndex:
