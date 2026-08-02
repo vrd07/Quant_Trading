@@ -197,3 +197,56 @@ class TestLiveSwings:
         levels = {lv.price: lv.side for lv in ll.live_swings(ctx, 40, ll.DEFAULTS)}
         assert levels[130.0] == "up"
         assert levels[70.0] == "down"
+
+
+class TestEqualClustering:
+    def _lv(self, price, kind, idx):
+        return ll.Level(price, kind, idx, "up")
+
+    def test_two_near_highs_collapse_to_the_cluster_extreme(self):
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.4, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_highs"
+        assert out[0].price == pytest.approx(100.4)     # extreme = max for highs
+        assert out[0].formation_idx == 20               # most recent constituent
+
+    def test_two_near_lows_price_at_the_minimum(self):
+        levels = [ll.Level(80.0, "swing_low", 10, "down"),
+                  ll.Level(79.7, "swing_low", 22, "down")]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_lows"
+        assert out[0].price == pytest.approx(79.7)      # extreme = min for lows
+        assert out[0].formation_idx == 22
+
+    def test_constituents_are_removed_not_double_marked(self):
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.4, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert all(lv.kind != "swing_high" for lv in out)
+
+    def test_far_apart_highs_stay_solo(self):
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(105.0, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 2
+        assert {lv.kind for lv in out} == {"swing_high"}
+
+    def test_chain_linkage_groups_a_staircase_within_tolerance(self):
+        # each step is inside tol of its neighbour -> one cluster, extreme 101.0
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.4, "swing_high", 12),
+                  self._lv(100.8, "swing_high", 14), self._lv(101.0, "swing_high", 16)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].price == pytest.approx(101.0)
+
+    def test_highs_and_lows_cluster_independently(self):
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.2, "swing_high", 12),
+                  ll.Level(100.1, "swing_low", 14, "up")]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        kinds = sorted(lv.kind for lv in out)
+        assert kinds == ["equal_highs", "swing_low"]
+
+    def test_side_is_recomputed_against_close(self):
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.4, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=200.0)
+        assert out[0].side == "down"

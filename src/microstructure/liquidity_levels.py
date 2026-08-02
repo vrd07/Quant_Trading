@@ -271,3 +271,53 @@ def live_swings(ctx: FrameContext, t: int, params: LevelParams = DEFAULTS) -> li
             if p != c:
                 out.append(Level(p, "swing_low", i, "up" if p > c else "down"))
     return out
+
+
+# ---------------------------------------------------------------- clustering
+
+def _cluster_one_side(levels: list[Level], tol: float, eq_kind: str,
+                      take_max: bool, close: float) -> list[Level]:
+    """Chain-linkage grouping of a single pivot family, ascending by price.
+
+    Chain linkage (break when the gap to the *previous* member exceeds tol) rather
+    than centroid linkage: it is order-independent given a sorted input and it is
+    trivially reproducible in MQL5, which matters more here than cluster elegance.
+    """
+    out: list[Level] = []
+    group: list[Level] = []
+
+    def flush() -> None:
+        if not group:
+            return
+        if len(group) >= 2:
+            price = max(g.price for g in group) if take_max else min(g.price for g in group)
+            out.append(Level(float(price), eq_kind,
+                             max(g.formation_idx for g in group),
+                             "up" if price > close else "down"))
+        else:
+            g = group[0]
+            out.append(Level(g.price, g.kind, g.formation_idx,
+                             "up" if g.price > close else "down"))
+
+    for lv in sorted(levels, key=lambda x: (x.price, x.formation_idx)):
+        if group and (lv.price - group[-1].price) > tol:
+            flush()
+            group = []
+        group.append(lv)
+    flush()
+    return out
+
+
+def cluster_equal(levels: list[Level], tol: float, close: float) -> list[Level]:
+    """Collapse near-equal solo swings into equal_highs / equal_lows.
+
+    A cluster of 2+ is priced at the extreme — the price at which every stop in the
+    cluster is actually taken — not the mean. Non-swing kinds pass through untouched.
+    """
+    highs = [lv for lv in levels if lv.kind == "swing_high"]
+    lows = [lv for lv in levels if lv.kind == "swing_low"]
+    rest = [lv for lv in levels if lv.kind not in SWING_KINDS]
+    out = _cluster_one_side(highs, tol, "equal_highs", True, close)
+    out += _cluster_one_side(lows, tol, "equal_lows", False, close)
+    out += rest
+    return out
