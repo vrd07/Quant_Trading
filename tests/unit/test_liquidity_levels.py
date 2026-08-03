@@ -250,3 +250,37 @@ class TestEqualClustering:
         levels = [self._lv(100.0, "swing_high", 10), self._lv(100.4, "swing_high", 20)]
         out = ll.cluster_equal(levels, tol=0.5, close=200.0)
         assert out[0].side == "down"
+
+    def test_gap_of_exactly_tol_still_merges(self):
+        # break condition is strict `>` -> a gap == tol stays inside the group.
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.5, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_highs"
+
+    def test_gap_just_over_tol_stays_solo(self):
+        # one tick past the boundary above -> now > tol -> must split.
+        levels = [self._lv(100.0, "swing_high", 10), self._lv(100.6, "swing_high", 20)]
+        out = ll.cluster_equal(levels, tol=0.5, close=90.0)
+        assert len(out) == 2
+        assert {lv.kind for lv in out} == {"swing_high"}
+
+    def test_solo_high_passthrough_recomputes_side_down(self):
+        # helper hardcodes side="up" on the input Level; close sits ABOVE the
+        # price so the correct recomputed side is "down". A regression that
+        # returned the input Level unchanged (kept g.side) would still say
+        # "up" and this would catch it.
+        levels = [self._lv(100.0, "swing_high", 10)]
+        out = ll.cluster_equal(levels, tol=0.5, close=200.0)
+        assert len(out) == 1
+        assert out[0].kind == "swing_high"
+        assert out[0].side == "down"
+
+    def test_solo_low_passthrough_recomputes_side_up(self):
+        # input Level carries side="down"; close sits BELOW the price so the
+        # correct recomputed side is "up".
+        levels = [ll.Level(80.0, "swing_low", 10, "down")]
+        out = ll.cluster_equal(levels, tol=0.5, close=50.0)
+        assert len(out) == 1
+        assert out[0].kind == "swing_low"
+        assert out[0].side == "up"
