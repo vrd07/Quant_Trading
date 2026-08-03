@@ -426,3 +426,68 @@ def session_levels(ctx: FrameContext, t: int,
                 out.append(lv)
 
     return out
+
+
+# ---------------------------------------------------------------- choice set
+
+def kind_priority(kind: str) -> int:
+    """Lower wins a merge: equal-cluster > session/period extreme > solo swing."""
+    if kind in EQUAL_KINDS:
+        return 0
+    if kind in SESSION_KINDS:
+        return 1
+    return 2
+
+
+def _merge_by_priority(levels: list[Level], tol: float, close: float) -> list[Level]:
+    """Collapse levels within `tol` of each other, keeping the highest priority.
+
+    Ascending sweep with chain linkage, same shape as _cluster_one_side so the two
+    behave alike. Within a group the winner is (priority, formation_idx, price) —
+    fully deterministic, which is what the parity harness needs.
+    """
+    out: list[Level] = []
+    group: list[Level] = []
+
+    def flush() -> None:
+        if not group:
+            return
+        best = min(group, key=lambda lv: (kind_priority(lv.kind), lv.formation_idx, lv.price))
+        out.append(Level(best.price, best.kind, best.formation_idx,
+                         "up" if best.price > close else "down"))
+
+    for lv in sorted(levels, key=lambda x: (x.price, kind_priority(x.kind), x.formation_idx)):
+        if group and (lv.price - group[-1].price) > tol:
+            flush()
+            group = []
+        group.append(lv)
+    flush()
+    return out
+
+
+def build_choice_set(ctx: FrameContext, t: int,
+                     params: LevelParams = DEFAULTS) -> list[Level]:
+    """The competing alternatives at snapshot bar `t`.
+
+    Returned sorted by (up-side first, then ascending distance from close, then
+    price). That ordering is a parity contract — the MQL5 export writes rows in
+    this sequence and check_liquidity_parity.py compares positionally.
+    """
+    atr = float(ctx.atr[t])
+    if not np.isfinite(atr) or atr <= 0.0:
+        return []
+    close = float(ctx.close[t])
+
+    swings = live_swings(ctx, t, params)
+    levels = cluster_equal(swings, params.eq_tol_atr * atr, close)
+    levels += session_levels(ctx, t, params)
+
+    max_dist = params.max_dist_atr * atr
+    levels = [lv for lv in levels if 0.0 < abs(lv.price - close) <= max_dist]
+    levels = _merge_by_priority(levels, params.merge_tol_atr * atr, close)
+
+    ups = sorted([lv for lv in levels if lv.side == "up"],
+                 key=lambda lv: (lv.price - close, lv.price))[:params.levels_per_side]
+    downs = sorted([lv for lv in levels if lv.side == "down"],
+                   key=lambda lv: (close - lv.price, lv.price))[:params.levels_per_side]
+    return ups + downs

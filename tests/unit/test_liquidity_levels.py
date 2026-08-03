@@ -505,6 +505,248 @@ class TestSessionLevels:
         assert "london_high" not in kinds
 
 
+class TestChoiceSet:
+    def _ctx_with_atr(self, bars, params):
+        return ll.build_context(bars, params)
+
+    def test_levels_beyond_max_distance_are_dropped(self):
+        params = ll.LevelParams(max_dist_atr=2.0, scan_bars=200)
+        highs = np.full(60, 100.0)
+        highs[20] = 130.0                    # far above, ~30 price units
+        lows = np.full(60, 99.0)
+        closes = np.full(60, 99.5)
+        bars = make_bars(highs, lows, closes=closes)
+        ctx = self._ctx_with_atr(bars, params)
+        prices = [lv.price for lv in ll.build_choice_set(ctx, 59, params)]
+        assert 130.0 not in prices           # 30 units >> 2 * ATR(~1)
+
+    def test_at_most_levels_per_side_on_each_side(self):
+        params = ll.LevelParams(levels_per_side=2, scan_bars=500, max_dist_atr=100.0)
+        n = 200
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 90.0)
+        for k, i in enumerate(range(20, 120, 12)):        # a ladder of swing highs
+            highs[i] = 101.0 + k * 3.0
+        for k, i in enumerate(range(25, 125, 12)):        # and of swing lows
+            lows[i] = 89.0 - k * 3.0
+        closes = np.full(n, 95.0)
+        bars = make_bars(highs, lows, closes=closes)
+        ctx = self._ctx_with_atr(bars, params)
+        got = ll.build_choice_set(ctx, n - 1, params)
+        assert sum(lv.side == "up" for lv in got) <= 2
+        assert sum(lv.side == "down" for lv in got) <= 2
+
+    def test_merge_keeps_the_higher_priority_type(self):
+        equal = ll.Level(100.0, "equal_highs", 10, "up")
+        session = ll.Level(100.02, "pd_high", 12, "up")
+        swing = ll.Level(100.04, "swing_high", 14, "up")
+        out = ll._merge_by_priority([swing, session, equal], tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_highs"
+
+    def test_merge_prefers_session_over_solo_swing(self):
+        session = ll.Level(100.0, "pd_low", 12, "down")
+        swing = ll.Level(100.02, "swing_low", 14, "down")
+        out = ll._merge_by_priority([swing, session], tol=0.5, close=200.0)
+        assert len(out) == 1
+        assert out[0].kind == "pd_low"
+
+    def test_merge_leaves_well_separated_levels_alone(self):
+        a = ll.Level(100.0, "swing_high", 10, "up")
+        b = ll.Level(105.0, "swing_high", 12, "up")
+        out = ll._merge_by_priority([a, b], tol=0.5, close=90.0)
+        assert len(out) == 2
+
+    def test_output_is_sorted_up_side_first_then_by_distance(self):
+        params = ll.LevelParams(levels_per_side=6, scan_bars=500, max_dist_atr=100.0)
+        n = 200
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 90.0)
+        highs[20], highs[40] = 104.0, 108.0
+        lows[30], lows[50] = 86.0, 82.0
+        closes = np.full(n, 95.0)
+        bars = make_bars(highs, lows, closes=closes)
+        ctx = self._ctx_with_atr(bars, params)
+        got = ll.build_choice_set(ctx, n - 1, params)
+        sides = [lv.side for lv in got]
+        assert sides == sorted(sides, key=lambda s: 0 if s == "up" else 1)
+        ups = [abs(lv.price - 95.0) for lv in got if lv.side == "up"]
+        assert ups == sorted(ups)
+
+    def test_empty_frame_head_returns_empty_set(self):
+        bars = make_bars([100.0] * 5, [99.0] * 5)
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        assert ll.build_choice_set(ctx, 4, ll.DEFAULTS) == []
+
+    # ---- hardening beyond the brief: pin the exact boundaries, not just the middle ----
+
+    def test_up_and_down_sides_are_each_sorted_with_genuine_multi_level_ties_to_break(self):
+        # The brief's own ordering fixture (transcribed verbatim above) has a
+        # hidden flaw: highs[20]=104 then highs[40]=108 means the LATER,
+        # TALLER spike sweeps the earlier one (a later high >= an earlier
+        # pivot kills it, same rule as everywhere else in this module), and
+        # symmetrically for the lows -- so only ONE level survives per side
+        # in that fixture. `ups == sorted(ups)` there is checking a
+        # single-element list: true no matter what the sort key is, or even
+        # if sorting were skipped entirely. Verified empirically: printing
+        # ll.build_choice_set(ctx, n-1, params) against that exact fixture
+        # yields exactly 1 up + 1 down.
+        #
+        # This fixture uses a decaying (earlier-bigger, later-smaller) shape
+        # on BOTH sides -- the same "tent" shape load-bearing in
+        # make_session_bars for the same underlying reason -- so TWO
+        # distinct, un-swept levels survive per side at different distances,
+        # genuinely exercising ascending-distance order with something that
+        # would visibly reorder under a wrong/missing sort key.
+        params = ll.LevelParams(levels_per_side=6, scan_bars=500, max_dist_atr=100.0)
+        n = 200
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 90.0)
+        highs[20], highs[40] = 110.0, 104.0     # earlier bigger, later smaller -> both survive
+        lows[30], lows[50] = 80.0, 86.0         # earlier deeper, later shallower -> both survive
+        closes = np.full(n, 95.0)
+        bars = make_bars(highs, lows, closes=closes)
+        ctx = self._ctx_with_atr(bars, params)
+        got = ll.build_choice_set(ctx, n - 1, params)
+        ups = [lv.price - 95.0 for lv in got if lv.side == "up"]
+        downs = [95.0 - lv.price for lv in got if lv.side == "down"]
+        assert len(ups) >= 2 and len(downs) >= 2      # not vacuous on either side
+        assert ups == sorted(ups)
+        assert downs == sorted(downs)
+        sides = [lv.side for lv in got]
+        assert sides == sorted(sides, key=lambda s: 0 if s == "up" else 1)
+
+    def test_distance_cap_boundary_is_inclusive_at_exactly_max_dist(self, monkeypatch):
+        # Pins the `<=` in `abs(lv.price - close) <= max_dist`: a level placed
+        # at EXACTLY max_dist_atr * ATR must be kept, one epsilon further out
+        # must be dropped, and one just inside must be kept. A test that only
+        # shows "far things get dropped" (the brief's own test above) can't
+        # tell a `<=` from a `<` mutant at the boundary itself -- this can.
+        # live_swings/session_levels are monkeypatched so the levels under
+        # test are placed at exact, independently-computed offsets from a
+        # pinned ATR=1.0, rather than depending on the pivot/session pipeline
+        # to happen to produce a level at exactly the boundary.
+        params = ll.LevelParams(max_dist_atr=8.0, merge_tol_atr=0.0, levels_per_side=6)
+        bars = make_bars([100.0] * 5, [99.0] * 5, closes=[95.0] * 5)
+        ctx = self._ctx_with_atr(bars, params)
+        ctx.atr[:] = 1.0
+        close = float(ctx.close[4])
+        max_dist = params.max_dist_atr * 1.0
+        on_boundary = ll.Level(close + max_dist, "pd_high", 0, "up")
+        just_outside = ll.Level(close + max_dist + 1e-6, "asia_high", 1, "up")
+        just_inside = ll.Level(close + max_dist - 0.01, "london_high", 2, "up")
+        monkeypatch.setattr(ll, "live_swings", lambda ctx, t, params: [])
+        monkeypatch.setattr(
+            ll, "session_levels",
+            lambda ctx, t, params: [on_boundary, just_outside, just_inside])
+        got = ll.build_choice_set(ctx, 4, params)
+        kinds = {lv.kind for lv in got}
+        assert "pd_high" in kinds
+        assert "london_high" in kinds
+        assert "asia_high" not in kinds
+
+    def test_merge_runs_before_the_per_side_cap(self, monkeypatch):
+        # levels_per_side=2, three up-side candidates: L_a (dist 1.00) and
+        # L_b (dist 1.05) are within merge tol (0.10) of each other; L_c
+        # (dist 2.00) is a genuinely distinct third level, further than both.
+        #
+        # Correct order (merge THEN cap): merging collapses {L_a, L_b} into
+        # one survivor before the cap runs, so the 2-slot cap keeps BOTH the
+        # merged survivor and L_c -> 2 output levels, one at each distance.
+        #
+        # Wrong order (cap THEN merge): the 2 nearest by raw distance are
+        # {L_a, L_b} -- L_c is capped out before it ever gets a chance to
+        # merge. Merging the surviving pair then collapses them into ONE
+        # level, so the wrong order yields only 1 output level and L_c's
+        # distance is completely absent. This is what "cap first and a merge
+        # could leave fewer than six per side" means in the brief -- and a
+        # test that only checked the final PRICE (which could coincide under
+        # either order) rather than the full membership/count would not
+        # actually discriminate the two orderings.
+        params = ll.LevelParams(levels_per_side=2, merge_tol_atr=0.10, max_dist_atr=100.0)
+        bars = make_bars([100.0] * 5, [99.0] * 5, closes=[95.0] * 5)
+        ctx = self._ctx_with_atr(bars, params)
+        ctx.atr[:] = 1.0
+        close = float(ctx.close[4])
+        L_a = ll.Level(close + 1.00, "pd_high", 0, "up")
+        L_b = ll.Level(close + 1.05, "asia_high", 1, "up")
+        L_c = ll.Level(close + 2.00, "london_high", 2, "up")
+        monkeypatch.setattr(ll, "live_swings", lambda ctx, t, params: [])
+        monkeypatch.setattr(ll, "session_levels", lambda ctx, t, params: [L_a, L_b, L_c])
+        got = ll.build_choice_set(ctx, 4, params)
+        assert len(got) == 2
+        offsets = sorted(round(lv.price - close, 2) for lv in got)
+        assert offsets == [1.0, 2.0]     # L_c's slot must survive
+
+    def test_cap_applies_independently_per_side_not_as_a_global_pool(self, monkeypatch):
+        # 5 valid "up" candidates (distances 0.5..2.5) but only 1 "down"
+        # candidate, placed FARTHER away (distance 10) than every up. With
+        # levels_per_side=2 the correct per-side cap keeps 2 ups (the nearest
+        # two) and the lone down (fewer than the cap, so untouched: 3 total).
+        # A buggy "global pool of 2*levels_per_side=4 nearest overall" cap
+        # would instead keep the 4 nearest ups and drop the down entirely
+        # (4 total, all up) -- these two behaviours are distinguishable by
+        # per-side counts alone.
+        params = ll.LevelParams(levels_per_side=2, merge_tol_atr=0.0, max_dist_atr=100.0)
+        bars = make_bars([100.0] * 5, [99.0] * 5, closes=[95.0] * 5)
+        ctx = self._ctx_with_atr(bars, params)
+        ctx.atr[:] = 1.0
+        close = float(ctx.close[4])
+        ups = [ll.Level(close + d, "pd_high", i, "up")
+               for i, d in enumerate([0.5, 1.0, 1.5, 2.0, 2.5])]
+        down = [ll.Level(close - 10.0, "pd_low", 10, "down")]
+        monkeypatch.setattr(ll, "live_swings", lambda ctx, t, params: [])
+        monkeypatch.setattr(ll, "session_levels", lambda ctx, t, params: ups + down)
+        got = ll.build_choice_set(ctx, 4, params)
+        up_count = sum(1 for lv in got if lv.side == "up")
+        down_count = sum(1 for lv in got if lv.side == "down")
+        assert up_count == 2
+        assert down_count == 1
+
+    def test_merge_prefers_equal_cluster_over_session_alone(self):
+        # Isolates the equal>session leg of the priority order without a
+        # swing in the mix (the brief's 3-way test could pass even if
+        # equal>session were broken, so long as swing still lost to both).
+        equal = ll.Level(100.0, "equal_highs", 10, "up")
+        session = ll.Level(100.02, "pd_high", 12, "up")
+        out = ll._merge_by_priority([session, equal], tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_highs"
+
+    def test_merge_prefers_equal_cluster_over_solo_swing_alone(self):
+        # Isolates the equal>swing leg directly (session absent).
+        equal = ll.Level(100.0, "equal_lows", 10, "down")
+        swing = ll.Level(100.02, "swing_low", 14, "down")
+        out = ll._merge_by_priority([swing, equal], tol=0.5, close=200.0)
+        assert len(out) == 1
+        assert out[0].kind == "equal_lows"
+
+    def test_merge_tie_break_prefers_earlier_formation_idx_when_priority_ties(self):
+        # Two levels of EQUAL priority (both solo swings) within tol: the
+        # survivor must be whichever has the EARLIER formation_idx. Here the
+        # earlier-idx level is placed at the HIGHER price, so a wrong
+        # tie-break like "always keep the lower price" would also give the
+        # wrong answer -- this isolates formation_idx specifically.
+        earlier_higher_price = ll.Level(100.3, "swing_high", 5, "up")
+        later_lower_price = ll.Level(100.1, "swing_high", 20, "up")
+        out = ll._merge_by_priority([later_lower_price, earlier_higher_price],
+                                    tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].price == pytest.approx(100.3)
+        assert out[0].formation_idx == 5
+
+    def test_merge_tie_break_falls_back_to_lower_price_when_idx_also_ties(self):
+        # Equal priority AND equal formation_idx (e.g. a swing high/low
+        # confirming on the same bar) -- the final tie-break is the lower
+        # price. The higher price is listed FIRST in the input so a naive
+        # "first element wins" bug would keep the wrong one.
+        higher = ll.Level(100.5, "swing_high", 7, "up")
+        lower = ll.Level(100.4, "swing_high", 7, "up")
+        out = ll._merge_by_priority([higher, lower], tol=0.5, close=90.0)
+        assert len(out) == 1
+        assert out[0].price == pytest.approx(100.4)
+
+
 class TestSessionMaskBoundaries:
     def test_half_open_bounds_at_the_exact_hour(self):
         # Pins every session's [start, end) endpoint at once: hour 7 belongs
