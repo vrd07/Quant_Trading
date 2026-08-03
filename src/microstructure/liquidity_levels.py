@@ -491,3 +491,57 @@ def build_choice_set(ctx: FrameContext, t: int,
     downs = sorted([lv for lv in levels if lv.side == "down"],
                    key=lambda lv: (close - lv.price, lv.price))[:params.levels_per_side]
     return ups + downs
+
+
+# ------------------------------------------------------------------ features
+
+def _touch_count(ctx: FrameContext, t: int, lv: Level, band: float,
+                 lookback: int) -> float:
+    """Prior approaches within `band` that did not breach the level."""
+    start = max(lv.formation_idx + 1, t - lookback + 1, 0)
+    if start > t:
+        return 0.0
+    if lv.side == "up":
+        seg = ctx.high[start:t + 1]
+        return float(np.count_nonzero((seg >= lv.price - band) & (seg < lv.price)))
+    seg = ctx.low[start:t + 1]
+    return float(np.count_nonzero((seg <= lv.price + band) & (seg > lv.price)))
+
+
+def feature_matrix(ctx: FrameContext, t: int, levels: list[Level],
+                   params: LevelParams = DEFAULTS) -> np.ndarray:
+    """Raw (un-z-scored) feature rows, one per level, in FEATURE_NAMES order."""
+    k = len(levels)
+    X = np.zeros((k, len(FEATURE_NAMES)), dtype=float)
+    if k == 0:
+        return X
+
+    atr = float(ctx.atr[t])
+    close = float(ctx.close[t])
+    atr_pct = float(ctx.atr_pctile[t])
+    band = params.touch_band_atr * atr
+    slope = float(ctx.ema_slope[t])
+    hour = int(ctx.hour[t])
+    s_london = 1.0 if 7 <= hour < 16 else 0.0
+    s_ny = 1.0 if 13 <= hour < 21 else 0.0
+
+    dists = np.array([abs(lv.price - close) for lv in levels], dtype=float)
+    for i, lv in enumerate(levels):
+        up = lv.side == "up"
+        n_closer = float(sum(1 for j, other in enumerate(levels)
+                             if j != i and other.side == lv.side and dists[j] < dists[i]))
+        log_dist = float(np.log1p(dists[i] / atr))
+        aligned = 1.0 if ((up and slope > 0.0) or ((not up) and slope < 0.0)) else 0.0
+        X[i, 0] = log_dist
+        X[i, 1] = n_closer
+        X[i, 2] = 1.0 if up else 0.0
+        X[i, 3] = 1.0 if lv.kind in EQUAL_KINDS else 0.0
+        X[i, 4] = 1.0 if lv.kind in SESSION_KINDS else 0.0
+        X[i, 5] = float(np.log1p(max(0, t - lv.formation_idx)))
+        X[i, 6] = _touch_count(ctx, t, lv, band, params.touch_lookback)
+        X[i, 7] = aligned
+        X[i, 8] = atr_pct
+        X[i, 9] = s_london
+        X[i, 10] = s_ny
+        X[i, 11] = log_dist * atr_pct
+    return X

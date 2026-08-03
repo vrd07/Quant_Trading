@@ -762,3 +762,326 @@ class TestSessionMaskBoundaries:
         assert list(asia) == [True, False, False, False, False, False, False]
         assert list(london) == [False, True, True, True, True, False, False]
         assert list(ny) == [False, False, False, True, True, True, True]
+
+
+class TestFeatureMatrix:
+    def _frame(self, n=300, close=100.0):
+        highs = np.full(n, close + 1.0)
+        lows = np.full(n, close - 1.0)
+        closes = np.full(n, close)
+        return make_bars(highs, lows, closes=closes, start="2026-01-05 00:00")
+
+    def test_shape_and_column_order(self):
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        levels = [ll.Level(110.0, "swing_high", 100, "up"),
+                  ll.Level(90.0, "swing_low", 120, "down")]
+        X = ll.feature_matrix(ctx, 299, levels, ll.DEFAULTS)
+        assert X.shape == (2, len(ll.FEATURE_NAMES)) == (2, 12)
+
+    def test_log_dist_atr_is_log1p_of_atr_normalised_distance(self):
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        lv = ll.Level(110.0, "swing_high", 100, "up")
+        X = ll.feature_matrix(ctx, 299, [lv], ll.DEFAULTS)
+        expected = np.log1p(10.0 / ctx.atr[299])
+        assert X[0, 0] == pytest.approx(expected)
+
+    def test_n_closer_same_side_counts_only_nearer_same_side_members(self):
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        levels = [ll.Level(105.0, "swing_high", 100, "up"),
+                  ll.Level(110.0, "swing_high", 101, "up"),
+                  ll.Level(95.0, "swing_low", 102, "down")]
+        X = ll.feature_matrix(ctx, 299, levels, ll.DEFAULTS)
+        assert X[0, 1] == 0.0
+        assert X[1, 1] == 1.0     # the 105 level sits between price and 110
+        assert X[2, 1] == 0.0     # other side does not count
+
+    def test_side_up_and_type_one_hots(self):
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        levels = [ll.Level(110.0, "equal_highs", 100, "up"),
+                  ll.Level(90.0, "pd_low", 100, "down"),
+                  ll.Level(92.0, "swing_low", 100, "down")]
+        X = ll.feature_matrix(ctx, 299, levels, ll.DEFAULTS)
+        assert list(X[:, 2]) == [1.0, 0.0, 0.0]        # side_up
+        assert list(X[:, 3]) == [1.0, 0.0, 0.0]        # type_equal
+        assert list(X[:, 4]) == [0.0, 1.0, 0.0]        # type_session
+        assert list(X[:, 5])[0] == pytest.approx(np.log1p(199))   # log_age_bars
+
+    def test_touch_count_counts_near_misses_not_breaches(self):
+        n = 60
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 99.0)
+        closes = np.full(n, 99.5)
+        # level at 110; bars 30 and 40 approach to within the band without touching
+        highs[30] = 109.9
+        highs[40] = 109.95
+        bars = make_bars(highs, lows, closes=closes)
+        # ATR here is ~1.24 (the two approach bars spike it above the flat 1.0), so a
+        # 1.0x band reaches down to ~108.8: it catches the two near-misses and excludes
+        # the 100.0 bars. A large band would count every bar in the frame.
+        params = ll.LevelParams(touch_band_atr=1.0)
+        ctx = ll.build_context(bars, params)
+        lv = ll.Level(110.0, "swing_high", 10, "up")
+        X = ll.feature_matrix(ctx, 59, [lv], params)
+        assert X[0, 6] == pytest.approx(2.0)
+
+    def test_trend_align_follows_the_ema_slope_sign(self):
+        n = 300
+        base = 100.0 + np.arange(n) * 0.05          # steadily rising -> positive slope
+        bars = pd.DataFrame({"open": base, "high": base + 0.5, "low": base - 0.5,
+                             "close": base, "volume": 100.0},
+                            index=pd.date_range("2026-01-05", periods=n, freq="15min", tz="UTC"))
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        c = ctx.close[299]
+        up = ll.Level(c + 5.0, "swing_high", 100, "up")
+        down = ll.Level(c - 5.0, "swing_low", 100, "down")
+        X = ll.feature_matrix(ctx, 299, [up, down], ll.DEFAULTS)
+        assert X[0, 7] == 1.0
+        assert X[1, 7] == 0.0
+
+    def test_session_dummies_are_both_set_during_the_overlap(self):
+        # 14:00 UTC is inside London (7-16) and NY (13-21)
+        idx = pd.date_range("2026-01-05 10:00", periods=20, freq="15min", tz="UTC")
+        base = np.full(20, 100.0)
+        bars = pd.DataFrame({"open": base, "high": base + 1, "low": base - 1,
+                             "close": base, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        t = 16                                    # 14:00 UTC
+        assert ctx.hour[t] == 14
+        X = ll.feature_matrix(ctx, t, [ll.Level(110.0, "swing_high", 0, "up")], ll.DEFAULTS)
+        assert X[0, 9] == 1.0 and X[0, 10] == 1.0
+
+    def test_asia_snapshot_sets_neither_session_dummy(self):
+        idx = pd.date_range("2026-01-05 02:00", periods=8, freq="15min", tz="UTC")
+        base = np.full(8, 100.0)
+        bars = pd.DataFrame({"open": base, "high": base + 1, "low": base - 1,
+                             "close": base, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        X = ll.feature_matrix(ctx, 7, [ll.Level(110.0, "swing_high", 0, "up")], ll.DEFAULTS)
+        assert X[0, 9] == 0.0 and X[0, 10] == 0.0
+
+    def test_interaction_is_the_product_of_columns_0_and_8(self):
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        X = ll.feature_matrix(ctx, 299, [ll.Level(110.0, "swing_high", 100, "up")],
+                              ll.DEFAULTS)
+        assert X[0, 11] == pytest.approx(X[0, 0] * X[0, 8])
+
+    def test_all_features_are_finite_on_a_real_shaped_frame(self):
+        bars = self._frame(n=400)
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        levels = ll.build_choice_set(ctx, 399, ll.DEFAULTS)
+        X = ll.feature_matrix(ctx, 399, levels, ll.DEFAULTS)
+        assert np.isfinite(X).all()
+
+    # ---- hardening beyond the brief: pin column order, exact-zero trend_align,
+    # touch_count's three boundary rules, the session-dummy edges, the
+    # n_closer_same_side tie case, and the log_age_bars floor ----
+
+    def test_column_order_matches_feature_names_index_by_index(self):
+        """Fingerprint fixture: side_up/type_equal/type_session each carry a
+        DIFFERENT one-hot pattern across the four rows (unlike the brief's own
+        test_side_up_and_type_one_hots fixture above, where row 0 happens to
+        score 1.0 on BOTH side_up and type_equal -- identical columns there,
+        so a transposition of columns 2 and 3 would slip through undetected).
+        n_closer_same_side, log_dist_atr and log_age_bars are independently
+        computed from the same rows, and atr_pctile is pinned away from 1.0
+        so the interaction column (col0 * col8) is provably NOT the same
+        vector as col0 -- otherwise swapping columns 0 and 11 would also be
+        invisible. Every assertion below is name-indexed via
+        FEATURE_NAMES.index(...), so a reordering of the contract itself
+        (not just a hardcoded position) is what is under test.
+        """
+        bars = self._frame(n=300, close=100.0)
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        # Pin the frame-level scalars directly so the expected values below
+        # depend only on feature_matrix's own algebra, not on the ATR/
+        # percentile/slope recursions being reproduced correctly elsewhere.
+        ctx.atr[:] = 2.0
+        ctx.atr_pctile[:] = 0.7
+        ctx.ema_slope[:] = 0.0
+        ctx.hour[:] = 2                 # Asia -> both session dummies read 0
+        t = 299
+
+        levels = [
+            ll.Level(110.0, "equal_highs", 250, "up"),    # dist 10, age 49
+            ll.Level(108.0, "swing_high", 200, "up"),     # dist 8,  age 99
+            ll.Level(90.0, "pd_low", 280, "down"),        # dist 10, age 19
+            ll.Level(85.0, "swing_low", 100, "down"),     # dist 15, age 199
+        ]
+        X = ll.feature_matrix(ctx, t, levels, ll.DEFAULTS)
+
+        def col(name):
+            return list(X[:, ll.FEATURE_NAMES.index(name)])
+
+        atr, apct = 2.0, 0.7
+        dists = (10.0, 8.0, 10.0, 15.0)
+        ages = (49, 99, 19, 199)
+        expected_log_dist = [np.log1p(d / atr) for d in dists]
+        expected_log_age = [np.log1p(a) for a in ages]
+
+        assert col("log_dist_atr") == pytest.approx(expected_log_dist)
+        assert col("n_closer_same_side") == [1.0, 0.0, 0.0, 1.0]
+        assert col("side_up") == [1.0, 1.0, 0.0, 0.0]
+        assert col("type_equal") == [1.0, 0.0, 0.0, 0.0]
+        assert col("type_session") == [0.0, 0.0, 1.0, 0.0]
+        assert col("log_age_bars") == pytest.approx(expected_log_age)
+        assert col("touch_count") == [0.0, 0.0, 0.0, 0.0]
+        assert col("atr_pctile") == pytest.approx([0.7, 0.7, 0.7, 0.7])
+        assert col("dist_x_atrpctile") == pytest.approx(
+            [v * apct for v in expected_log_dist])
+        # col11 must differ from col0 now that atr_pctile != 1.0 -- otherwise
+        # a 0<->11 transposition would be numerically invisible.
+        assert col("dist_x_atrpctile") != pytest.approx(col("log_dist_atr"))
+
+    def test_trend_align_is_zero_on_both_sides_at_exactly_zero_slope(self):
+        """Locked definition: an exactly-zero slope scores 0.0 for BOTH the
+        up and the down side -- not 1.0 for one of them. A `>=`/`<=` in
+        either branch of the aligned check would flip one of these to 1.0."""
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        ctx.ema_slope[:] = 0.0
+        c = ctx.close[299]
+        up = ll.Level(c + 5.0, "swing_high", 100, "up")
+        down = ll.Level(c - 5.0, "swing_low", 100, "down")
+        X = ll.feature_matrix(ctx, 299, [up, down], ll.DEFAULTS)
+        col = ll.FEATURE_NAMES.index("trend_align")
+        assert X[0, col] == 0.0
+        assert X[1, col] == 0.0
+
+    def test_touch_count_edge_cases_band_boundary_and_at_level_breach(self):
+        """Two boundary rules pinned against a known ATR (overridden to an
+        exact 1.0) so the band threshold is a hand-checkable round number:
+        a bar whose high sits EXACTLY at the band's outer edge
+        (110 - 1.0*1.0 = 109.0) must count (`>=`, not `>`); a bar whose high
+        sits EXACTLY at the level price (110.0) is a breach, not a touch,
+        and must NOT count (`< price`, not `<= price`)."""
+        n = 20
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 99.0)
+        closes = np.full(n, 99.5)
+        highs[5] = 109.0      # exactly at the band edge
+        highs[10] = 110.0     # exactly AT the level -- a breach
+        bars = make_bars(highs, lows, closes=closes)
+        params = ll.LevelParams(touch_band_atr=1.0)
+        ctx = ll.build_context(bars, params)
+        ctx.atr[:] = 1.0
+        lv = ll.Level(110.0, "swing_high", 0, "up")
+        X = ll.feature_matrix(ctx, n - 1, [lv], params)
+        assert X[0, ll.FEATURE_NAMES.index("touch_count")] == pytest.approx(1.0)
+
+    def test_touch_count_scan_starts_strictly_after_formation_idx(self):
+        """The near-miss bar sits at the SAME index the level formed on. Even
+        though it is within the band, it must not count -- the scan window
+        is `formation_idx + 1 .. t`, strictly after formation, not
+        `formation_idx .. t`. A mutant that started the scan AT
+        formation_idx (no +1) would count it."""
+        n = 20
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 99.0)
+        closes = np.full(n, 99.5)
+        highs[8] = 109.5      # a near miss, if it were in the scan window
+        bars = make_bars(highs, lows, closes=closes)
+        params = ll.LevelParams(touch_band_atr=1.0)
+        ctx = ll.build_context(bars, params)
+        ctx.atr[:] = 1.0
+        lv = ll.Level(110.0, "swing_high", 8, "up")     # formed ON the near-miss bar
+        X = ll.feature_matrix(ctx, n - 1, [lv], params)
+        assert X[0, ll.FEATURE_NAMES.index("touch_count")] == 0.0
+
+    def test_touch_count_respects_touch_lookback_window(self):
+        """A near-miss that sits before the lookback horizon must not count,
+        even though it is comfortably after formation_idx. Pins
+        `t - lookback + 1` as the other half of the scan-start max(), not
+        just formation_idx + 1 -- a mutant that dropped the lookback term
+        would count it."""
+        n = 30
+        highs = np.full(n, 100.0)
+        lows = np.full(n, 99.0)
+        closes = np.full(n, 99.5)
+        highs[2] = 109.5       # near miss, but before the lookback horizon
+        bars = make_bars(highs, lows, closes=closes)
+        params = ll.LevelParams(touch_band_atr=1.0, touch_lookback=10)
+        ctx = ll.build_context(bars, params)
+        ctx.atr[:] = 1.0
+        lv = ll.Level(110.0, "swing_high", 0, "up")
+        t = n - 1               # 29; lookback=10 -> scan starts at 20, bar 2 excluded
+        X = ll.feature_matrix(ctx, t, [lv], params)
+        assert X[0, ll.FEATURE_NAMES.index("touch_count")] == 0.0
+
+    def test_session_dummy_boundaries_at_each_half_open_edge(self):
+        """Pins every edge of the two [start, end) session windows via the
+        snapshot hour (feature_matrix classifies the snapshot, not the
+        level): 07:00 opens london only; 13:00 is the first minute BOTH are
+        set (the overlap's start); 16:00 closes london out while ny keeps
+        running; 21:00 closes ny out too, landing back in the no-session
+        tail alongside 22:00 -- both must read exactly like Asia (0, 0)."""
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        lv = ll.Level(110.0, "swing_high", 0, "up")
+        expected = {
+            7: (1.0, 0.0),
+            13: (1.0, 1.0),
+            16: (0.0, 1.0),
+            21: (0.0, 0.0),
+            22: (0.0, 0.0),
+        }
+        lon_col = ll.FEATURE_NAMES.index("session_london")
+        ny_col = ll.FEATURE_NAMES.index("session_ny")
+        for hour, (exp_lon, exp_ny) in expected.items():
+            ctx.hour[299] = hour
+            X = ll.feature_matrix(ctx, 299, [lv], ll.DEFAULTS)
+            assert X[0, lon_col] == exp_lon, hour
+            assert X[0, ny_col] == exp_ny, hour
+
+    def test_n_closer_same_side_ties_do_not_count(self):
+        """Two same-side levels sit at the IDENTICAL price (hence identical
+        distance from close). Neither is strictly closer than the other, so
+        a `<=` in place of the `<` would make each count the other and read
+        1.0 where the correct answer is 0.0 for both."""
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        levels = [ll.Level(105.0, "swing_high", 100, "up"),
+                  ll.Level(105.0, "equal_highs", 120, "up")]
+        X = ll.feature_matrix(ctx, 299, levels, ll.DEFAULTS)
+        col = ll.FEATURE_NAMES.index("n_closer_same_side")
+        assert X[0, col] == 0.0
+        assert X[1, col] == 0.0
+
+    def test_all_features_are_finite_with_a_genuinely_nonempty_choice_set(self):
+        """The brief's own fixture above (self._frame: flat highs/lows/closes)
+        produces ZERO un-swept pivots -- every interior bar ties for both the
+        rolling max and min, and ties sweep (per pivot_masks/next_ge_index),
+        so every candidate pivot dies on the very next identical bar.
+        build_choice_set returns [] on it (verified empirically), so
+        test_all_features_are_finite_on_a_real_shaped_frame's per-row loop
+        body never actually executes and its isfinite check is vacuously
+        true regardless of any bug inside the loop -- the same flat/
+        monotonic fixture trap already hit twice elsewhere in this module.
+        Reused here is make_session_bars, already built to produce genuine
+        un-swept swing AND session levels, so the loop body genuinely runs."""
+        bars = make_session_bars(n_days=5)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        t = len(bars) - 1
+        levels = ll.build_choice_set(ctx, t, SESSION_PARAMS)
+        assert len(levels) > 0          # not vacuous
+        X = ll.feature_matrix(ctx, t, levels, SESSION_PARAMS)
+        assert np.isfinite(X).all()
+
+    def test_log_age_bars_floors_negative_age_at_zero(self):
+        """Pins the `max(0, t - formation_idx)` floor: a level whose
+        formation_idx equals t reads log1p(0) == 0.0, and one whose
+        formation_idx is AFTER t (age would go negative under a raw
+        subtraction) must floor to the same 0.0 rather than propagate a
+        negative value into log1p (whose domain is x > -1)."""
+        bars = self._frame()
+        ctx = ll.build_context(bars, ll.DEFAULTS)
+        at_t = ll.Level(110.0, "swing_high", 299, "up")     # age exactly 0
+        future = ll.Level(108.0, "swing_high", 305, "up")   # "formed after t"
+        X = ll.feature_matrix(ctx, 299, [at_t, future], ll.DEFAULTS)
+        col = ll.FEATURE_NAMES.index("log_age_bars")
+        assert X[0, col] == 0.0
+        assert X[1, col] == 0.0
