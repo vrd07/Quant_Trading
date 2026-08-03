@@ -321,3 +321,108 @@ def cluster_equal(levels: list[Level], tol: float, close: float) -> list[Level]:
     out += _cluster_one_side(lows, tol, "equal_lows", False, close)
     out += rest
     return out
+
+
+# ------------------------------------------------------- session / period
+
+# UTC session windows, half-open [start, end). The Asia window matches what
+# london_breakout already uses; London/NY overlap 13:00-16:00 by design.
+SESSIONS = (
+    ("asia", 0, 7),
+    ("london", 7, 16),
+    ("ny", 13, 21),
+)
+
+
+def _session_mask(hour: np.ndarray, start: int, end: int) -> np.ndarray:
+    return (hour >= start) & (hour < end)
+
+
+def _group_runs(ids: np.ndarray, lo: int, hi: int) -> list[tuple[int, int]]:
+    """Contiguous [start, end] index runs of equal non-negative id in [lo, hi]."""
+    runs: list[tuple[int, int]] = []
+    i = lo
+    while i <= hi:
+        if ids[i] < 0:
+            i += 1
+            continue
+        j = i
+        while j + 1 <= hi and ids[j + 1] == ids[i]:
+            j += 1
+        runs.append((i, j))
+        i = j + 1
+    return runs
+
+
+def _extreme_level(ctx: FrameContext, lo: int, hi: int, t: int, want_high: bool,
+                   kind: str, forming: bool, params: LevelParams) -> Level | None:
+    """Build one extreme level from bars [lo, hi], applying un-swept and forming rules."""
+    if hi < lo:
+        return None
+    if want_high:
+        seg = ctx.high[lo:hi + 1]
+        k = int(np.argmax(seg))
+        price = float(seg[k])
+        # un-swept: nothing after the extreme bar, up to t, may have reached it
+        after = ctx.high[lo + k + 1:t + 1]
+        if after.size and float(after.max()) >= price:
+            return None
+    else:
+        seg = ctx.low[lo:hi + 1]
+        k = int(np.argmin(seg))
+        price = float(seg[k])
+        after = ctx.low[lo + k + 1:t + 1]
+        if after.size and float(after.min()) <= price:
+            return None
+    c = ctx.close[t]
+    if price == c:
+        return None
+    if forming:
+        # A forming extreme sitting on top of price is not a pool, it IS price.
+        if abs(price - c) < params.forming_band_atr * ctx.atr[t]:
+            return None
+    return Level(price, kind, lo + k, "up" if price > c else "down")
+
+
+def session_levels(ctx: FrameContext, t: int,
+                   params: LevelParams = DEFAULTS) -> list[Level]:
+    """Prior-completed and forming session extremes plus prior day/week extremes."""
+    lo = max(0, t - params.scan_bars + 1)
+    out: list[Level] = []
+
+    for name, h0, h1 in SESSIONS:
+        mask = _session_mask(ctx.hour, h0, h1)
+        ids = np.where(mask, ctx.day_id, -1)
+        runs = _group_runs(ids, lo, t)
+        if not runs:
+            continue
+        current = runs[-1] if runs[-1][1] == t else None
+        prior = runs[-2] if current is not None and len(runs) >= 2 else (
+            runs[-1] if current is None else None)
+        if prior is not None:
+            p_lo, p_hi = prior
+            for want_high, suffix in ((True, "high"), (False, "low")):
+                lv = _extreme_level(ctx, p_lo, p_hi, t, want_high,
+                                    f"{name}_{suffix}", False, params)
+                if lv is not None:
+                    out.append(lv)
+        if current is not None:
+            c_lo, c_hi = current
+            for want_high, suffix in ((True, "high"), (False, "low")):
+                lv = _extreme_level(ctx, c_lo, c_hi, t, want_high,
+                                    f"{name}_{suffix}", True, params)
+                if lv is not None:
+                    out.append(lv)
+
+    for ids, prefix in ((ctx.day_id, "pd"), (ctx.week_id, "pw")):
+        runs = _group_runs(ids, lo, t)
+        if len(runs) < 2:
+            continue
+        p_lo, p_hi = runs[-2]           # the last fully completed period
+        for want_high, suffix in ((True, "high"), (False, "low")):
+            lv = _extreme_level(ctx, p_lo, p_hi, t, want_high,
+                                f"{prefix}_{suffix}", False, params)
+            if lv is not None:
+                out.append(lv)
+
+    return out

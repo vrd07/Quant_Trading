@@ -284,3 +284,239 @@ class TestEqualClustering:
         assert len(out) == 1
         assert out[0].kind == "swing_low"
         assert out[0].side == "up"
+
+
+SESSION_PARAMS = ll.LevelParams(scan_bars=1000, forming_band_atr=0.25)
+
+
+def make_session_bars(n_days=3, start_day="2026-01-05"):
+    """96 15m bars per UTC day, each day a distinct high/low.
+
+    NOTE: the brief's original version of this helper (`base = 100 + arange*0.01`,
+    a single continuously-rising ramp with no reset) is unusable for testing prior-
+    period highs: with price monotonically climbing forever, the very next bar
+    after any "yesterday" always trades above yesterday's high, so pd_high /
+    asia_high / pw_high could never survive the un-swept rule no matter how the
+    rest of the implementation is written (verified empirically -- the brief's
+    own test_prior_day_high_and_low_are_yesterdays_extremes fails against the
+    brief's own reference implementation with that helper). Fixed here with a
+    per-day tent: each day rises to a peak at bar 20 (inside the Asia window,
+    so an "asia session's own high" can't be exceeded by that day's own later
+    hours either) then declines to a trough at the day's last bar. Amplitude
+    shrinks geometrically (20 * 0.8**day) so day 0 is strictly the tallest
+    peak and deepest trough of the whole frame -- no later day's range ever
+    pokes outside an earlier one, so prior-day/prior-week extremes stay
+    un-swept arbitrarily far into the future, while each day/week is still
+    trivially distinguishable by its own peak/trough value.
+    """
+    idx = pd.date_range(f"{start_day} 00:00", periods=96 * n_days, freq="15min", tz="UTC")
+    n = len(idx)
+    bar_in_day = np.arange(n) % 96
+    day_of = np.arange(n) // 96
+    amplitude = 20.0 * (0.8 ** day_of)
+    shape = np.where(bar_in_day <= 20, bar_in_day / 20.0,
+                     1.0 - 2.0 * (bar_in_day - 20) / 75.0)
+    base = 100.0 + amplitude * shape
+    return pd.DataFrame({"open": base, "high": base + 0.5, "low": base - 0.5,
+                         "close": base, "volume": 100.0}, index=idx)
+
+
+class TestSessionLevels:
+    def test_prior_day_high_and_low_are_yesterdays_extremes(self):
+        bars = make_session_bars(n_days=3)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        t = 96 * 2 + 40                      # mid third day
+        got = {lv.kind: lv.price for lv in ll.session_levels(ctx, t, SESSION_PARAMS)}
+        prev_day = bars.iloc[96:192]
+        assert got["pd_high"] == pytest.approx(prev_day.high.max())
+        assert got["pd_low"] == pytest.approx(prev_day.low.min())
+
+    def test_prior_completed_asia_uses_yesterdays_window_not_todays(self):
+        bars = make_session_bars(n_days=3)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        t = 96 * 2 + 40                      # 10:00 UTC day 3 -> Asia already closed today
+        got = {lv.kind: lv.price for lv in ll.session_levels(ctx, t, SESSION_PARAMS)}
+        todays_asia = bars.iloc[192:192 + 28]         # 00:00-07:00 of day 3
+        assert got["asia_high"] == pytest.approx(todays_asia.high.max())
+
+    def test_forming_session_extreme_at_current_price_is_excluded(self):
+        # price printing a new session high: the level IS price, so it is not a pool
+        idx = pd.date_range("2026-01-05 07:00", periods=8, freq="15min", tz="UTC")
+        base = 100.0 + np.arange(8) * 1.0
+        bars = pd.DataFrame({"open": base, "high": base + 0.05, "low": base - 0.05,
+                             "close": base + 0.04, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        kinds = {lv.kind for lv in ll.session_levels(ctx, 7, SESSION_PARAMS)}
+        assert "london_high" not in kinds
+
+    def test_forming_session_extreme_enters_once_price_pulls_away(self):
+        idx = pd.date_range("2026-01-05 07:00", periods=12, freq="15min", tz="UTC")
+        highs = np.full(12, 100.0)
+        highs[2] = 130.0                     # session high set early
+        lows = np.full(12, 99.0)
+        closes = np.full(12, 99.5)
+        bars = pd.DataFrame({"open": closes, "high": highs, "low": lows,
+                             "close": closes, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        got = {lv.kind: lv.price for lv in ll.session_levels(ctx, 11, SESSION_PARAMS)}
+        assert got["london_high"] == pytest.approx(130.0)
+
+    def test_swept_period_level_drops_out(self):
+        bars = make_session_bars(n_days=3).copy()
+        # blow through the prior-day high on the third day
+        bars.iloc[96 * 2 + 10, bars.columns.get_loc("high")] = 10_000.0
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        kinds = {lv.kind for lv in ll.session_levels(ctx, 96 * 2 + 40, SESSION_PARAMS)}
+        assert "pd_high" not in kinds
+
+    def test_prior_week_extremes_use_the_previous_iso_week(self):
+        # start on a Monday so week boundaries are unambiguous
+        bars = make_session_bars(n_days=10, start_day="2026-01-05")   # 2026-01-05 is a Monday
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        t = 96 * 8                            # inside the second ISO week
+        got = {lv.kind: lv.price for lv in ll.session_levels(ctx, t, SESSION_PARAMS)}
+        first_week = bars.iloc[:96 * 7]
+        assert got["pw_high"] == pytest.approx(first_week.high.max())
+        assert got["pw_low"] == pytest.approx(first_week.low.min())
+
+    def test_formation_idx_points_at_the_bar_that_set_the_extreme(self):
+        bars = make_session_bars(n_days=3).copy()
+        spike = 96 + 33
+        bars.iloc[spike, bars.columns.get_loc("high")] = 500.0
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        levels = {lv.kind: lv for lv in ll.session_levels(ctx, 96 * 2 + 40, SESSION_PARAMS)}
+        assert levels["pd_high"].formation_idx == spike
+
+    # ---- hardening beyond the brief: pin the exact boundaries, not just the middle ----
+
+    def test_prior_session_run_outside_window_is_most_recent_completed_not_two_back(self):
+        """At a snapshot OUTSIDE any session window, 'prior' must be the most
+        recently completed run (runs[-1], already finished today) -- NOT one
+        run further back (runs[-2]). A flat `prior = runs[-2]` mutant would
+        silently pick day 2's asia session here instead of day 3's; the
+        explicit != assertion below is what would catch that mutant, since a
+        plain equality against the right answer alone wouldn't distinguish it
+        from "happens to also be true"."""
+        bars = make_session_bars(n_days=3)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        t = 96 * 2 + 40   # 10:00 UTC day 3, asia (0-7) already closed today
+        got = {lv.kind: lv.price for lv in ll.session_levels(ctx, t, SESSION_PARAMS)}
+        day3_asia = bars.iloc[192:192 + 28]     # today's already-completed asia run
+        day2_asia = bars.iloc[96:96 + 28]       # one run further back -- the wrong,
+                                                 # flat-runs[-2] answer
+        assert got["asia_high"] == pytest.approx(day3_asia.high.max())
+        assert got["asia_high"] != pytest.approx(day2_asia.high.max())
+
+    def test_prior_and_forming_session_instances_coexist_under_same_kind(self):
+        """A completed run (yesterday) and a still-forming run (today) both
+        emit a Level tagged "london_high" -- they are distinguished by
+        formation_idx, not by kind. A naive {lv.kind: lv.price} lookup (as
+        used in most tests above, for convenience) would silently keep only
+        one of the two; this test asserts on the full filtered list instead,
+        so both the prior and current branches of the two-branch conditional
+        are proven to run simultaneously rather than one masking the other."""
+        day1_highs = [100.0] * 36
+        day1_highs[10] = 150.0                 # yesterday's completed london high
+        day1 = make_bars(day1_highs, [90.0] * 36, closes=[95.0] * 36,
+                         start="2026-01-05 07:00")
+        day2_highs = [100.0] * 12
+        day2_highs[2] = 130.0                  # today's forming london high (smaller,
+                                                # so it never threatens yesterday's level)
+        day2 = make_bars(day2_highs, [90.0] * 12, closes=[95.0] * 12,
+                         start="2026-01-06 07:00")
+        bars = pd.concat([day1, day2])
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        levels = [lv for lv in ll.session_levels(ctx, 47, SESSION_PARAMS)
+                 if lv.kind == "london_high"]
+        assert len(levels) == 2
+        by_idx = {lv.formation_idx: lv.price for lv in levels}
+        assert by_idx[10] == pytest.approx(150.0)
+        assert by_idx[38] == pytest.approx(130.0)
+
+    def test_overlap_hours_contribute_to_both_london_and_ny_forming(self):
+        # 13:00-15:45 sits inside BOTH the london [7,16) and ny [13,21) windows.
+        # The same spike bar must independently qualify as the forming extreme
+        # for both session types -- proving the overlap is real, not just an
+        # artifact of how the two masks happen to be defined.
+        idx = pd.date_range("2026-01-05 13:00", periods=12, freq="15min", tz="UTC")
+        highs = np.full(12, 100.0)
+        highs[2] = 130.0
+        lows = np.full(12, 99.0)
+        closes = np.full(12, 99.5)
+        bars = pd.DataFrame({"open": closes, "high": highs, "low": lows,
+                             "close": closes, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        levels = {lv.kind: lv for lv in ll.session_levels(ctx, 11, SESSION_PARAMS)}
+        assert levels["london_high"].price == pytest.approx(130.0)
+        assert levels["ny_high"].price == pytest.approx(130.0)
+        assert levels["london_high"].formation_idx == 2
+        assert levels["ny_high"].formation_idx == 2
+
+    def test_forming_extreme_formation_idx_points_at_the_spike_not_run_start(self):
+        # spike sits at local index 5 -- neither the run's start (0) nor its
+        # end (11, the snapshot bar) -- so this can't pass by accident from a
+        # formation_idx that was hardcoded to the run boundary.
+        idx = pd.date_range("2026-01-05 07:00", periods=12, freq="15min", tz="UTC")
+        highs = np.full(12, 100.0)
+        highs[5] = 130.0
+        lows = np.full(12, 99.0)
+        closes = np.full(12, 99.5)
+        bars = pd.DataFrame({"open": closes, "high": highs, "low": lows,
+                             "close": closes, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        levels = {lv.kind: lv for lv in ll.session_levels(ctx, 11, SESSION_PARAMS)}
+        assert levels["london_high"].formation_idx == 5
+
+    def test_forming_band_boundary_at_exactly_threshold_is_included(self):
+        # Every bar's true range is forced to exactly 1.0 (high-low=1.0, and
+        # gaps against the constant prior close of 99.5 stay under 1.0), so
+        # Wilder's ATR recursion is a fixed point at 1.0 for the whole frame
+        # -- this pins ctx.atr[t] == 1.0 without depending on any decay math.
+        # The forming-band threshold is then exactly 0.25 * 1.0 = 0.25, and
+        # bar 0's high (100.0) is placed exactly 0.25 away from the snapshot
+        # close (99.75). The comparison in the implementation is strict `<`,
+        # so a distance EQUAL to the threshold must NOT be treated as "at
+        # price" -- the level must survive.
+        idx = pd.date_range("2026-01-05 07:00", periods=5, freq="15min", tz="UTC")
+        highs = np.array([100.0, 99.9, 99.9, 99.9, 99.9])
+        lows = np.array([99.0, 98.9, 98.9, 98.9, 98.9])
+        closes = np.array([99.5, 99.5, 99.5, 99.5, 99.75])
+        bars = pd.DataFrame({"open": closes, "high": highs, "low": lows,
+                             "close": closes, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        assert ctx.atr[4] == pytest.approx(1.0)      # pin the constructed ATR
+        kinds = {lv.kind for lv in ll.session_levels(ctx, 4, SESSION_PARAMS)}
+        assert "london_high" in kinds
+
+    def test_forming_band_just_inside_threshold_is_excluded(self):
+        # Identical construction to the boundary test above, except the
+        # snapshot close moves one cent closer (distance 0.24 < the 0.25
+        # threshold) -- this must now be excluded. Together the two tests pin
+        # the comparison as strict `<` (not `<=`) on both sides of the line.
+        idx = pd.date_range("2026-01-05 07:00", periods=5, freq="15min", tz="UTC")
+        highs = np.array([100.0, 99.9, 99.9, 99.9, 99.9])
+        lows = np.array([99.0, 98.9, 98.9, 98.9, 98.9])
+        closes = np.array([99.5, 99.5, 99.5, 99.5, 99.76])
+        bars = pd.DataFrame({"open": closes, "high": highs, "low": lows,
+                             "close": closes, "volume": 100.0}, index=idx)
+        ctx = ll.build_context(bars, SESSION_PARAMS)
+        assert ctx.atr[4] == pytest.approx(1.0)
+        kinds = {lv.kind for lv in ll.session_levels(ctx, 4, SESSION_PARAMS)}
+        assert "london_high" not in kinds
+
+
+class TestSessionMaskBoundaries:
+    def test_half_open_bounds_at_the_exact_hour(self):
+        # Pins every session's [start, end) endpoint at once: hour 7 belongs
+        # to london but NOT asia (start inclusive); hour 16 belongs to
+        # NEITHER london nor ny (end exclusive on london, ny starts at 13);
+        # hours 13-15 belong to BOTH london and ny (the intentional overlap);
+        # hour 20 still belongs to ny (just under its 21 end); hour 6 belongs
+        # only to asia.
+        hour = np.array([6, 7, 12, 13, 15, 16, 20])
+        asia = ll._session_mask(hour, 0, 7)
+        london = ll._session_mask(hour, 7, 16)
+        ny = ll._session_mask(hour, 13, 21)
+        assert list(asia) == [True, False, False, False, False, False, False]
+        assert list(london) == [False, True, True, True, True, False, False]
+        assert list(ny) == [False, False, False, True, True, True, True]
