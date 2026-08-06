@@ -13,6 +13,7 @@ BTC/USD, **XAUUSD**, etc.) on any MT5 symbol. Built and tuned for **XAUUSD (Gold
 | `GoldenChart_RSI.mq5` | Sub-window | **RSI (14)** with the pink-shaded 40–60 band + dotted 30/40/60/70 levels |
 | `GoldenChart_StochRSI.mq5` | Sub-window | **Stoch RSI (14, 14, 3, 3)** — %K (blue) / %D (orange) + shaded 20–80 band. *(MT5 has no built-in Stoch RSI.)* |
 | `GoldenChart_MACD.mq5` | Sub-window | **MACD (12, 26, 9)** — green/red histogram + MACD/signal lines |
+| `GoldenChart_Liquidity.mq5` | Main chart | **Liquidity race**: un-swept swing/equal/session levels drawn as rays, ranked by a calibrated `P(hit first in 24h)` from `liquidity_coefficients.mqh`, plus a corner ranking panel. Detection is fixed at M15 regardless of chart TF. Requires `liquidity_coefficients.mqh` beside it. |
 
 ## Install
 
@@ -95,3 +96,20 @@ Indicator inputs: `InpFile` (default `mt5_chart_signals.csv`), the three colors,
 - Stoch RSI is computed from scratch (RSI → stochastic → %K SMA → %D SMA), `(14,14,3,3)`.
 - The dashed S/R lines are MT5 `OBJ_HLINE` objects, so they show the colored price label on the
   right scale just like the reference screenshots, and self-update on each new bar.
+
+## Liquidity race — regenerating the coefficients
+
+`liquidity_coefficients.mqh` is **generated**. Never hand-edit it — hand-tuning turns a
+calibrated model into a guess. To change the weights:
+
+```bash
+python scripts/research_liquidity_race.py
+```
+
+That rewrites the `.mqh` and `reports/liquidity_race_calibration.md` together, then
+recompile the indicator (F7). After any change to detection logic on either side, re-run
+the parity check:
+
+```bash
+python scripts/check_liquidity_parity.py --dir data/parity
+```
