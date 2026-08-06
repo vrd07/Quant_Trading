@@ -109,3 +109,131 @@ def subset(data: ChoiceData, snap_mask: np.ndarray) -> ChoiceData:
                       snap_id=snap_remap[data.snap_id[row_idx]],
                       chosen=chosen,
                       day_id=data.day_id[keep_snaps])
+
+
+# ------------------------------------------------------------------ metrics
+
+import pandas as pd  # noqa: E402  (kept beside the metrics that use it)
+
+
+def per_snapshot_nll(beta: np.ndarray, data: ChoiceData) -> np.ndarray:
+    """-log P(actual outcome) for each snapshot. Bootstrapping needs the terms."""
+    v, denom = _utilities(beta, data)
+    terms = np.log(denom)
+    picked = data.chosen >= 0
+    terms[picked] -= v[data.chosen[picked]]
+    return terms
+
+
+def log_loss(beta: np.ndarray, data: ChoiceData) -> float:
+    if data.n_snap == 0:
+        return float("nan")
+    return float(per_snapshot_nll(beta, data).mean())
+
+
+def top1_accuracy(beta: np.ndarray, data: ChoiceData) -> tuple[float, float]:
+    """(overall, conditional). Overall includes the outside option as a candidate."""
+    if data.n_snap == 0:
+        return float("nan"), float("nan")
+    p_rows, p_none = predict_probs(beta, data)
+    order = np.lexsort((-p_rows, data.snap_id))
+    starts = np.searchsorted(data.snap_id[order], np.arange(data.n_snap))
+    best_row = order[starts]                       # highest-p row per snapshot
+    best_p = p_rows[best_row]
+    pred_none = best_p <= p_none
+    correct = np.where(pred_none, data.chosen < 0, data.chosen == best_row)
+    overall = float(correct.mean())
+    hit = data.chosen >= 0
+    conditional = float((data.chosen[hit] == best_row[hit]).mean()) if hit.any() else float("nan")
+    return overall, conditional
+
+
+def day_block_folds(day_id: np.ndarray, n_folds: int = 5,
+                    seed: int = 0) -> list[np.ndarray]:
+    """Boolean snapshot masks, assigned so a whole day lands in one fold."""
+    days = np.unique(day_id)
+    rng = np.random.default_rng(seed)
+    shuffled = rng.permutation(days)
+    buckets = np.array_split(shuffled, n_folds)
+    return [np.isin(day_id, b) for b in buckets]
+
+
+def day_block_bootstrap_diff(beta_model: np.ndarray, beta_base: np.ndarray,
+                             data_model: ChoiceData, data_base: ChoiceData,
+                             n_reps: int = 2000, seed: int = 0
+                             ) -> tuple[float, float, float]:
+    """95% CI on mean(model NLL) - mean(baseline NLL), resampling WHOLE DAYS.
+
+    The two ChoiceData objects describe the same snapshots in the same order — they
+    differ only in their feature columns (full model vs distance-only baseline).
+    """
+    if data_model.n_snap != data_base.n_snap:
+        raise ValueError("model and baseline must cover the same snapshots")
+    nll_m = per_snapshot_nll(beta_model, data_model)
+    nll_b = per_snapshot_nll(beta_base, data_base)
+    diff = nll_m - nll_b
+
+    days = np.unique(data_model.day_id)
+    by_day = {d: np.flatnonzero(data_model.day_id == d) for d in days}
+    day_sums = np.array([diff[by_day[d]].sum() for d in days])
+    day_counts = np.array([len(by_day[d]) for d in days], dtype=float)
+
+    rng = np.random.default_rng(seed)
+    stats = np.empty(n_reps, dtype=float)
+    n_days = len(days)
+    for r in range(n_reps):
+        pick = rng.integers(0, n_days, size=n_days)
+        stats[r] = day_sums[pick].sum() / day_counts[pick].sum()
+    lo, hi = np.percentile(stats, [2.5, 97.5])
+    return float(diff.mean()), float(lo), float(hi)
+
+
+def reliability(p: np.ndarray, hit: np.ndarray, n_bins: int = 10) -> pd.DataFrame:
+    """Predicted vs observed frequency, by equal-count bin of predicted probability."""
+    p = np.asarray(p, dtype=float)
+    hit = np.asarray(hit).astype(bool)
+    if p.size == 0:
+        return pd.DataFrame(columns=["bin", "n", "p_mean", "observed", "gap"])
+    order = np.argsort(p)
+    buckets = np.array_split(order, n_bins)
+    rows = []
+    for b, idx in enumerate(buckets):
+        if len(idx) == 0:
+            continue
+        pm = float(p[idx].mean())
+        ob = float(hit[idx].mean())
+        rows.append({"bin": b, "n": int(len(idx)), "p_mean": pm,
+                     "observed": ob, "gap": ob - pm})
+    return pd.DataFrame(rows)
+
+
+def expected_calibration_error(table: pd.DataFrame) -> float:
+    if table.empty:
+        return float("nan")
+    w = table["n"].to_numpy(dtype=float)
+    return float(np.sum(w * np.abs(table["gap"].to_numpy())) / w.sum())
+
+
+def platt_scale(p: np.ndarray, hit: np.ndarray) -> tuple[float, float]:
+    """Fit logit(p_cal) = a * logit(p) + b by 1-D logistic regression."""
+    eps = 1e-9
+    z = np.log(np.clip(p, eps, 1 - eps) / (1 - np.clip(p, eps, 1 - eps)))
+    y = np.asarray(hit).astype(float)
+
+    def obj(theta):
+        a, b = theta
+        lin = np.clip(a * z + b, -V_CLIP, V_CLIP)
+        q = 1.0 / (1.0 + np.exp(-lin))
+        nll = -float(np.sum(y * np.log(q + eps) + (1 - y) * np.log(1 - q + eps)))
+        g = q - y
+        return nll, np.array([float(np.sum(g * z)), float(np.sum(g))])
+
+    res = minimize(obj, np.array([1.0, 0.0]), jac=True, method="L-BFGS-B")
+    return float(res.x[0]), float(res.x[1])
+
+
+def platt_apply(p: np.ndarray, a: float, b: float) -> np.ndarray:
+    eps = 1e-9
+    pc = np.clip(np.asarray(p, dtype=float), eps, 1 - eps)
+    z = np.log(pc / (1 - pc))
+    return 1.0 / (1.0 + np.exp(-np.clip(a * z + b, -V_CLIP, V_CLIP)))

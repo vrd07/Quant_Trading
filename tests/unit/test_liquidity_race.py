@@ -1,5 +1,6 @@
 """Unit tests for src/microstructure/liquidity_race.py — synthetic choice data."""
 import numpy as np
+import pandas as pd
 import pytest
 
 from src.microstructure import liquidity_race as lr
@@ -360,3 +361,376 @@ class TestChoiceData:
         assert data.n_snap == 7
         assert data.n_feat == 3
         assert data.X.shape == (21, 3)
+
+
+class TestMetrics:
+    def test_log_loss_of_a_uniform_model_is_log_of_set_size_plus_one(self):
+        data = make_synthetic(np.zeros(3), n_snap=500, set_size=4)
+        # zero beta -> 5 equally likely outcomes -> -log(1/5)
+        assert lr.log_loss(np.zeros(3), data) == pytest.approx(np.log(5.0))
+
+    def test_log_loss_improves_when_beta_is_true(self):
+        beta_true = np.array([1.1, -0.8, 0.6])
+        data = make_synthetic(beta_true, n_snap=8000)
+        assert lr.log_loss(beta_true, data) < lr.log_loss(np.zeros(3), data)
+
+    def test_per_snapshot_nll_averages_to_log_loss(self):
+        data = make_synthetic(np.array([0.4, 0.2, -0.3]), n_snap=300)
+        beta = np.array([0.3, 0.1, -0.2])
+        terms = lr.per_snapshot_nll(beta, data)
+        assert len(terms) == data.n_snap
+        assert terms.mean() == pytest.approx(lr.log_loss(beta, data))
+
+    def test_top1_accuracy_beats_chance_with_the_true_beta(self):
+        beta_true = np.array([1.5, -1.2, 0.9])
+        data = make_synthetic(beta_true, n_snap=8000)
+        overall, conditional = lr.top1_accuracy(beta_true, data)
+        assert 0.0 <= overall <= 1.0
+        assert 0.0 <= conditional <= 1.0
+        assert overall > lr.top1_accuracy(np.zeros(3), data)[0]
+
+    def test_top1_conditional_ignores_none_snapshots(self):
+        data = make_synthetic(np.array([0.9, -0.7, 0.3]), n_snap=2000)
+        n_hit = int((data.chosen >= 0).sum())
+        assert 0 < n_hit < data.n_snap      # the fixture must contain both outcomes
+        overall, conditional = lr.top1_accuracy(np.array([0.9, -0.7, 0.3]), data)
+        assert overall != conditional
+
+    # ------------------------------------------------------------- hardening
+
+    def test_per_snapshot_nll_sums_to_the_unpenalised_neg_log_lik(self):
+        """Cross-check against the Task 7 objective: the two must agree exactly,
+        which pins the -v[chosen] term and the log(denom) term together."""
+        data = make_synthetic(np.array([0.6, -0.35, 0.15]), n_snap=400, seed=19)
+        beta = np.array([0.25, -0.1, 0.4])
+        nll_total, _ = lr.neg_log_lik(beta, data, lam=0.0)
+        assert lr.per_snapshot_nll(beta, data).sum() == pytest.approx(nll_total)
+
+    def test_per_snapshot_nll_hand_computed_on_a_tiny_fixture(self):
+        """Two snapshots: one touched, one 'none'. Pins both branches by hand."""
+        X = np.array([[1.0, 0.0], [0.0, 1.0], [0.5, 0.5]])
+        data = lr.ChoiceData(X=X,
+                             snap_id=np.array([0, 0, 1], dtype=np.int64),
+                             chosen=np.array([1, -1], dtype=np.int64),
+                             day_id=np.array([0, 0], dtype=np.int64))
+        beta = np.array([0.4, -0.2])
+        v = X @ beta                       # [0.4, -0.2, 0.1]
+        d0 = 1.0 + np.exp(v[0]) + np.exp(v[1])
+        d1 = 1.0 + np.exp(v[2])
+        terms = lr.per_snapshot_nll(beta, data)
+        assert terms[0] == pytest.approx(np.log(d0) - v[1])   # chose row 1
+        assert terms[1] == pytest.approx(np.log(d1))          # chose "none"
+        assert lr.log_loss(beta, data) == pytest.approx((terms[0] + terms[1]) / 2.0)
+
+    def test_log_loss_of_an_empty_dataset_is_nan(self):
+        empty = lr.ChoiceData(X=np.zeros((0, 2)), snap_id=np.zeros(0, np.int64),
+                              chosen=np.zeros(0, np.int64), day_id=np.zeros(0, np.int64))
+        assert np.isnan(lr.log_loss(np.zeros(2), empty))
+        o, c = lr.top1_accuracy(np.zeros(2), empty)
+        assert np.isnan(o) and np.isnan(c)
+
+    def test_top1_ties_between_best_row_and_none_are_called_none(self):
+        """`pred_none = best_p <= p_none` — the <= sends an exact tie to the
+        outside option. At zero beta every outcome is exactly equally likely,
+        so this is the tie case, and the model must be scored as predicting none.
+        """
+        data = make_synthetic(np.zeros(2), n_snap=200, n_feat=2, set_size=3, seed=21)
+        overall, _ = lr.top1_accuracy(np.zeros(2), data)
+        # every snapshot predicts "none", so overall accuracy == the none rate
+        expected = float((data.chosen < 0).mean())
+        assert overall == pytest.approx(expected)
+        assert 0.0 < expected < 1.0, "fixture must contain both outcomes"
+
+    def test_top1_picks_the_highest_probability_row_within_each_snapshot(self):
+        """Hand-built: snapshot 0's best row is its second, snapshot 1's is its
+        first. A `best_row` that ignored snapshot boundaries would pick globally."""
+        X = np.array([[0.0], [2.0],          # snapshot 0: row 1 is best
+                      [3.0], [1.0]])         # snapshot 1: row 2 is best
+        data = lr.ChoiceData(X=X,
+                             snap_id=np.array([0, 0, 1, 1], dtype=np.int64),
+                             chosen=np.array([1, 2], dtype=np.int64),
+                             day_id=np.array([0, 0], dtype=np.int64))
+        overall, conditional = lr.top1_accuracy(np.array([1.0]), data)
+        assert overall == pytest.approx(1.0)
+        assert conditional == pytest.approx(1.0)
+        # naming the other row in each snapshot must score zero
+        data_wrong = lr.ChoiceData(X=X, snap_id=data.snap_id,
+                                   chosen=np.array([0, 3], dtype=np.int64),
+                                   day_id=data.day_id)
+        assert lr.top1_accuracy(np.array([1.0]), data_wrong)[1] == pytest.approx(0.0)
+
+    def test_top1_conditional_divides_by_the_touched_count_only(self):
+        """The denominator is the number of TOUCHED snapshots, not all of them.
+
+        Both the plan's tests and my highest-p test are blind to this: one only
+        asserts `overall != conditional`, and the other uses a fixture where every
+        snapshot was touched, so the two denominators coincide. Here two of three
+        snapshots were touched and exactly one of those is named correctly, so the
+        correct answer is 1/2 while dividing by all three would give 1/3.
+        """
+        X = np.array([[0.0], [2.0],      # snap 0: best row is index 1
+                      [2.0], [0.0],      # snap 1: best row is index 2
+                      [0.0], [2.0]])     # snap 2: never touched
+        data = lr.ChoiceData(
+            X=X,
+            snap_id=np.array([0, 0, 1, 1, 2, 2], dtype=np.int64),
+            chosen=np.array([1, 3, -1], dtype=np.int64),   # snap 0 right, snap 1 wrong
+            day_id=np.array([0, 0, 0], dtype=np.int64),
+        )
+        _, conditional = lr.top1_accuracy(np.array([1.0]), data)
+        assert conditional == pytest.approx(0.5)
+        assert conditional != pytest.approx(1.0 / 3.0)
+
+    def test_top1_conditional_is_nan_when_nothing_was_ever_touched(self):
+        data = lr.ChoiceData(X=np.array([[0.5], [0.2]]),
+                             snap_id=np.array([0, 1], dtype=np.int64),
+                             chosen=np.array([-1, -1], dtype=np.int64),
+                             day_id=np.array([0, 0], dtype=np.int64))
+        overall, conditional = lr.top1_accuracy(np.array([0.1]), data)
+        assert np.isnan(conditional)
+        assert not np.isnan(overall)
+
+
+class TestDayBlocking:
+    def test_folds_never_split_a_day(self):
+        day_id = np.repeat(np.arange(50), 20)
+        folds = lr.day_block_folds(day_id, n_folds=5, seed=1)
+        assert len(folds) == 5
+        for mask in folds:
+            days_in = set(day_id[mask])
+            days_out = set(day_id[~mask])
+            assert not (days_in & days_out)
+        # every snapshot appears in exactly one fold
+        stacked = np.vstack(folds).sum(axis=0)
+        assert (stacked == 1).all()
+
+    def test_bootstrap_ci_brackets_the_point_estimate(self):
+        beta_true = np.array([1.0, -0.6, 0.4])
+        data = make_synthetic(beta_true, n_snap=4000)
+        mean, lo, hi = lr.day_block_bootstrap_diff(beta_true, np.zeros(3),
+                                                   data, data, n_reps=200, seed=2)
+        assert lo <= mean <= hi
+        assert mean < 0        # the true beta must beat a zero model
+
+    def test_bootstrap_ci_includes_zero_for_two_identical_models(self):
+        data = make_synthetic(np.array([0.8, -0.4, 0.2]), n_snap=2000)
+        beta = np.array([0.5, -0.2, 0.1])
+        mean, lo, hi = lr.day_block_bootstrap_diff(beta, beta, data, data,
+                                                   n_reps=200, seed=3)
+        assert mean == pytest.approx(0.0, abs=1e-12)
+        assert lo <= 0.0 <= hi
+
+    # ------------------------------------------------------------- hardening
+
+    def _clustered(self, n_days=25, per_day=40, set_size=2, n_feat=2, seed=77):
+        """Snapshots that are IDENTICAL within a day and vary across days.
+
+        This is the correlation structure the day-blocking exists for: the real
+        24h forward windows overlap ~95-deep, so neighbouring snapshots carry
+        almost the same information.
+        """
+        rng = np.random.default_rng(seed)
+        Xs, snap_id, chosen, day_id = [], [], [], []
+        cursor, snap = 0, 0
+        for d in range(n_days):
+            X_day = rng.normal(size=(set_size, n_feat))
+            pick_day = int(rng.integers(-1, set_size))
+            for _ in range(per_day):
+                Xs.append(X_day)
+                snap_id.extend([snap] * set_size)
+                chosen.append(-1 if pick_day < 0 else cursor + pick_day)
+                day_id.append(d)
+                cursor += set_size
+                snap += 1
+        return lr.ChoiceData(X=np.vstack(Xs),
+                             snap_id=np.array(snap_id, dtype=np.int64),
+                             chosen=np.array(chosen, dtype=np.int64),
+                             day_id=np.array(day_id, dtype=np.int64))
+
+    def test_bootstrap_resamples_days_not_snapshots(self):
+        """THE point of the task. With snapshots perfectly correlated inside a
+        day, a snapshot-level bootstrap would report an interval ~sqrt(per_day)
+        times too narrow. Resampling whole days must reproduce the DAY-level
+        spread, not the snapshot-level one.
+
+        This is the failure mode that produced the RSI-reversal '12/12 plateau'
+        which then scored PF 0.39 on a fresh holdout.
+        """
+        data = self._clustered(n_days=25, per_day=40)
+        beta_m, beta_b = np.array([0.9, -0.5]), np.zeros(2)
+        mean, lo, hi = lr.day_block_bootstrap_diff(beta_m, beta_b, data, data,
+                                                   n_reps=2000, seed=11)
+        diff = lr.per_snapshot_nll(beta_m, data) - lr.per_snapshot_nll(beta_b, data)
+        # what a naive iid-snapshot interval would have claimed
+        naive_half = 1.96 * diff.std(ddof=1) / np.sqrt(len(diff))
+        day_half = (hi - lo) / 2.0
+        assert day_half > 3.0 * naive_half, (
+            f"day-blocked half-width {day_half:.5f} is not materially wider than "
+            f"the naive {naive_half:.5f} — the bootstrap is not blocking by day")
+        # and it must still bracket the point estimate
+        assert lo <= mean <= hi
+
+    def test_interval_is_a_95_percent_ci_not_some_other_level(self):
+        """Pins the [2.5, 97.5] percentiles. Nothing else here would notice a
+        90% or 99% interval — every other assertion only checks that lo <= mean
+        <= hi, which any level satisfies.
+
+        With one snapshot per day the day bootstrap reduces to the ordinary iid
+        case, so the half-width must land near 1.96 standard errors. The band
+        below excludes 90% (1.645) and 99% (2.576) comfortably.
+        """
+        data = self._clustered(n_days=400, per_day=1, seed=101)
+        beta_m, beta_b = np.array([0.8, -0.45]), np.zeros(2)
+        _, lo, hi = lr.day_block_bootstrap_diff(beta_m, beta_b, data, data,
+                                                n_reps=3000, seed=7)
+        diff = lr.per_snapshot_nll(beta_m, data) - lr.per_snapshot_nll(beta_b, data)
+        se = diff.std(ddof=1) / np.sqrt(len(diff))
+        z = ((hi - lo) / 2.0) / se
+        assert 1.75 < z < 2.20, f"half-width is {z:.3f} SEs, expected ~1.96"
+
+    def test_bootstrap_is_deterministic_in_the_seed(self):
+        data = self._clustered(n_days=12, per_day=10)
+        beta_m, beta_b = np.array([0.7, -0.3]), np.zeros(2)
+        a = lr.day_block_bootstrap_diff(beta_m, beta_b, data, data, n_reps=150, seed=5)
+        b = lr.day_block_bootstrap_diff(beta_m, beta_b, data, data, n_reps=150, seed=5)
+        c = lr.day_block_bootstrap_diff(beta_m, beta_b, data, data, n_reps=150, seed=6)
+        assert a == b
+        assert a[1:] != c[1:]        # a different seed moves the interval
+
+    def test_identical_models_give_an_exactly_zero_interval(self):
+        """Stronger than the plan's abs=1e-12: with identical inputs the per-
+        snapshot differences are bitwise zero, so every bootstrap replicate is
+        exactly zero too."""
+        data = self._clustered(n_days=8, per_day=5)
+        beta = np.array([0.4, -0.25])
+        mean, lo, hi = lr.day_block_bootstrap_diff(beta, beta, data, data,
+                                                   n_reps=50, seed=4)
+        assert mean == 0.0 and lo == 0.0 and hi == 0.0
+
+    def test_bootstrap_rejects_mismatched_snapshot_counts(self):
+        a = self._clustered(n_days=4, per_day=3)
+        b = self._clustered(n_days=5, per_day=3)
+        with pytest.raises(ValueError, match="same snapshots"):
+            lr.day_block_bootstrap_diff(np.zeros(2), np.zeros(2), a, b, n_reps=10)
+
+    def test_folds_are_deterministic_and_seed_dependent(self):
+        day_id = np.repeat(np.arange(40), 5)
+        f1 = lr.day_block_folds(day_id, n_folds=5, seed=1)
+        f2 = lr.day_block_folds(day_id, n_folds=5, seed=1)
+        f3 = lr.day_block_folds(day_id, n_folds=5, seed=2)
+        assert all((x == y).all() for x, y in zip(f1, f2))
+        assert not all((x == y).all() for x, y in zip(f1, f3))
+
+    def test_folds_are_returned_even_when_there_are_fewer_days_than_folds(self):
+        day_id = np.repeat(np.arange(3), 4)
+        folds = lr.day_block_folds(day_id, n_folds=5, seed=0)
+        assert len(folds) == 5
+        assert sum(int(m.any()) for m in folds) == 3      # two folds are empty
+        assert np.vstack(folds).sum(axis=0).tolist() == [1] * len(day_id)
+
+    def test_folds_cover_every_day_exactly_once_with_uneven_splits(self):
+        day_id = np.repeat(np.arange(7), 3)               # 7 days into 4 folds
+        folds = lr.day_block_folds(day_id, n_folds=4, seed=3)
+        seen = [set(day_id[m]) for m in folds]
+        assert set().union(*seen) == set(range(7))
+        for i in range(len(seen)):
+            for j in range(i + 1, len(seen)):
+                assert not (seen[i] & seen[j])
+
+
+class TestReliability:
+    def test_perfectly_calibrated_input_has_near_zero_ece(self):
+        rng = np.random.default_rng(5)
+        p = rng.uniform(0.02, 0.6, size=200_000)
+        hit = rng.uniform(size=p.size) < p
+        table = lr.reliability(p, hit, n_bins=10)
+        assert lr.expected_calibration_error(table) < 0.01
+        assert len(table) <= 10
+        assert set(table.columns) >= {"bin", "n", "p_mean", "observed"}
+
+    def test_systematically_overconfident_input_has_large_ece(self):
+        rng = np.random.default_rng(6)
+        p = rng.uniform(0.3, 0.9, size=100_000)
+        hit = rng.uniform(size=p.size) < (p * 0.4)     # reality is far below the claim
+        table = lr.reliability(p, hit, n_bins=10)
+        assert lr.expected_calibration_error(table) > 0.15
+
+    def test_platt_scaling_pulls_an_overconfident_model_back(self):
+        rng = np.random.default_rng(8)
+        p = rng.uniform(0.3, 0.9, size=50_000)
+        hit = rng.uniform(size=p.size) < (p * 0.4)
+        a, b = lr.platt_scale(p, hit)
+        p2 = lr.platt_apply(p, a, b)
+        before = lr.expected_calibration_error(lr.reliability(p, hit))
+        after = lr.expected_calibration_error(lr.reliability(p2, hit))
+        assert after < before
+
+    # ------------------------------------------------------------- hardening
+
+    def test_bins_are_equal_COUNT_not_equal_WIDTH(self):
+        """The binning is by rank (argsort + array_split), not by value range.
+        A heavily skewed p makes the two schemes obviously different: equal-width
+        bins would be wildly unbalanced, equal-count ones differ by at most 1."""
+        rng = np.random.default_rng(12)
+        p = rng.uniform(0, 1, size=10_000) ** 6          # mass crushed near zero
+        hit = rng.uniform(size=p.size) < p
+        table = lr.reliability(p, hit, n_bins=10)
+        counts = table.n.to_numpy()
+        assert counts.max() - counts.min() <= 1
+        assert counts.sum() == p.size
+        # p_mean must be increasing across rank bins
+        assert list(table.p_mean) == sorted(table.p_mean)
+
+    def test_reliability_table_is_hand_checkable_on_a_tiny_fixture(self):
+        p = np.array([0.1, 0.2, 0.3, 0.4])
+        hit = np.array([False, True, False, True])
+        table = lr.reliability(p, hit, n_bins=2)
+        assert list(table.n) == [2, 2]
+        assert table.p_mean.tolist() == pytest.approx([0.15, 0.35])
+        assert table.observed.tolist() == pytest.approx([0.5, 0.5])
+        assert table.gap.tolist() == pytest.approx([0.35, 0.15])
+
+    def test_reliability_handles_empty_input_and_excess_bins(self):
+        empty = lr.reliability(np.array([]), np.array([], dtype=bool), n_bins=10)
+        assert len(empty) == 0
+        assert set(empty.columns) >= {"bin", "n", "p_mean", "observed", "gap"}
+        assert np.isnan(lr.expected_calibration_error(empty))
+        # more bins than points: empty buckets are skipped, not emitted as NaN rows
+        table = lr.reliability(np.array([0.2, 0.8]), np.array([False, True]), n_bins=10)
+        assert len(table) == 2
+        assert table.n.tolist() == [1, 1]
+
+    def test_ece_is_weighted_by_bin_population(self):
+        """Hand-built table with deliberately unequal n. An unweighted mean of
+        |gap| would give 0.30; the population-weighted one gives 0.12."""
+        table = pd.DataFrame({"bin": [0, 1], "n": [900, 100],
+                              "p_mean": [0.5, 0.5], "observed": [0.5, 0.5],
+                              "gap": [0.05, 0.55]})
+        assert lr.expected_calibration_error(table) == pytest.approx(
+            (900 * 0.05 + 100 * 0.55) / 1000.0)
+        assert lr.expected_calibration_error(table) == pytest.approx(0.10)
+
+    def test_ece_uses_the_absolute_gap_so_errors_cannot_cancel(self):
+        table = pd.DataFrame({"bin": [0, 1], "n": [100, 100],
+                              "p_mean": [0.5, 0.5], "observed": [0.5, 0.5],
+                              "gap": [0.20, -0.20]})
+        assert lr.expected_calibration_error(table) == pytest.approx(0.20)
+
+    def test_platt_on_already_calibrated_data_is_close_to_the_identity(self):
+        rng = np.random.default_rng(31)
+        p = rng.uniform(0.05, 0.95, size=80_000)
+        hit = rng.uniform(size=p.size) < p
+        a, b = lr.platt_scale(p, hit)
+        assert a == pytest.approx(1.0, abs=0.08)
+        assert b == pytest.approx(0.0, abs=0.08)
+        assert lr.platt_apply(p, a, b) == pytest.approx(p, abs=0.03)
+
+    def test_platt_apply_is_monotonic_and_bounded(self):
+        p = np.linspace(0.0, 1.0, 101)          # includes the exact 0 and 1 edges
+        out = lr.platt_apply(p, 1.7, -0.4)
+        assert np.isfinite(out).all()
+        assert (out > 0.0).all() and (out < 1.0).all()
+        assert list(out) == sorted(out)
+        # a negative slope must invert the order, proving `a` is actually used
+        down = lr.platt_apply(p, -1.7, -0.4)
+        assert list(down) == sorted(down, reverse=True)
