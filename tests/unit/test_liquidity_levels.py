@@ -4,6 +4,7 @@ import pandas as pd
 import pytest
 
 from src.microstructure import liquidity_levels as ll
+from pathlib import Path
 
 
 def make_bars(highs, lows, closes=None, opens=None, start="2026-01-05 00:00", freq="15min"):
@@ -1394,3 +1395,32 @@ class TestBuildDataset:
         assert len(up) > 0 and len(down) > 0
         assert (up.dist_atr > 0).all()      # up levels sit above the close
         assert (down.dist_atr < 0).all()    # down levels sit below it
+
+
+class TestScopeBoundary:
+    """The spec: research and chart only. Nothing imports into the trading path."""
+
+    def _source(self, rel):
+        root = Path(__file__).parent.parent.parent
+        return (root / rel).read_text()
+
+    def test_liquidity_modules_do_not_import_the_trading_path(self):
+        forbidden = ("src.strategies", "src.risk", "src.execution",
+                     "src.portfolio", "src.connectors")
+        for rel in ("src/microstructure/liquidity_levels.py",
+                    "src/microstructure/liquidity_race.py",
+                    "scripts/research_liquidity_race.py",
+                    "scripts/check_liquidity_parity.py"):
+            src = self._source(rel)
+            for mod in forbidden:
+                assert mod not in src, f"{rel} must not reference {mod}"
+
+    def test_the_trading_path_does_not_import_the_liquidity_modules(self):
+        root = Path(__file__).parent.parent.parent
+        for sub in ("src/strategies", "src/risk", "src/execution"):
+            for py in (root / sub).rglob("*.py"):
+                text = py.read_text()
+                assert "liquidity_levels" not in text or "monitoring" in text, (
+                    f"{py} imports the liquidity race marking tool — that is a "
+                    f"strategy decision behind the full backtest.md 8-gate process")
+                assert "liquidity_race" not in text, f"{py} imports liquidity_race"

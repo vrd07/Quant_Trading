@@ -126,6 +126,52 @@ Support modules alongside the strategies:
 
 All strategies emit `Signal` objects; `RiskEngine` validates and sizes before execution.
 
+### Chart tooling — Liquidity Race Indicator (not a strategy)
+
+`mt5_indicators/GoldenChart_Liquidity.mq5` marks XAUUSD liquidity pools (un-swept
+swing highs/lows, ATR-clustered equal highs/lows, session and period extremes — **no
+round numbers**) and ranks them by a calibrated `P(this level is hit first in the next
+24h)`. Shipped 2026-08-07. Design: `docs/superpowers/specs/2026-07-30-liquidity-race-indicator-design.md`.
+
+- **Python definition:** `src/microstructure/liquidity_levels.py` (detection + the
+  12-feature vector; `FEATURE_NAMES` order is a hard contract with the `.mqh`) and
+  `src/microstructure/liquidity_race.py` (conditional logit + day-blocked metrics).
+  ⚠️ Not to be confused with the older, unrelated `src/monitoring/liquidity_levels.py`.
+- **Calibration:** `python scripts/research_liquidity_race.py` regenerates BOTH
+  `mt5_indicators/liquidity_coefficients.mqh` and
+  `reports/liquidity_race_calibration.md`. The `.mqh` is **generated — never hand-edit
+  it**; hand-tuning turns a calibrated model into a guess. Re-run ~quarterly.
+- **Parity is non-optional.** Detection exists in Python and MQL5 and can drift
+  silently. After ANY change to either side: attach the indicator with
+  `InpExportCSV=true`, copy the two CSVs to `data/parity/`, and run
+  `python scripts/check_liquidity_parity.py --dir data/parity`. Level sets must match
+  exactly; features to 1e-4. Do not relax the tolerances to make it pass.
+- **Detection TF is fixed at 15m** regardless of the chart it is attached to — the
+  baked coefficients were calibrated there. Viewing on M5/H1 is fine; changing
+  `InpDetectTF` is not.
+- **Display honesty:** what the chart shows is set by `LQ_MODEL_MODE` in the `.mqh`,
+  which the research script sets from the OOS gate — `full` (probabilities),
+  `distance` (baseline probabilities, model didn't beat distance), or `rank_only` (no
+  percentage). The panel's permanent `nothing touched` row is the honest denominator.
+  The chart never shows a number the data did not earn.
+- **2026-08-07 calibration result: mode `full`, both gate legs passed.** IS 2022-01..2025-12
+  / OOS 2026-01..2026-07, 165 OOS days: log-loss **0.646** vs distance baseline **0.990**,
+  day-blocked 95% CI [−0.385, −0.301], ECE 0.64pp.
+  ⚠️ **It beats distance on the PROBABILITY, not on the RANKING.** Conditional top-1
+  (only snapshots where something was touched) is 0.7165 for the model vs 0.7207 for
+  distance — marginally worse. Only 4 of 12 features carry weight, and 2 of those are
+  snapshot-constant so they cannot move the ranking at all; the 2 that vary are both
+  monotone in distance, so the ordering collapses to ~nearest-first. **Read the
+  percentage, not the rank badge**, and do not "improve" the rank by dropping the
+  snapshot-constant columns — they are load-bearing for the probability.
+  ⚠️ ECE flatters: 7 of 10 OOS deciles have predicted ≈0 and observed exactly 0, and ECE
+  is population-weighted. The honest claim is "the top three deciles are calibrated to
+  within ~1.7pp". Full numbers: `reports/liquidity_race_calibration.md`.
+- **Scope: research and chart only.** It imports nothing from and into
+  `src/strategies`, `src/risk`, `src/execution` — enforced by
+  `tests/unit/test_liquidity_levels.py::TestScopeBoundary`. Wiring it into a strategy
+  is a separate decision behind the full `backtest.md` 8-gate process.
+
 ### Configuration System
 
 Config files in `config/` follow naming `config_live_{account_size}.yaml`. The active config is passed via `--config` when invoking `src/main.py`. Key risk parameters for the $5k account:
