@@ -545,3 +545,104 @@ def feature_matrix(ctx: FrameContext, t: int, levels: list[Level],
         X[i, 10] = s_ny
         X[i, 11] = log_dist * atr_pct
     return X
+
+
+# ---------------------------------------------------------- labels / dataset
+
+def first_touch(ctx: FrameContext, t: int, levels: list[Level],
+                horizon: int = 96) -> int:
+    """Index of the first level touched in [t+1, t+horizon], else -1.
+
+    Wicks count — that is the stop run. When one bar spans several levels the
+    NEARER one is credited: within-bar ordering is unknowable from OHLC, and
+    crediting the farther level would bias the model toward distance.
+    """
+    if not levels:
+        return -1
+    n = len(ctx.close)
+    end = min(n - 1, t + horizon)
+    if end <= t:
+        return -1
+    close = float(ctx.close[t])
+    prices = np.array([lv.price for lv in levels], dtype=float)
+    up = np.array([lv.side == "up" for lv in levels], dtype=bool)
+    dist = np.abs(prices - close)
+    for j in range(t + 1, end + 1):
+        hi, lo = ctx.high[j], ctx.low[j]
+        hit = np.where(up, hi >= prices, lo <= prices)
+        if hit.any():
+            cand = np.flatnonzero(hit)
+            return int(cand[np.argmin(dist[cand])])
+    return -1
+
+
+def build_dataset(bars: pd.DataFrame, params: LevelParams = DEFAULTS,
+                  horizon: int = 96, warmup: int | None = None,
+                  stride: int = 1, progress=None):
+    """Walk the frame, building one choice set + label per snapshot bar.
+
+    Returns (ChoiceData, meta) where meta has one row per (snapshot, level) aligned
+    positionally with ChoiceData.X — the report and the parity harness both need the
+    human-readable side of each row.
+
+    `warmup` defaults to params.scan_bars: the pivot scan, the ATR percentile window
+    and a full prior week all have to be populated before a snapshot means anything.
+    """
+    from src.microstructure.liquidity_race import ChoiceData   # local: avoid a cycle
+
+    ctx = build_context(bars, params)
+    n = len(bars)
+    if warmup is None:
+        warmup = params.scan_bars
+    last = n - horizon - 1
+
+    rows: list[np.ndarray] = []
+    snap_ids: list[int] = []
+    chosen: list[int] = []
+    day_ids: list[int] = []
+    meta_rows: list[dict] = []
+    cursor = 0
+    snap = 0
+
+    for t in range(warmup, last + 1, stride):
+        levels = build_choice_set(ctx, t, params)
+        if not levels:
+            continue
+        X = feature_matrix(ctx, t, levels, params)
+        pick = first_touch(ctx, t, levels, horizon)
+        rows.append(X)
+        k = len(levels)
+        snap_ids.extend([snap] * k)
+        chosen.append(-1 if pick < 0 else cursor + pick)
+        day_ids.append(int(ctx.day_id[t]))
+        ts = bars.index[t]
+        close = float(ctx.close[t])
+        atr = float(ctx.atr[t])
+        for lv in levels:
+            meta_rows.append({
+                "snap_id": snap,
+                "snapshot_ts": ts,
+                "price": lv.price,
+                "kind": lv.kind,
+                "formation_idx": lv.formation_idx,
+                "formation_ts": bars.index[lv.formation_idx],
+                "side": lv.side,
+                "dist_atr": (lv.price - close) / atr,
+            })
+        cursor += k
+        snap += 1
+        if progress is not None and snap % 5000 == 0:
+            progress(snap, t, n)
+
+    if not rows:
+        empty = np.zeros((0, len(FEATURE_NAMES)))
+        return (ChoiceData(empty, np.zeros(0, np.int64), np.zeros(0, np.int64),
+                           np.zeros(0, np.int64)), pd.DataFrame(columns=[
+                               "snap_id", "snapshot_ts", "price", "kind",
+                               "formation_idx", "formation_ts", "side", "dist_atr"]))
+
+    data = ChoiceData(X=np.vstack(rows),
+                      snap_id=np.array(snap_ids, dtype=np.int64),
+                      chosen=np.array(chosen, dtype=np.int64),
+                      day_id=np.array(day_ids, dtype=np.int64))
+    return data, pd.DataFrame(meta_rows)

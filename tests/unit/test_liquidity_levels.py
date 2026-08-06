@@ -1085,3 +1085,312 @@ class TestFeatureMatrix:
         col = ll.FEATURE_NAMES.index("log_age_bars")
         assert X[0, col] == 0.0
         assert X[1, col] == 0.0
+
+
+class TestFirstTouch:
+    def _ctx(self, highs, lows, closes):
+        return ll.build_context(make_bars(highs, lows, closes=closes), ll.DEFAULTS)
+
+    def test_returns_minus_one_when_nothing_is_touched(self):
+        ctx = self._ctx([100.0] * 20, [99.0] * 20, [99.5] * 20)
+        levels = [ll.Level(150.0, "swing_high", 1, "up"),
+                  ll.Level(50.0, "swing_low", 1, "down")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == -1
+
+    def test_credits_the_level_reached_first_in_time(self):
+        highs = [100.0] * 20
+        highs[8] = 111.0          # touches the 110 level at bar 8
+        highs[12] = 121.0         # touches the 120 level later
+        ctx = self._ctx(highs, [99.0] * 20, [99.5] * 20)
+        levels = [ll.Level(110.0, "swing_high", 1, "up"),
+                  ll.Level(120.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == 0
+
+    def test_same_bar_tie_credits_the_nearer_level(self):
+        highs = [100.0] * 20
+        highs[8] = 130.0          # one bar spans both 110 and 120
+        ctx = self._ctx(highs, [99.0] * 20, [99.5] * 20)
+        levels = [ll.Level(120.0, "swing_high", 1, "up"),
+                  ll.Level(110.0, "swing_high", 1, "up")]
+        # index 1 is the 110 level -> nearer to the 99.5 close
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == 1
+
+    def test_same_bar_tie_across_sides_credits_the_nearer_level(self):
+        highs = [100.0] * 20
+        lows = [99.0] * 20
+        highs[8] = 105.0          # 3.0 above close, reaches the 102 level
+        lows[8] = 90.0            # 9.5 below close, reaches the 95 level
+        ctx = self._ctx(highs, lows, [99.5] * 20)
+        levels = [ll.Level(95.0, "swing_low", 1, "down"),
+                  ll.Level(102.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == 1
+
+    def test_snapshot_bar_itself_does_not_count(self):
+        highs = [100.0] * 20
+        highs[5] = 130.0          # the snapshot bar's own wick
+        ctx = self._ctx(highs, [99.0] * 20, [99.5] * 20)
+        levels = [ll.Level(110.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == -1
+
+    def test_horizon_is_respected(self):
+        highs = [100.0] * 30
+        highs[20] = 130.0
+        ctx = self._ctx(highs, [99.0] * 30, [99.5] * 30)
+        levels = [ll.Level(110.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == -1
+        assert ll.first_touch(ctx, 5, levels, horizon=20) == 0
+
+    # ----------------------------------------------------------- hardening
+
+    def test_time_beats_nearness_across_sides(self):
+        """The plan's `..._reached_first_in_time` test cannot actually prove this.
+
+        There the earlier-touched level (110) is ALSO the nearer one, so an
+        implementation that ignored time and simply returned the nearest level
+        touched anywhere in the window would pass it. On a single side the case
+        is unconstructable — reaching 120 from below always crosses 110 first —
+        so time-vs-nearness can only be separated ACROSS sides.
+
+        Here the FARTHER level (up at 110, 10.0 away) is touched at bar 8 and the
+        NEARER one (down at 95, 5.0 away) not until bar 12. Time must win.
+        """
+        highs = [100.5] * 20
+        lows = [99.5] * 20
+        highs[8] = 110.5          # touches the up level only
+        lows[12] = 94.0           # touches the down level, later but nearer
+        ctx = self._ctx(highs, lows, [100.0] * 20)
+        levels = [ll.Level(95.0, "swing_low", 1, "down"),
+                  ll.Level(110.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == 1
+
+    def test_a_touch_exactly_at_the_level_price_counts(self):
+        """Pins `>=` / `<=` at the boundary. Every one of the plan's own tests
+        overshoots the level, so a strict `>` / `<` implementation passes them all."""
+        highs = [100.0] * 20
+        lows = [99.0] * 20
+        highs[8] = 110.0                      # EXACTLY the up level
+        ctx = self._ctx(highs, lows, [99.5] * 20)
+        assert ll.first_touch(ctx, 5, [ll.Level(110.0, "swing_high", 1, "up")],
+                              horizon=10) == 0
+        lows2 = [99.0] * 20
+        lows2[8] = 90.0                       # EXACTLY the down level
+        ctx2 = self._ctx([100.0] * 20, lows2, [99.5] * 20)
+        assert ll.first_touch(ctx2, 5, [ll.Level(90.0, "swing_low", 1, "down")],
+                              horizon=10) == 0
+
+    def test_a_bar_one_tick_short_of_the_level_does_not_count(self):
+        highs = [100.0] * 20
+        highs[8] = 109.999
+        ctx = self._ctx(highs, [99.0] * 20, [99.5] * 20)
+        assert ll.first_touch(ctx, 5, [ll.Level(110.0, "swing_high", 1, "up")],
+                              horizon=10) == -1
+
+    def test_touch_exactly_on_the_last_horizon_bar_counts(self):
+        """t + horizon is inclusive; t + horizon + 1 is not."""
+        highs = [100.0] * 30
+        highs[15] = 130.0                     # t=5, horizon=10 -> last bar is 15
+        ctx = self._ctx(highs, [99.0] * 30, [99.5] * 30)
+        assert ll.first_touch(ctx, 5, [ll.Level(110.0, "swing_high", 1, "up")],
+                              horizon=10) == 0
+        highs2 = [100.0] * 30
+        highs2[16] = 130.0
+        ctx2 = self._ctx(highs2, [99.0] * 30, [99.5] * 30)
+        assert ll.first_touch(ctx2, 5, [ll.Level(110.0, "swing_high", 1, "up")],
+                              horizon=10) == -1
+
+    def test_horizon_is_clamped_to_the_end_of_the_frame(self):
+        highs = [100.0] * 20
+        highs[18] = 130.0
+        ctx = self._ctx(highs, [99.0] * 20, [99.5] * 20)
+        # horizon runs past the frame; must clamp, not raise
+        assert ll.first_touch(ctx, 5, [ll.Level(110.0, "swing_high", 1, "up")],
+                              horizon=10_000) == 0
+
+    def test_degenerate_windows_return_minus_one(self):
+        ctx = self._ctx([100.0] * 20, [99.0] * 20, [99.5] * 20)
+        lv = [ll.Level(110.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, lv, horizon=0) == -1      # end == t
+        assert ll.first_touch(ctx, 19, lv, horizon=10) == -1    # t is the last bar
+        assert ll.first_touch(ctx, 5, [], horizon=10) == -1     # no runners
+
+    def test_nearness_is_measured_from_the_snapshot_close_and_no_other_bar(self):
+        """Both levels are hit by bar 8, and the tie must be broken from the close
+        of the SNAPSHOT bar t=5 — not from any other bar in the window.
+
+        Three different reference closes give three different winners here, so this
+        pins the choice rather than merely being consistent with it:
+          close[5]  = 100.0 -> up 104 is 4.0 away, down 93 is 7.0  -> UP   (correct)
+          close[6]  =  94.0 -> up 104 is 10.0 away, down 93 is 1.0 -> down
+          close[8]  =  95.0 -> up 104 is 9.0 away,  down 93 is 2.0 -> down
+        Bar 6 is deliberately pushed low WITHOUT touching either level (its low is
+        93.5, above the 93 level), so it changes the close without stealing the touch.
+        """
+        highs = [100.5] * 20
+        lows = [99.5] * 20
+        closes = [100.0] * 20
+        highs[6], lows[6], closes[6] = 95.5, 93.5, 94.0     # near-miss, moves close
+        highs[8], lows[8], closes[8] = 105.0, 92.0, 95.0    # spans both levels
+        ctx = self._ctx(highs, lows, closes)
+        levels = [ll.Level(93.0, "swing_low", 1, "down"),
+                  ll.Level(104.0, "swing_high", 1, "up")]
+        assert ll.first_touch(ctx, 5, levels, horizon=10) == 1
+
+
+def _walk_bars(n=900, seed=4, start="2026-01-05"):
+    rng = np.random.default_rng(seed)
+    walk = 100.0 + np.cumsum(rng.normal(0, 0.3, n))
+    return pd.DataFrame({"open": walk, "high": walk + 0.4, "low": walk - 0.4,
+                         "close": walk, "volume": 100.0},
+                        index=pd.date_range(start, periods=n, freq="15min", tz="UTC"))
+
+
+class TestBuildDataset:
+    def test_dataset_shapes_and_meta_alignment(self):
+        n = 900
+        rng = np.random.default_rng(4)
+        walk = 100.0 + np.cumsum(rng.normal(0, 0.3, n))
+        bars = pd.DataFrame({"open": walk, "high": walk + 0.4, "low": walk - 0.4,
+                             "close": walk, "volume": 100.0},
+                            index=pd.date_range("2026-01-05", periods=n, freq="15min", tz="UTC"))
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(bars, params, horizon=20, warmup=250, stride=5)
+        assert data.X.shape[0] == len(meta)
+        assert data.X.shape[1] == len(ll.FEATURE_NAMES)
+        assert len(data.chosen) == data.snap_id.max() + 1
+        assert len(data.day_id) == len(data.chosen)
+        assert set(meta.columns) >= {"snapshot_ts", "price", "kind", "formation_idx",
+                                     "dist_atr", "side", "snap_id"}
+
+    def test_no_snapshot_can_see_past_its_horizon(self):
+        # a dataset built on the first half must equal the same rows built on the whole
+        n = 900
+        rng = np.random.default_rng(9)
+        walk = 100.0 + np.cumsum(rng.normal(0, 0.3, n))
+        idx = pd.date_range("2026-01-05", periods=n, freq="15min", tz="UTC")
+        bars = pd.DataFrame({"open": walk, "high": walk + 0.4, "low": walk - 0.4,
+                             "close": walk, "volume": 100.0}, index=idx)
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        full, meta_full = ll.build_dataset(bars, params, horizon=20, warmup=250, stride=5)
+        cut = 600
+        part, meta_part = ll.build_dataset(bars.iloc[:cut], params, horizon=20,
+                                           warmup=250, stride=5)
+        common = meta_part.snapshot_ts.unique()
+        common = common[common <= meta_full.snapshot_ts.max()]
+        # every shared snapshot must have produced identical level prices
+        a = meta_full[meta_full.snapshot_ts.isin(common)].sort_values(
+            ["snapshot_ts", "price"]).price.to_numpy()
+        b = meta_part[meta_part.snapshot_ts.isin(common)].sort_values(
+            ["snapshot_ts", "price"]).price.to_numpy()
+        assert a == pytest.approx(b)
+
+    def test_empty_choice_sets_are_dropped(self):
+        # a perfectly flat frame produces no un-swept structure worth ranking
+        n = 400
+        flat = np.full(n, 100.0)
+        bars = pd.DataFrame({"open": flat, "high": flat, "low": flat,
+                             "close": flat, "volume": 100.0},
+                            index=pd.date_range("2026-01-05", periods=n, freq="15min", tz="UTC"))
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(bars, params, horizon=20, warmup=250, stride=5)
+        assert data.X.shape[0] == len(meta)
+        if len(data.chosen):
+            assert np.bincount(data.snap_id, minlength=data.n_snap).min() >= 1
+
+    # ----------------------------------------------------------- hardening
+
+    def test_the_flat_frame_really_does_yield_an_empty_dataset(self):
+        """The plan's `test_empty_choice_sets_are_dropped` guards its only real
+        assertion behind `if len(data.chosen):`, which is False here — so it
+        asserts nothing. Pin the actual outcome, including the meta columns of
+        the empty return path."""
+        n = 400
+        flat = np.full(n, 100.0)
+        bars = pd.DataFrame({"open": flat, "high": flat, "low": flat,
+                             "close": flat, "volume": 100.0},
+                            index=pd.date_range("2026-01-05", periods=n, freq="15min", tz="UTC"))
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(bars, params, horizon=20, warmup=250, stride=5)
+        assert data.X.shape == (0, len(ll.FEATURE_NAMES))
+        assert len(data.chosen) == 0 and len(data.snap_id) == 0 and len(data.day_id) == 0
+        assert len(meta) == 0
+        assert set(meta.columns) >= {"snap_id", "snapshot_ts", "price", "kind",
+                                     "formation_idx", "side", "dist_atr"}
+
+    def test_chosen_is_a_global_row_index_inside_its_own_snapshot(self):
+        """The cursor offset is the whole ballgame. `chosen` indexes the STACKED X,
+        not the per-snapshot block, so an implementation that stored the local
+        `pick` would point into snapshot 0's rows for every later snapshot."""
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(_walk_bars(), params, horizon=20,
+                                      warmup=250, stride=5)
+        picked = np.flatnonzero(data.chosen >= 0)
+        assert len(picked) > 0, "fixture must produce at least one touched snapshot"
+        assert picked.max() > 0, "fixture must exercise a snapshot after the first"
+        for s in picked:
+            row = data.chosen[s]
+            assert 0 <= row < data.X.shape[0]
+            assert data.snap_id[row] == s
+            assert int(meta.iloc[row].snap_id) == s
+
+    def test_meta_rows_are_positionally_aligned_with_the_feature_rows(self):
+        """meta.iloc[i] must describe X[i]. Recompute column 0 from meta's own
+        dist_atr: log_dist_atr == log1p(|dist_atr|)."""
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(_walk_bars(), params, horizon=20,
+                                      warmup=250, stride=5)
+        assert len(meta) > 0
+        col = ll.FEATURE_NAMES.index("log_dist_atr")
+        expected = np.log1p(np.abs(meta.dist_atr.to_numpy()))
+        assert data.X[:, col] == pytest.approx(expected)
+        # and the side one-hot must agree with meta's own side string
+        side_col = ll.FEATURE_NAMES.index("side_up")
+        assert data.X[:, side_col] == pytest.approx(
+            (meta.side.to_numpy() == "up").astype(float))
+
+    def test_snapshot_ids_are_contiguous_and_every_snapshot_has_rows(self):
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(_walk_bars(), params, horizon=20,
+                                      warmup=250, stride=5)
+        counts = np.bincount(data.snap_id, minlength=data.n_snap)
+        assert len(counts) == data.n_snap
+        assert counts.min() >= 1                       # no empty snapshot survived
+        assert list(np.unique(data.snap_id)) == list(range(data.n_snap))
+
+    def test_stride_and_warmup_bound_the_snapshot_positions(self):
+        bars = _walk_bars()
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        horizon, warmup, stride = 20, 250, 5
+        data, meta = ll.build_dataset(bars, params, horizon=horizon,
+                                      warmup=warmup, stride=stride)
+        pos = bars.index.get_indexer(pd.DatetimeIndex(meta.snapshot_ts.unique()))
+        assert pos.min() >= warmup
+        # last = n - horizon - 1, so no snapshot can see past the frame's end
+        assert pos.max() <= len(bars) - horizon - 1
+        # every snapshot sits on the stride grid anchored at warmup
+        assert set(((pos - warmup) % stride).tolist()) == {0}
+
+    def test_warmup_defaults_to_scan_bars(self):
+        bars = _walk_bars()
+        params = ll.LevelParams(scan_bars=300, atr_pctile_window=100)
+        data, meta = ll.build_dataset(bars, params, horizon=20, stride=25)
+        pos = bars.index.get_indexer(pd.DatetimeIndex(meta.snapshot_ts.unique()))
+        assert pos.min() >= 300
+
+    def test_day_id_matches_the_snapshot_bars_utc_date(self):
+        bars = _walk_bars(n=900, start="2026-03-02")
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(bars, params, horizon=20, warmup=250, stride=5)
+        first_ts = meta.groupby("snap_id").snapshot_ts.first()
+        expected = np.array([ts.date().toordinal() for ts in first_ts])
+        assert list(data.day_id) == list(expected)
+        assert len(np.unique(data.day_id)) > 1, "fixture must span several days"
+
+    def test_meta_dist_atr_is_signed_and_matches_the_side(self):
+        params = ll.LevelParams(scan_bars=200, atr_pctile_window=100)
+        data, meta = ll.build_dataset(_walk_bars(), params, horizon=20,
+                                      warmup=250, stride=5)
+        up = meta[meta.side == "up"]
+        down = meta[meta.side == "down"]
+        assert len(up) > 0 and len(down) > 0
+        assert (up.dist_atr > 0).all()      # up levels sit above the close
+        assert (down.dist_atr < 0).all()    # down levels sit below it
