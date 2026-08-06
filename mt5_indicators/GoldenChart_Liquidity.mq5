@@ -666,13 +666,205 @@ void Recompute()
    if(InpExportCSV && newBar) ExportParity();
 }
 
-//--- TEMPORARY STUBS, replaced in Task 12 --------------------------
+//+------------------------------------------------------------------+
+//| Scoring: z-score with the baked constants, dot with beta, softmax  |
+//| against an outside option pinned at v0 = 0.                        |
+//|   P(level i first) = exp(v_i) / (1 + sum_j exp(v_j))                |
+//|   P(none in 24h)   = 1        / (1 + sum_j exp(v_j))                |
+//+------------------------------------------------------------------+
+double gProbNone = 1.0;
+
 void ScoreLevels(LqLevel &lv[], const int n)
 {
-   for(int i = 0; i < n; i++) { lv[i].score = 0.0; lv[i].prob = 0.0; }
+   double denom = 1.0;
+   for(int i = 0; i < n; i++)
+   {
+      double v = 0.0;
+      for(int f = 0; f < LQ_N_FEATURES; f++)
+      {
+         double z = (lv[i].feat[f] - LQ_MEAN[f]) / LQ_STD[f];
+         v += LQ_BETA[f] * z;
+      }
+      if(v >  30.0) v =  30.0;       // matches V_CLIP in liquidity_race.py
+      if(v < -30.0) v = -30.0;
+      lv[i].score = v;
+      denom += MathExp(v);
+   }
+   for(int i = 0; i < n; i++)
+   {
+      double p = MathExp(lv[i].score) / denom;
+      if(LQ_PLATT_A != 1.0 || LQ_PLATT_B != 0.0)
+      {
+         double pc = MathMax(1e-9, MathMin(1.0 - 1e-9, p));
+         double z = MathLog(pc / (1.0 - pc));
+         double lin = LQ_PLATT_A * z + LQ_PLATT_B;
+         if(lin >  30.0) lin =  30.0;
+         if(lin < -30.0) lin = -30.0;
+         p = 1.0 / (1.0 + MathExp(-lin));
+      }
+      lv[i].prob = p;
+   }
+   gProbNone = 1.0 / denom;
+}
+
+//+------------------------------------------------------------------+
+//| Ranking + drawing                                                 |
+//+------------------------------------------------------------------+
+bool ShowProbability() { return (StringCompare(LQ_MODEL_MODE, "rank_only") != 0); }
+
+// rank within the level's own side, 1-based, by descending probability
+// (or by ascending distance when there is no probability to rank on)
+int RankOf(LqLevel &lv[], const int n, const int i, const double close)
+{
+   int rank = 1;
+   for(int j = 0; j < n; j++)
+   {
+      if(j == i || lv[j].up != lv[i].up) continue;
+      if(ShowProbability())
+      {
+         if(lv[j].prob > lv[i].prob) rank++;
+      }
+      else
+      {
+         if(MathAbs(lv[j].price - close) < MathAbs(lv[i].price - close)) rank++;
+      }
+   }
+   return rank;
+}
+
+void DrawRay(const string name, const datetime anchor, const double price,
+             const color clr, const int rank)
+{
+   int width = (rank == 1) ? 3 : ((rank == 2) ? 2 : 1);
+   ENUM_LINE_STYLE style = (rank == 1) ? STYLE_SOLID
+                         : ((rank <= 3) ? STYLE_DASH : STYLE_DOT);
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_TREND, 0, anchor, price, TimeCurrent(), price);
+   ObjectSetInteger(0, name, OBJPROP_TIME, 0, anchor);
+   ObjectSetDouble(0, name, OBJPROP_PRICE, 0, price);
+   ObjectSetInteger(0, name, OBJPROP_TIME, 1, TimeCurrent());
+   ObjectSetDouble(0, name, OBJPROP_PRICE, 1, price);
+   ObjectSetInteger(0, name, OBJPROP_RAY_RIGHT, true);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_WIDTH, width);
+   ObjectSetInteger(0, name, OBJPROP_STYLE, style);
+   ObjectSetInteger(0, name, OBJPROP_BACK, true);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+}
+
+void DrawLabel(const string name, const double price, const string text,
+               const color clr)
+{
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_TEXT, 0, TimeCurrent(), price);
+   ObjectSetInteger(0, name, OBJPROP_TIME, 0, TimeCurrent());
+   ObjectSetDouble(0, name, OBJPROP_PRICE, 0, price);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_ANCHOR, ANCHOR_RIGHT_LOWER);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+}
+
+void PanelLine(const int row, const string text)
+{
+   string name = PFX + "panel_" + IntegerToString(row);
+   if(ObjectFind(0, name) < 0)
+      ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
+   ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+   ObjectSetInteger(0, name, OBJPROP_XDISTANCE, 12);
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 18 + row * 14);
+   ObjectSetString(0, name, OBJPROP_TEXT, text);
+   ObjectSetString(0, name, OBJPROP_FONT, "Courier New");
+   ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
+   ObjectSetInteger(0, name, OBJPROP_COLOR, clrGainsboro);
+   ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
+}
+
+string Pad(const string s, const int width)
+{
+   string out = s;
+   while(StringLen(out) < width) out += " ";
+   return out;
 }
 
 void Render(LqLevel &lv[], const int n, const int t)
 {
-   Comment("GC_LQ: ", n, " levels detected (rendering lands in Task 12)");
+   ObjectsDeleteAll(0, PFX);
+   if(n == 0)
+   {
+      PanelLine(0, "LIQUIDITY RACE - no levels in range");
+      ChartRedraw();
+      return;
+   }
+
+   double close = gR[t].close;
+   double atr = gATR[t];
+   int digits = (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS);
+
+   // draw order: rays and labels, one per level
+   int ranks[];
+   ArrayResize(ranks, n);
+   for(int i = 0; i < n; i++) ranks[i] = RankOf(lv, n, i, close);
+
+   for(int i = 0; i < n; i++)
+   {
+      color clr = (lv[i].up == 1) ? InpBuySideColor : InpSellSideColor;
+      string base = PFX + IntegerToString(i);
+      DrawRay(base + "_ray", gR[lv[i].formation].time, lv[i].price, clr, ranks[i]);
+      string text = KindTag(lv[i].kind) + " "
+                  + DoubleToString(lv[i].price, digits)
+                  + " · #" + IntegerToString(ranks[i]);
+      if(ShowProbability())
+         text += " · " + DoubleToString(lv[i].prob * 100.0, 0) + "%";
+      DrawLabel(base + "_lbl", lv[i].price, text, clr);
+   }
+
+   if(!InpShowPanel) { ChartRedraw(); return; }
+
+   // panel: all levels, sorted by probability (or by distance in rank_only mode)
+   int order[];
+   ArrayResize(order, n);
+   for(int i = 0; i < n; i++) order[i] = i;
+   for(int a = 1; a < n; a++)
+   {
+      int key = order[a];
+      int b = a - 1;
+      while(b >= 0)
+      {
+         bool swap = ShowProbability()
+            ? (lv[order[b]].prob < lv[key].prob)
+            : (MathAbs(lv[order[b]].price - close) > MathAbs(lv[key].price - close));
+         if(!swap) break;
+         order[b + 1] = order[b];
+         b--;
+      }
+      order[b + 1] = key;
+   }
+
+   int row = 0;
+   PanelLine(row++, "LIQUIDITY RACE - next 24h        ATR "
+             + DoubleToString(atr, 1));
+   PanelLine(row++, Pad("", 26) + Pad("dATR", 8)
+             + (ShowProbability() ? "P(first)" : ""));
+   for(int k = 0; k < n; k++)
+   {
+      int i = order[k];
+      double datr = (lv[i].price - close) / atr;
+      string line = Pad(" #" + IntegerToString(k + 1), 5)
+                  + Pad(KindTag(lv[i].kind), 7)
+                  + Pad(DoubleToString(lv[i].price, digits), 14)
+                  + Pad(StringFormat("%+.1f", datr), 8);
+      if(ShowProbability())
+         line += StringFormat("%5.0f%%", lv[i].prob * 100.0);
+      PanelLine(row++, line);
+   }
+   // The honest denominator. Without it a 34% top rank reads far more
+   // confident than it is, so this row is permanent.
+   if(ShowProbability())
+      PanelLine(row++, Pad("     nothing touched", 34)
+                + StringFormat("%5.0f%%", gProbNone * 100.0));
+   else
+      PanelLine(row++, "     model uncalibrated - ranks only");
+   ChartRedraw();
 }
