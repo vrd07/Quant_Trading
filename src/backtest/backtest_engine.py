@@ -434,6 +434,7 @@ class BacktestEngine:
                     'stop_loss': float(signal.stop_loss) if signal.stop_loss else None,
                     'take_profit': float(signal.take_profit) if signal.take_profit else None,
                     'strategy': signal.strategy_name,
+                    'regime': signal.regime.value if signal.regime else None,
                     'strength': signal.strength,
                     'r_dollars': r_dollars,
                     'pnl': 0  # Will be updated when closed
