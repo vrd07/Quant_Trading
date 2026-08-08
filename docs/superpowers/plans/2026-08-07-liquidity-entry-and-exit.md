@@ -319,8 +319,12 @@ trade rows — generic, and useful beyond this work.
 - Test: `tests/unit/test_backtest_regime_column.py`
 
 **Interfaces:**
-- Produces: a `regime` column in `*_trades.csv`, values `"trend"` / `"range"` /
-  `None`. Consumed by Task A3.
+- Produces: a `regime` column in `*_trades.csv`. Values are **uppercase** —
+  `"TREND"` / `"RANGE"` / `"UNKNOWN"` — because they come from `MarketRegime.<X>.value`
+  and that enum's values are uppercase. `Signal.regime` is non-Optional and defaults to
+  `MarketRegime.UNKNOWN`, so the `else None` branch never fires; it is kept only as a
+  guard against a future Optional change. Consumed by Task A3, which **must compare
+  uppercase**.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -562,8 +566,19 @@ def main() -> int:
         print("no kalman trades in the log — nothing to diagnose")
         return 1
 
+    # MarketRegime values are UPPERCASE ("TREND"/"RANGE"/"UNKNOWN"). Normalise once
+    # here so a case mismatch cannot silently match zero rows and masquerade as
+    # "no trades in this mode" — which would read as a genuine stop condition.
+    trades["regime"] = trades["regime"].astype(str).str.upper()
+
     trades["adverse_atr"] = adverse_distances(bars, trades)
     trades["slice"] = np.where(trades["timestamp"] <= IS_END, "IS", "OOS")
+
+    seen = set(trades["regime"].unique())
+    if not ({"TREND", "RANGE"} & seen):
+        print(f"ABORT: no TREND/RANGE rows — regime column holds {sorted(seen)}. "
+              f"This is a plumbing bug, NOT a result. Do not read it as 'no effect'.")
+        return 2
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w") as fh:
@@ -579,26 +594,26 @@ def main() -> int:
             s = trades[trades["slice"] == sl]
             fh.write(f"\n## {sl}\n")
             section(fh, "All modes", bucket_table(s))
-            for mode in ("trend", "range"):
+            for mode in ("TREND", "RANGE"):
                 m = s[s["regime"] == mode]
                 if len(m):
-                    section(fh, f"{mode.upper()} (n={len(m)})", bucket_table(m))
+                    section(fh, f"{mode} (n={len(m)})", bucket_table(m))
                     for side in ("BUY", "SELL"):
                         ms = m[m["side"].str.upper() == side]
                         if len(ms):
-                            section(fh, f"{mode.upper()} / {side} (n={len(ms)})",
+                            section(fh, f"{mode} / {side} (n={len(ms)})",
                                     bucket_table(ms))
                 else:
-                    fh.write(f"\n### {mode.upper()}\n\nno trades\n")
+                    fh.write(f"\n### {mode}\n\nno trades in this mode\n")
 
             fh.write(f"\n### Veto simulation — {sl}\n\n")
-            for mode in ("trend", "range"):
+            for mode in ("TREND", "RANGE"):
                 m = s[s["regime"] == mode]
                 if not len(m):
                     continue
                 vt = veto_table(m)
                 bn, bp, bw = vt.attrs["base"]
-                fh.write(f"\n**{mode.upper()}** baseline: n={bn}, "
+                fh.write(f"\n**{mode}** baseline: n={bn}, "
                          f"pnl={bp:.2f}, win_rate={bw:.3f}\n\n")
                 fh.write(vt.to_markdown(index=False))
                 fh.write("\n")
