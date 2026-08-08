@@ -268,3 +268,26 @@ class TestGuards:
         data = bars()
         sig = run(strat, cycle(0.60, +5.0), regime(CycleRegime.TREND), data=data)
         assert sig.timestamp == data.index[-1].to_pydatetime()
+
+
+class TestRegistration:
+    def test_present_in_the_strategy_registry(self):
+        from src.strategies.strategy_manager import StrategyManager
+        assert StrategyManager.STRATEGY_REGISTRY["wavelet_cycle"] is WaveletCycleStrategy
+
+    def test_weights_table_has_all_three_regimes(self):
+        from scripts.regime_classifier import STRATEGY_WEIGHTS
+        for regime in ("TREND", "RANGE", "VOLATILE"):
+            assert "wavelet_cycle" in STRATEGY_WEIGHTS[regime]
+
+    def test_ships_disabled_in_every_live_config(self):
+        """Unvalidated strategy: registered for consistency, off for safety."""
+        import glob
+        import yaml
+        paths = glob.glob("config/config_live*.yaml")
+        assert len(paths) >= 7
+        for path in paths:
+            with open(path) as fh:
+                cfg = yaml.safe_load(fh)
+            block = cfg["strategies"]["wavelet_cycle"]
+            assert block["enabled"] is False, f"{path} has wavelet_cycle enabled"

@@ -267,6 +267,7 @@ STRATEGY_WEIGHTS = {
         "wednesday_drift": 0.70,  # calendar-structural (AUDJPY mid-week risk-on drift); regime-agnostic — fires once/week on its own latch
         "bos_structure":  0.70,  # SMC CHOCH→BOS×2→pullback (2026-07-07 research: PF 1.56/1.64 both yrs); regime-agnostic — own structure machine governs
         "ema200_nasdaq":  0.70,  # NASDAQ 13:40 UTC EMA200 anchor break; regime-agnostic — own anchor/window gate governs (user-shipped, research PF 1.04)
+        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
     "RANGE": {
         "momentum":       0.55,  # raised: still captures pullback momentum entries in range
@@ -284,6 +285,7 @@ STRATEGY_WEIGHTS = {
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
         "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
         "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
+        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
     "VOLATILE": {
         "momentum":       0.50,  # raised: momentum rides vol-driven trends
@@ -301,6 +303,7 @@ STRATEGY_WEIGHTS = {
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
         "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
         "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
+        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
 }
 
