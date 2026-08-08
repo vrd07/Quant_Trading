@@ -65,6 +65,19 @@ Spec: `docs/superpowers/specs/2026-08-07-kalman-liquidity-gate-design.md`
 threshold leaves a mode with fewer than 80 trades over the full span, Phase A stops there
 and Tasks A4–A5 are not done. That outcome is a legitimate result, not a failure.
 
+> ## ⛔ PHASE A IS CLOSED — 2026-08-08
+> **A1 ✅ · A2 ✅ · A3 ✅ (verdict: STOP, no effect) · A4 ❌ not done · A5 ❌ not done.**
+>
+> The gate is not supported. On 11,534 per-year trades (IS 9,906 / OOS 1,628) no
+> candidate threshold moved `kept_mean_R` or `kept_win_rate` by more than 0.17 standard
+> errors, and RANGE was negative at three of four thresholds. Full verdict, tables and
+> caveats: `reports/kalman_liquidity_gate.md`.
+>
+> Do not resume A4/A5 by picking a different threshold — there was no threshold that
+> qualified. Reopening Phase A requires a new hypothesis, not a re-cut of this one.
+>
+> **Phase B below is independent of this result and remains live.**
+
 ---
 
 ### Task A1: Adverse-pool proximity function
