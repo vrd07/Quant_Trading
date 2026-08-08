@@ -257,6 +257,13 @@ risk:
     # Per-strategy exits (strategy name from the MT5 order comment).
     # london_breakout's validated exit is SL-or-time-stop, no BE/lock moves.
     strategy_overrides:
+      wavelet_cycle:
+        # Static ceiling standing in for the spec's dynamic 1.5x-cycle time stop.
+        # 1.5 * max_period(48) * 15m = 1080 min. The per-trade value is published
+        # as metadata['time_stop_minutes']; honouring it dynamically needs a
+        # change in trailing_stop_manager and is NOT wired.
+        time_stop_minutes: 1080
+        disable_be_lock: true
       london_breakout:
         time_stop_minutes: 360
         disable_be_lock: true
@@ -380,6 +387,30 @@ strategies:
     cooldown_bars: 0         # research sim has no cooldown; engine governs overlap
     timeframe_minutes: 15
     allowed_symbols: [XAUUSD]  # hard gate — US30 FAILED the same research (PF 1.05)
+
+  # ── WAVELET CYCLE (XAUUSD ONLY — hard-gated in code) ────────────────────────
+  # Causal DWT trend + FFT/MESA dominant cycle + Goertzel phase, inside a
+  # regime gate. DISABLED: shipped for registry/weights consistency only.
+  # Research verdict = NO EDGE (reports/wavelet_cycle_research.md): no grid cell
+  # was positive on both train and validate, so the frozen OOS slice was never
+  # spent; BTC produced 0 trades (cycle gate never opened on 1,600/1,600 bars).
+  # Enable ONLY after a NEW hypothesis passes the frozen OOS test WITH a
+  # surrogate margin, and 200 paper trades per spec §8.3.
+  # ⚠️ Prior art: reports/fourier_research.md rejected FFT extrapolation,
+  # cycle-phase entries and spectral-entropy gates on this instrument.
+  wavelet_cycle:
+    enabled: false
+    timeframe: 15m
+    asset_preset: gold
+    allowed_symbols: ["XAUUSD"]
+    atr_period: 14
+    entry_dev_atr: 0.5
+    rr: 2.0
+    # 4.0, NOT the spec's 2.0. At 2.0 the §8.1 hallucination gate fails outright
+    # (pink noise reads tradeable on 61% of bars vs a 30% ceiling). See the
+    # measurement table in src/cycles/cycle_tracker.py.
+    min_prominence: 4.0
+    min_strength: 0.3
 
   ema200_nasdaq:
     enabled: false   # DISABLED 2026-07-08 — negative expectancy in every framing
@@ -733,7 +764,7 @@ trading_hours:
       end: "07:00"
       enabled: true
       lot_size_multiplier: 0.7
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq, wavelet_cycle]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON 07:00–12:00 UTC — breakout/trend bias ─────────────────────────
     - name: london
@@ -741,7 +772,7 @@ trading_hours:
       end: "12:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq, wavelet_cycle]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LONDON/NY OVERLAP 12:00–16:00 UTC — peak liquidity ───────────────────
     - name: overlap
@@ -749,7 +780,7 @@ trading_hours:
       end: "16:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq, wavelet_cycle]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── NEW YORK 16:00–22:00 UTC — momentum/trend continuation ───────────────
     - name: new_york
@@ -757,7 +788,7 @@ trading_hours:
       end: "22:00"
       enabled: true
       lot_size_multiplier: 1.0
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq, wavelet_cycle]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
     # ── LATE / DEAD ZONE 22:00–24:00 UTC — disabled (wide spreads) ───────────
     - name: late_ny
@@ -765,11 +796,11 @@ trading_hours:
       end: "23:59"
       enabled: true   # 2026-05-05: enabled for Kalman 24h coverage; lot_size_multiplier 0.5 caps wide-spread risk
       lot_size_multiplier: 0.5
-      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
+      strategies: [kalman_regime, sbr, vwap, momentum, smc_ob, asia_range_fade, fibonacci_retracement, london_breakout, monday_drift, squeeze_breakout, stoch_pullback, index_overnight, wednesday_drift, bos_structure, ema200_nasdaq, wavelet_cycle]   # 2026-05-14: unified combo whitelist (ConfluenceGate gates the rest)
 
   news_filter:
     enabled: true
-    csv_path: news/2026-08-08_news.csv
+    csv_path: news/2026-08-09_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
