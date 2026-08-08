@@ -131,8 +131,19 @@ class BacktestEngine:
         # overrides permanently halting a backtest after early losses.
         self.bypass_risk_limits = bypass_risk_limits
 
-        # Risk processor: computes SL/TP from signal metadata
-        self.risk_processor = RiskProcessor(risk_config)
+        # Risk processor: computes SL/TP from signal metadata.
+        # The provider hands the liquidity TP overlay the trailing bar window. It
+        # returns None rather than a short frame — a shorter frame yields a different
+        # pool set than live, which is exactly the drift HISTORY_BARS exists to prevent.
+        self._bars_for_overlay = None
+        self.risk_processor = RiskProcessor(
+            risk_config,
+            bar_provider=lambda ticker, n: (
+                None if self._bars_for_overlay is None
+                else self._bars_for_overlay.iloc[-n:] if len(self._bars_for_overlay) >= n
+                else None
+            ),
+        )
         
         # Performance tracking
         self.metrics = PerformanceMetrics()
@@ -215,6 +226,9 @@ class BacktestEngine:
         # Process each bar
         for i in range(len(bars)):
             self.current_bar_index = i
+            # Full causal history, not the max_window slice: the overlay asks for
+            # HISTORY_BARS (2500) which is wider than the strategy window (1000).
+            self._bars_for_overlay = bars.iloc[:i + 1]
 
             # Get data available up to this bar (no lookahead).
             # Limit window to max_window bars to avoid O(n²) indicator recompute.

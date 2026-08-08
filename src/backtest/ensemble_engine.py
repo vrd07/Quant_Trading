@@ -112,7 +112,18 @@ class EnsembleBacktestEngine:
         self.risk_engine = RiskEngine(cfg)
         self.risk_engine.equity_high_water_mark = initial_capital
         self.risk_engine.daily_start_equity = initial_capital
-        self.risk_processor = RiskProcessor(cfg)
+        # The provider hands the liquidity TP overlay the trailing bar window. It
+        # returns None rather than a short frame — a shorter frame yields a different
+        # pool set than live, which is exactly the drift HISTORY_BARS exists to prevent.
+        self._bars_for_overlay = None
+        self.risk_processor = RiskProcessor(
+            cfg,
+            bar_provider=lambda ticker, n: (
+                None if self._bars_for_overlay is None
+                else self._bars_for_overlay.iloc[-n:] if len(self._bars_for_overlay) >= n
+                else None
+            ),
+        )
 
         news_active_at = (news_replay.is_active_at_bar
                           if news_replay is not None else None)
@@ -238,6 +249,9 @@ class EnsembleBacktestEngine:
         for i in range(len(bars)):
             window_start = max(0, i + 1 - max_window)
             available = bars.iloc[window_start:i + 1]
+            # Full causal history, not the max_window slice: the overlay asks for
+            # HISTORY_BARS (2500) which is wider than the strategy window (1000).
+            self._bars_for_overlay = bars.iloc[:i + 1]
             if len(available) < min_history:
                 continue
 

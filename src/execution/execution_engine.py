@@ -29,6 +29,8 @@ from decimal import Decimal
 from datetime import datetime, timezone, timedelta
 import time
 
+import pandas as pd
+
 from ..connectors.mt5_connector import MT5Connector
 from ..core.types import Order, Signal, Position, Symbol
 from ..core.constants import OrderStatus, OrderSide, OrderType
@@ -78,7 +80,12 @@ class ExecutionEngine:
         # Sub-components
         self.order_manager = OrderManager()
         self.fill_handler = FillHandler()
-        self.risk_processor = RiskProcessor(risk_engine.config)
+        # self.data_engine is assigned above, so the bound method resolves it fine;
+        # it would resolve at call time regardless of construction order.
+        self.risk_processor = RiskProcessor(
+            risk_engine.config,
+            bar_provider=self._overlay_bars,
+        )
         
         # Logging
         from ..monitoring.logger import get_logger
@@ -89,7 +96,36 @@ class ExecutionEngine:
         # signal. Keyed by reason text; re-alert only after the cooldown.
         self._last_reject_alert: Dict[str, float] = {}
         self._reject_alert_cooldown_s = 900.0  # 15 min per distinct reason
-    
+
+    def _overlay_bars(self, ticker: str, n: int):
+        """Trailing 15m bars for the liquidity TP overlay, or None.
+
+        DataEngine.get_bars returns `timestamp` as a COLUMN; build_context raises
+        unless the frame carries a tz-aware DatetimeIndex, so the index is set here.
+        Without this the overlay fails open on every live signal and looks like
+        "no pools found".
+
+        Returns None rather than a short frame: a different bar count produces a
+        different pool set than the backtest, and build_context's recursive ATR/EMA
+        seeds make that difference silent.
+        """
+        try:
+            de = getattr(self, 'data_engine', None)
+            if de is None:
+                return None
+            bars = de.get_bars(ticker, '15m', count=n)
+            if bars is None or len(bars) < n:
+                return None
+            if not isinstance(bars.index, pd.DatetimeIndex):
+                if 'timestamp' not in bars.columns:
+                    return None
+                bars = bars.set_index('timestamp')
+            if bars.index.tz is None:
+                bars = bars.tz_localize('UTC')
+            return bars.iloc[-n:]
+        except Exception:
+            return None
+
     def submit_signal(
         self,
         signal: Signal,
