@@ -190,6 +190,9 @@ class StochPullbackStrategy(BaseStrategy):
                 # The STRUCTURAL stop + fixed RR is the edge — keep the execution
                 # layer's BudgetSL from shrinking the stop to the dollar budget.
                 'preserve_structural_sl': True,
+                # Published for the liquidity TP overlay, which scales its buffer in
+                # ATR. Without it the overlay reads atr=0 and declines every signal.
+                'atr': atr_now,
                 'stoch_k': k_now,
                 'stoch_d': d_now,
                 'ema': ema_now,

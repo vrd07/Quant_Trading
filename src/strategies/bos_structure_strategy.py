@@ -298,6 +298,9 @@ class BOSStructureStrategy(BaseStrategy):
                 # The STRUCTURAL stop + fixed RR is the validated geometry — keep
                 # the execution-layer BudgetSL from shrinking it to the $ budget.
                 'preserve_structural_sl': True,
+                # Published for the liquidity TP overlay, which scales its buffer in
+                # ATR. Without it the overlay reads atr=0 and declines every signal.
+                'atr': float(atr.iloc[-1]) if len(atr) else 0.0,
                 'bos_count': sig['bos_count'],
                 'pivot_bars': self.pivot_bars,
                 'rr': self.rr,

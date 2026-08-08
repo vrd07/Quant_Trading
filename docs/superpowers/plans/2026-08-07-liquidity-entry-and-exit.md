@@ -65,6 +65,19 @@ Spec: `docs/superpowers/specs/2026-08-07-kalman-liquidity-gate-design.md`
 threshold leaves a mode with fewer than 80 trades over the full span, Phase A stops there
 and Tasks A4–A5 are not done. That outcome is a legitimate result, not a failure.
 
+> ## ⛔ PHASE A IS CLOSED — 2026-08-08
+> **A1 ✅ · A2 ✅ · A3 ✅ (verdict: STOP, no effect) · A4 ❌ not done · A5 ❌ not done.**
+>
+> The gate is not supported. On 11,534 per-year trades (IS 9,906 / OOS 1,628) no
+> candidate threshold moved `kept_mean_R` or `kept_win_rate` by more than 0.17 standard
+> errors, and RANGE was negative at three of four thresholds. Full verdict, tables and
+> caveats: `reports/kalman_liquidity_gate.md`.
+>
+> Do not resume A4/A5 by picking a different threshold — there was no threshold that
+> qualified. Reopening Phase A requires a new hypothesis, not a re-cut of this one.
+>
+> **Phase B below is independent of this result and remains live.**
+
 ---
 
 ### Task A1: Adverse-pool proximity function
@@ -319,8 +332,12 @@ trade rows — generic, and useful beyond this work.
 - Test: `tests/unit/test_backtest_regime_column.py`
 
 **Interfaces:**
-- Produces: a `regime` column in `*_trades.csv`, values `"trend"` / `"range"` /
-  `None`. Consumed by Task A3.
+- Produces: a `regime` column in `*_trades.csv`. Values are **uppercase** —
+  `"TREND"` / `"RANGE"` / `"UNKNOWN"` — because they come from `MarketRegime.<X>.value`
+  and that enum's values are uppercase. `Signal.regime` is non-Optional and defaults to
+  `MarketRegime.UNKNOWN`, so the `else None` branch never fires; it is kept only as a
+  guard against a future Optional change. Consumed by Task A3, which **must compare
+  uppercase**.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -399,23 +416,40 @@ git commit -m "feat: log regime on backtest trade rows"
 - Consumes: `nearest_adverse_pool_atr` (Task A1), the `regime` column (Task A2).
 - Produces: a chosen `adverse_pool_atr` per mode, or a decision to stop.
 
-- [ ] **Step 1: Produce the baseline trade log**
+- [ ] **Step 1: Produce the baseline trade log, one run per calendar year**
+
+⚠️ **Do not run this as a single full-span backtest.** A single 2022→2026 run blows the
+account to −99.50% inside 2022 and stops emitting trades on 2022-09-21, leaving OOS
+empty and making the IS-select / 2026-holdout guard impossible. That was measured, not
+predicted. The badness is concentrated in 2022: a 2025-01-01→2026-08-01 slice runs
+PF 1.00, WR 46.4%, ~4,400 trades and survives fine.
+
+Run each calendar year with fresh capital so no year's ruin truncates the next:
 
 ```bash
-./venv/bin/python scripts/run_backtest.py \
-  --strategy kalman_regime --symbol XAUUSD --timeframe 15m \
-  --slippage strict --output data/backtests/kalman_liq_base
+for yr in 2022 2023 2024 2025 2026; do
+  ./venv/bin/python scripts/run_backtest.py \
+    --strategy kalman_regime --symbol XAUUSD --timeframe 15m --slippage strict \
+    --start ${yr}-01-01 --end ${yr}-12-31 --capital 50000 \
+    --output data/backtests/kalman_liq_${yr}
+done
 ```
 
-This writes `data/backtests/kalman_liq_base_kalman_regime_trades.csv`. Confirm it has
-a `regime` column and a non-trivial row count:
+Confirm every year produced trades and carries a `regime` column:
 
 ```bash
-./venv/bin/python -c "import pandas as pd; d=pd.read_csv('data/backtests/kalman_liq_base_kalman_regime_trades.csv'); print(len(d)); print(d['regime'].value_counts(dropna=False))"
+./venv/bin/python - <<'PY'
+import glob, pandas as pd
+for f in sorted(glob.glob('data/backtests/kalman_liq_20*_kalman_regime_trades.csv')):
+    d = pd.read_csv(f)
+    print(f.split('/')[-1], len(d), dict(d['regime'].value_counts()))
+PY
 ```
 
-If the total is under ~150 trades, record that in the report — it caps how much any
-per-mode result can prove, and it is itself close to a stop condition.
+A year with zero trades means that year still hit ruin — record it and continue; the
+diagnostic works on whatever years survive, provided 2026 is one of them. **If 2026 has
+no trades, stop and report BLOCKED** — without OOS there is no holdout and the whole
+methodological guard is void.
 
 - [ ] **Step 2: Write the diagnostic script**
 
@@ -500,43 +534,62 @@ def adverse_distances(bars: pd.DataFrame, trades: pd.DataFrame) -> pd.Series:
 
 
 def bucket_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Outcome by adverse-pool distance. Metrics are R-multiples, not dollars.
+
+    Raw PnL is confounded here: position size is equity-proportional, so on a
+    declining account early trades carry far more dollar weight than late ones and a
+    dollar total partly measures WHEN a trade happened. R = pnl / r_dollars divides
+    that out. mean_R is the number that decides this diagnostic.
+    """
     lab = pd.cut(df["adverse_atr"], bins=BUCKETS, right=False)
-    g = df.groupby(lab, observed=False)["pnl"]
+    g = df.groupby(lab, observed=False)
     tbl = pd.DataFrame({
         "n": g.size(),
-        "win_rate": g.apply(lambda s: float((s > 0).mean()) if len(s) else np.nan),
-        "mean_pnl": g.mean(),
-        "total_pnl": g.sum(),
+        "win_rate": g["R"].apply(lambda s: float((s > 0).mean()) if len(s) else np.nan),
+        "mean_R": g["R"].mean(),
+        "total_R": g["R"].sum(),
     })
     none_rows = df[df["adverse_atr"].isna()]
     tbl.loc["no adverse pool"] = [
         len(none_rows),
-        float((none_rows["pnl"] > 0).mean()) if len(none_rows) else np.nan,
-        none_rows["pnl"].mean() if len(none_rows) else np.nan,
-        none_rows["pnl"].sum() if len(none_rows) else 0.0,
+        float((none_rows["R"] > 0).mean()) if len(none_rows) else np.nan,
+        none_rows["R"].mean() if len(none_rows) else np.nan,
+        none_rows["R"].sum() if len(none_rows) else 0.0,
     ]
     return tbl
 
 
 def veto_table(df: pd.DataFrame) -> pd.DataFrame:
-    """What a veto at each candidate threshold would remove and leave behind."""
+    """What a veto at each candidate threshold would remove and leave behind.
+
+    `kept_mean_R` and `kept_win_rate` are the columns that matter. A veto that only
+    raises total_R while leaving mean_R and win_rate flat is not selecting better
+    trades — it is just trading less of the same distribution, which lowers the loss
+    of a negative-expectancy system by arithmetic alone.
+    """
     rows = []
-    base_n, base_pnl = len(df), df["pnl"].sum()
-    base_wr = float((df["pnl"] > 0).mean()) if base_n else np.nan
+    base_n = len(df)
+    base_R, base_mean = df["R"].sum(), df["R"].mean()
+    base_wr = float((df["R"] > 0).mean()) if base_n else np.nan
     for x in CANDIDATE_THRESHOLDS:
         cut = df["adverse_atr"].notna() & (df["adverse_atr"] <= x)
         kept = df[~cut]
+        n_k = len(kept)
+        # s.e. of the kept win rate, so a move can be read against its own noise
+        wr_k = float((kept["R"] > 0).mean()) if n_k else np.nan
+        se = float(np.sqrt(wr_k * (1 - wr_k) / n_k)) if n_k and np.isfinite(wr_k) else np.nan
         rows.append({
             "threshold_atr": x,
             "vetoed_n": int(cut.sum()),
-            "vetoed_pnl": float(df.loc[cut, "pnl"].sum()),
-            "kept_n": len(kept),
-            "kept_pnl": float(kept["pnl"].sum()),
-            "kept_win_rate": float((kept["pnl"] > 0).mean()) if len(kept) else np.nan,
-            "pnl_delta": float(kept["pnl"].sum() - base_pnl),
+            "vetoed_mean_R": float(df.loc[cut, "R"].mean()) if int(cut.sum()) else np.nan,
+            "kept_n": n_k,
+            "kept_win_rate": wr_k,
+            "kept_wr_se": se,
+            "kept_mean_R": float(kept["R"].mean()) if n_k else np.nan,
+            "mean_R_delta": float(kept["R"].mean() - base_mean) if n_k else np.nan,
         })
     out = pd.DataFrame(rows)
-    out.attrs["base"] = (base_n, base_pnl, base_wr)
+    out.attrs["base"] = (base_n, base_R, base_mean, base_wr)
     return out
 
 
@@ -549,21 +602,44 @@ def section(fh, title, df_or_tbl):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bars", default="data/historical/XAUUSD_5m_real.csv")
-    ap.add_argument("--trades",
-                    default="data/backtests/kalman_liq_base_kalman_regime_trades.csv")
+    ap.add_argument("--trades-glob",
+                    default="data/backtests/kalman_liq_20*_kalman_regime_trades.csv",
+                    help="per-year trade logs; concatenated")
     ap.add_argument("--out", default="reports/kalman_liquidity_gate.md")
     args = ap.parse_args()
 
+    import glob
+    files = sorted(glob.glob(args.trades_glob))
+    if not files:
+        print(f"no trade logs matched {args.trades_glob}")
+        return 1
+    trades = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+
     bars = load_15m(Path(args.bars))
-    trades = pd.read_csv(Path(args.trades))
     trades["timestamp"] = pd.to_datetime(trades["timestamp"], utc=True)
     trades = trades[trades["strategy"] == "kalman_regime"].reset_index(drop=True)
     if trades.empty:
-        print("no kalman trades in the log — nothing to diagnose")
+        print("no kalman trades in the logs — nothing to diagnose")
         return 1
+
+    # R-multiple. r_dollars is the trade's dollar risk at entry, so pnl / r_dollars is
+    # sizing-normalised and comparable across years run at different equity levels.
+    trades = trades[trades["r_dollars"] > 0].reset_index(drop=True)
+    trades["R"] = trades["pnl"] / trades["r_dollars"]
+
+    # MarketRegime values are UPPERCASE ("TREND"/"RANGE"/"UNKNOWN"). Normalise once
+    # here so a case mismatch cannot silently match zero rows and masquerade as
+    # "no trades in this mode" — which would read as a genuine stop condition.
+    trades["regime"] = trades["regime"].astype(str).str.upper()
 
     trades["adverse_atr"] = adverse_distances(bars, trades)
     trades["slice"] = np.where(trades["timestamp"] <= IS_END, "IS", "OOS")
+
+    seen = set(trades["regime"].unique())
+    if not ({"TREND", "RANGE"} & seen):
+        print(f"ABORT: no TREND/RANGE rows — regime column holds {sorted(seen)}. "
+              f"This is a plumbing bug, NOT a result. Do not read it as 'no effect'.")
+        return 2
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     with open(args.out, "w") as fh:
@@ -579,27 +655,27 @@ def main() -> int:
             s = trades[trades["slice"] == sl]
             fh.write(f"\n## {sl}\n")
             section(fh, "All modes", bucket_table(s))
-            for mode in ("trend", "range"):
+            for mode in ("TREND", "RANGE"):
                 m = s[s["regime"] == mode]
                 if len(m):
-                    section(fh, f"{mode.upper()} (n={len(m)})", bucket_table(m))
+                    section(fh, f"{mode} (n={len(m)})", bucket_table(m))
                     for side in ("BUY", "SELL"):
                         ms = m[m["side"].str.upper() == side]
                         if len(ms):
-                            section(fh, f"{mode.upper()} / {side} (n={len(ms)})",
+                            section(fh, f"{mode} / {side} (n={len(ms)})",
                                     bucket_table(ms))
                 else:
-                    fh.write(f"\n### {mode.upper()}\n\nno trades\n")
+                    fh.write(f"\n### {mode}\n\nno trades in this mode\n")
 
             fh.write(f"\n### Veto simulation — {sl}\n\n")
-            for mode in ("trend", "range"):
+            for mode in ("TREND", "RANGE"):
                 m = s[s["regime"] == mode]
                 if not len(m):
                     continue
                 vt = veto_table(m)
-                bn, bp, bw = vt.attrs["base"]
-                fh.write(f"\n**{mode.upper()}** baseline: n={bn}, "
-                         f"pnl={bp:.2f}, win_rate={bw:.3f}\n\n")
+                bn, bR, bmean, bwr = vt.attrs["base"]
+                fh.write(f"\n**{mode}** baseline: n={bn}, total_R={bR:.2f}, "
+                         f"mean_R={bmean:.4f}, win_rate={bwr:.4f}\n\n")
                 fh.write(vt.to_markdown(index=False))
                 fh.write("\n")
 
@@ -625,10 +701,22 @@ few minutes — one context build over ~160k bars, then one choice set per trade
 Read `reports/kalman_liquidity_gate.md` and decide, **using the IS tables only**:
 
 **STOP — no effect.** If, in the IS veto tables, no candidate threshold produces a
-positive `pnl_delta` for either mode, the hypothesis is not supported. Write the verdict
-into the report, commit it, and **do not do Tasks A4 or A5**. Report this outcome to the
-user plainly — it is a real finding and it is the outcome the calibration's near-zero
-`type_equal` / `type_session` betas mildly favour.
+`mean_R_delta` that is both positive and larger than the noise in `kept_win_rate`
+(compare the win-rate move against `kept_wr_se` — a move inside one standard error is
+not evidence), the hypothesis is not supported. Write the verdict into the report,
+commit it, and **do not do Tasks A4 or A5**. Report this outcome plainly — it is a real
+finding and the one the calibration's near-zero `type_equal` / `type_session` betas
+mildly favour.
+
+⚠️ **The trap this criterion exists to catch.** On a negative-expectancy base strategy,
+vetoing *any* sizeable fraction of trades raises `total_R` purely by arithmetic — you
+are simply trading less of a losing distribution. That is not an edge and it will not
+survive. The signature of a genuine effect is `kept_mean_R` and `kept_win_rate` RISING
+by more than their noise; the signature of the artifact is `total_R` improving while
+`mean_R` and `win_rate` stay flat. An earlier run of this diagnostic showed exactly the
+artifact — RANGE total looked strong while win rate moved 0.3724 → 0.3791 against a
+standard error of 2.6pp, and TREND had the opposite sign at every threshold. Do not
+report that pattern as support.
 
 **STOP — too few survivors.** If the best threshold for a mode leaves `kept_n < 80`
 over the full span, that mode cannot separate from noise. Mark that mode as
@@ -1077,6 +1165,24 @@ Spec: `docs/superpowers/specs/2026-08-07-liquidity-tp-overlay-design.md`
 Independent of Phase A. Can be done first, or in parallel by a different worker, with one
 exception: both tasks modify `tests/unit/test_liquidity_levels.py`. If Phase A has not run,
 Task B2 Step 6 creates the `_ALLOWED_CROSSINGS` structure instead of adding a row to it.
+
+> ## ⛔ PHASE B IS CLOSED — 2026-08-08
+> **B1 ✅ · B2 ✅ · B3 ✅ · B4 ✅ (verdict: DOES NOT SHIP for any strategy).**
+>
+> The overlay fires (9.6% / 43.7% / 42.1% of trades) and is worse in **6 of 6
+> year-cells**. `enabled: false` in all 8 configs. Full results, mechanism and the
+> two plumbing defects that made the first A/B a false null:
+> `reports/liquidity_tp_overlay_ab.md`.
+>
+> **Do not re-run with a different `buffer_atr` or `band_pct`** — a knob that flips a
+> 6/6 result is fitted to the answer. Reopening needs a different question (pool-aware
+> entry or sizing), not a retune.
+>
+> Two deviations from this plan, both deliberate and both documented in the report:
+> B4's baseline runs on `config_live_25000.yaml` rather than the ACTIVE_CONFIG default
+> (otherwise the toggle is confounded with account size), and B2's hook needed
+> `RiskProcessor.apply_tp_overlay()` because `calculate_stops` is not on the backtest
+> path for any strategy this overlay targets.
 
 ---
 

@@ -172,6 +172,40 @@ round numbers**) and ranks them by a calibrated `P(this level is hit first in th
   `tests/unit/test_liquidity_levels.py::TestScopeBoundary`. Wiring it into a strategy
   is a separate decision behind the full `backtest.md` 8-gate process.
 
+#### Both trading uses of liquidity pools were tested and REJECTED (2026-08-08)
+
+Two hypotheses were taken through that 8-gate process. Neither ships. The code for both
+stays — tested, inert, reproducible — but `enabled: false` everywhere.
+
+- **Entry gate (kalman adverse-pool veto) — NO EFFECT.** Does an adverse pool sitting
+  close ahead of a kalman entry predict a stop-out? On 11,534 per-year trades
+  (IS 9,906 / OOS 1,628) no candidate threshold moved `kept_mean_R` or `kept_win_rate`
+  by more than **0.17 standard errors**, and RANGE was *negative* at three of four
+  thresholds. Never wired into the strategy. `reports/kalman_liquidity_gate.md`.
+  ⚠️ Decide this class of question on **R-multiples, never dollar PnL** — sizing is
+  equity-proportional, so on a decaying account a dollar total partly measures *when* a
+  trade happened, and vetoing any sizeable slice of a negative-expectancy strategy raises
+  total PnL by arithmetic alone. An earlier dollar-based cut of this same diagnostic
+  showed exactly that artifact and looked like support.
+- **TP overlay (snap the target short of a pool) — FIRES, AND LOSES.** `enabled: false`
+  in all 8 configs under `risk.liquidity_tp_overlay`. Worse in **6 of 6 year-cells**
+  across squeeze_breakout / stoch_pullback / bos_structure.
+  `reports/liquidity_tp_overlay_ab.md`. The premise survives — on the trades it touched,
+  win rate rose for all three and stop-outs became take-profits — but the target shrinks
+  a median 9–14%, and that surrendered reward costs more than the extra wins pay. It
+  attacks the fixed-RR geometry that IS the edge. **Do not re-run with a different
+  `buffer_atr`/`band_pct`**; a knob that flips a 6/6 result is fitted to the answer.
+- ⚠️ **The trap both hypotheses hit first: a plumbing null that looks like a result.**
+  The overlay's first A/B reproduced the baseline byte-for-byte, because (a) both
+  backtest engines call `calculate_stops` only when a signal arrives *without* a stop
+  (`if signal.entry_price and not signal.stop_loss`), and all three targeted strategies
+  emit their own structural stop, while `execution_engine` calls it unconditionally — so
+  the overlay was **live-only and invisible to every backtest**; and (b) `stoch_pullback`
+  and `bos_structure` never published `metadata['atr']`, so the overlay read `atr=0` and
+  declined every signal. Fixed via `RiskProcessor.apply_tp_overlay()` (idempotent, called
+  unconditionally in both engines) and by publishing ATR from both strategies. **Always
+  prove the feature moved something before reading its performance.**
+
 ### Configuration System
 
 Config files in `config/` follow naming `config_live_{account_size}.yaml`. The active config is passed via `--config` when invoking `src/main.py`. Key risk parameters for the $5k account:

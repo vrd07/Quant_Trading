@@ -159,6 +159,21 @@ risk:
   # Per-strategy `strategies.<name>.rr` overrides this global default.
   reward_risk_ratio: 2.0
 
+  # Liquidity TP snapping (2026-08-07). Moves the target to just short of an un-swept
+  # pool when one sits within band_pct of the current target distance.
+  # Spec: docs/superpowers/specs/2026-08-07-liquidity-tp-overlay-design.md
+  # kalman_regime is deliberately absent: its live target is rr x budget_sl_dist while
+  # its backtest target is tp_atr_multiplier x ATR, so a backtest A/B would validate a
+  # take-profit it never actually uses live.
+  liquidity_tp_overlay:
+    enabled: false
+    band_pct: 0.25
+    buffer_atr: 0.05
+    min_rr: 1.2
+    history_bars: 2500
+    strategies: [squeeze_breakout, stoch_pullback, bos_structure]
+    symbols: [XAUUSD]
+
   # Per-strategy risk override (added 2026-05-06).
   # kalman_regime sizes off its own per-trade $ cap, NOT the operator-typed
   # risk_per_trade_usd from runtime_setup. Backtest geometry (sl=3.0, tp=4.0)
@@ -732,7 +747,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-08-03_news.csv
+    csv_path: news/2026-08-08_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
