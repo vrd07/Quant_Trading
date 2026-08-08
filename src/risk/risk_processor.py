@@ -491,6 +491,27 @@ class RiskProcessor:
         signal = self._apply_liquidity_tp_overlay(signal, strategy_name)
         return signal
 
+    def apply_tp_overlay(self, signal: Signal) -> Signal:
+        """Explicit entry point for the liquidity TP overlay.
+
+        calculate_stops() already applies it, but both backtest engines call
+        calculate_stops ONLY when a signal arrives without a stop
+        (`if signal.entry_price and not signal.stop_loss`) — and all three strategies
+        this overlay targets (squeeze_breakout, stoch_pullback, bos_structure) emit
+        their own structural stop. The live path calls calculate_stops
+        unconditionally. Without this method the overlay would therefore apply LIVE
+        and stay invisible to every backtest — exactly the asymmetry the hook
+        placement was chosen to avoid.
+
+        Idempotent: a signal that already carries a liquidity_tp_reason has been
+        through the overlay once, and snapping a snapped target would compound.
+        """
+        if signal.metadata.get('liquidity_tp_reason') is not None:
+            return signal
+        strategy_name = signal.metadata.get(
+            'strategy', getattr(signal, 'strategy_name', 'unknown'))
+        return self._apply_liquidity_tp_overlay(signal, strategy_name)
+
     def _apply_liquidity_tp_overlay(self, signal: Signal, strategy_name: str) -> Signal:
         """Snap the target onto a nearby liquidity pool. Fails open, always.
 

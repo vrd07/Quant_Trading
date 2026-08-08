@@ -378,6 +378,14 @@ class EnsembleBacktestEngine:
             except Exception as e:
                 log.debug(f"calculate_stops failed: {e}")
                 return
+        # The guard above skips calculate_stops for every strategy that emits its own
+        # structural stop — which is all three the TP overlay targets. Apply the
+        # overlay explicitly so the backtest sees what live sees. Idempotent and
+        # inert unless risk.liquidity_tp_overlay.enabled.
+        try:
+            signal = self.risk_processor.apply_tp_overlay(signal)
+        except Exception as e:
+            log.debug(f"apply_tp_overlay failed: {e}")
         if not signal.entry_price or not signal.stop_loss:
             return
 

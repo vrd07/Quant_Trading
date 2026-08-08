@@ -354,6 +354,15 @@ class BacktestEngine:
                 except Exception as e:
                     self.logger.debug(f"RiskProcessor.calculate_stops failed: {e}")
 
+            # The guard above skips calculate_stops for every strategy that emits its
+            # own structural stop — which is all three the TP overlay targets. Apply
+            # the overlay explicitly so the backtest sees what live sees. Idempotent
+            # and inert unless risk.liquidity_tp_overlay.enabled.
+            try:
+                signal = self.risk_processor.apply_tp_overlay(signal)
+            except Exception as e:
+                self.logger.debug(f"apply_tp_overlay failed: {e}")
+
             # Validate signal has required fields after stop calculation
             if not signal.entry_price or not signal.stop_loss:
                 self.logger.debug(

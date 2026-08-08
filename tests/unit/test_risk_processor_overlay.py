@@ -110,3 +110,60 @@ def test_provider_exception_leaves_the_target_alone(gold_signal):
     before = gold_signal.take_profit
     out = rp.calculate_stops(gold_signal)
     assert out.take_profit == before or out.metadata.get("liquidity_tp_reason") == "error"
+
+
+# ── The explicit entry point the backtest engines need ──────────────────────
+#
+# Both backtest engines call calculate_stops ONLY when a signal arrives without a
+# stop (`if signal.entry_price and not signal.stop_loss`). All three strategies the
+# overlay targets emit their own structural stop, so calculate_stops never runs for
+# them there — while the live path calls it unconditionally. Without a separate
+# entry point the overlay would apply live and stay invisible to every backtest.
+
+
+def _snapping_rp(snapped_to=2050.0):
+    """A RiskProcessor whose overlay always snaps, so the call itself is observable."""
+    import src.risk.risk_processor as rp_mod
+    rp = RiskProcessor(_cfg(), bar_provider=lambda t, n: pd.DataFrame({"x": [1]}))
+    real_import = rp_mod.RiskProcessor._apply_liquidity_tp_overlay
+
+    def fake(self, signal, strategy_name):
+        signal.metadata["liquidity_tp_reason"] = "snapped"
+        signal.metadata["liquidity_tp_original"] = float(signal.take_profit)
+        signal.take_profit = Decimal(str(snapped_to))
+        return signal
+
+    return rp, real_import, fake
+
+
+def test_apply_tp_overlay_runs_when_calculate_stops_was_skipped(gold_signal, monkeypatch):
+    """The backtest case: the strategy already set its own stop and target."""
+    rp, _, fake = _snapping_rp()
+    monkeypatch.setattr(RiskProcessor, "_apply_liquidity_tp_overlay", fake)
+    gold_signal.stop_loss = Decimal("1967.0")
+    gold_signal.take_profit = Decimal("2066.0")
+    out = rp.apply_tp_overlay(gold_signal)
+    assert out.metadata["liquidity_tp_reason"] == "snapped"
+    assert out.take_profit == Decimal("2050.0")
+
+
+def test_apply_tp_overlay_is_idempotent(gold_signal, monkeypatch):
+    """calculate_stops may already have applied it — a second call must not re-snap."""
+    rp, _, fake = _snapping_rp()
+    monkeypatch.setattr(RiskProcessor, "_apply_liquidity_tp_overlay", fake)
+    gold_signal.stop_loss = Decimal("1967.0")
+    gold_signal.take_profit = Decimal("2066.0")
+    once = rp.apply_tp_overlay(gold_signal)
+    tp_after_first = once.take_profit
+    twice = rp.apply_tp_overlay(once)
+    assert twice.take_profit == tp_after_first, "overlay applied twice"
+    assert twice.metadata["liquidity_tp_original"] == 2066.0
+
+
+def test_apply_tp_overlay_is_inert_when_disabled(gold_signal):
+    rp = RiskProcessor(_cfg(enabled=False), bar_provider=lambda t, n: None)
+    gold_signal.stop_loss = Decimal("1967.0")
+    gold_signal.take_profit = Decimal("2066.0")
+    out = rp.apply_tp_overlay(gold_signal)
+    assert out.take_profit == Decimal("2066.0")
+    assert out.metadata.get("liquidity_tp_reason") is None
