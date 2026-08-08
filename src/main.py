@@ -1539,27 +1539,7 @@ class TradingSystem:
             )
             
             if order:
-                # Record this position's confidence so a future higher-confidence
-                # opposite signal can flip it (see Confidence-Based Reversal above).
-                try:
-                    _ticket = order.metadata.get('mt5_ticket') if getattr(order, 'metadata', None) else None
-                    if _ticket is not None:
-                        _conf = float(signal.metadata.get('confidence',
-                                       (signal.strength or 0.0) * 100.0))
-                        self._open_position_confidence.setdefault(signal_sym, {})[str(_ticket)] = _conf
-                        # Persist fire-time context (regime/strength/confidence)
-                        # so the journal isn't blind once MT5 reconstructs the
-                        # position from just its order comment at close.
-                        if self.trade_journal is not None:
-                            self.trade_journal.record_signal_context(
-                                _ticket,
-                                strategy=signal.strategy_name,
-                                regime=getattr(signal, 'regime', None),
-                                confidence=_conf,
-                                signal_strength=signal.strength,
-                            )
-                except Exception:
-                    pass
+                self._register_position_context(order, signal, signal_sym)
 
                 self.logger.info(
                     "Signal executed",
@@ -1588,7 +1568,48 @@ class TradingSystem:
                 signal_id=str(signal.signal_id),
                 error=str(e)
             )
-    
+
+    def _register_position_context(self, order, signal, signal_sym: str) -> None:
+        """
+        Bind a freshly placed order's fire-time context to its MT5 ticket.
+
+        MT5 reconstructs a position from nothing but its order comment, so
+        anything the strategy knew at fire time has to be recorded here or it
+        is lost: the confidence used by the reversal rule, the regime/strength
+        the journal wants, and any per-trade time stop the strategy published.
+        """
+        ticket = order.metadata.get('mt5_ticket') if getattr(order, 'metadata', None) else None
+        if ticket is None:
+            return
+
+        # Per-trade time stop (e.g. wavelet_cycle's 1.5x detected cycle).
+        # Registered FIRST and outside the best-effort block below: a broken
+        # journal must never cost a position its exit rule. The manager caps
+        # this by the configured ceiling and ignores missing values.
+        published_time_stop = signal.metadata.get('time_stop_minutes')
+        if published_time_stop is not None and self._trailing_stop_mgr is not None:
+            self._trailing_stop_mgr.register_time_stop(str(ticket), published_time_stop)
+
+        # Record this position's confidence so a future higher-confidence
+        # opposite signal can flip it (see Confidence-Based Reversal above).
+        try:
+            conf = float(signal.metadata.get('confidence',
+                                             (signal.strength or 0.0) * 100.0))
+            self._open_position_confidence.setdefault(signal_sym, {})[str(ticket)] = conf
+            # Persist fire-time context (regime/strength/confidence) so the
+            # journal isn't blind once MT5 reconstructs the position from just
+            # its order comment at close.
+            if self.trade_journal is not None:
+                self.trade_journal.record_signal_context(
+                    ticket,
+                    strategy=signal.strategy_name,
+                    regime=getattr(signal, 'regime', None),
+                    confidence=conf,
+                    signal_strength=signal.strength,
+                )
+        except Exception:
+            pass
+
     def _process_fills(self) -> None:
         """
         Detect recently closed positions from MT5 and update TradeJournal + RiskEngine.

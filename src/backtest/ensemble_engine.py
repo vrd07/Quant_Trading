@@ -413,6 +413,10 @@ class EnsembleBacktestEngine:
                 'strategy': strategy_name,
                 'regime': signal.regime.value if signal.regime else 'unknown',
                 'strength': signal.strength,
+                # Per-trade time stop, if the strategy published one. Carried
+                # so SimulatedBroker exits on the bar the live bot would —
+                # without it the feature is live-only and backtest-invisible.
+                'time_stop_minutes': signal.metadata.get('time_stop_minutes'),
             },
         )
 

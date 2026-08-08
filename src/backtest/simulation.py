@@ -131,6 +131,9 @@ class SimulatedBroker:
                 # Carry the engine's metrics trade index so the close record
                 # can be reconciled back to the exact entry row.
                 'trade_idx': order.metadata.get('trade_idx'),
+                # Per-trade time stop the strategy published on its signal
+                # (live parity: TrailingStopManager.register_time_stop).
+                'time_stop_minutes': order.metadata.get('time_stop_minutes'),
             }
         )
         
@@ -193,8 +196,7 @@ class SimulatedBroker:
         for pos_id, position in self.positions.items():
             # Time stop: close if position has been open too long.
             # Per-strategy override beats the global value (live parity).
-            time_stop = self._overrides_for(position).get(
-                'time_stop_minutes', self.time_stop_minutes)
+            time_stop = self._resolve_time_stop(position)
             if self.trailing_stop_enabled and time_stop is not None:
                 entry_idx = self._trail_entry_bar_idx.get(pos_id)
                 if entry_idx is not None:
@@ -240,6 +242,32 @@ class SimulatedBroker:
         # Close positions
         for pos_id, (exit_price, exit_reason) in positions_to_close.items():
             self._close_position(pos_id, exit_price, exit_reason)
+
+    def _resolve_time_stop(self, position: Position) -> Optional[float]:
+        """
+        Effective time stop in minutes for a position, or None.
+
+        Mirrors TrailingStopManager._resolve_time_stop exactly: the configured
+        value (per-strategy override, else global) is a hard ceiling, and a
+        time stop published by the strategy on its signal can only tighten the
+        hold. An unusable published value is ignored rather than trusted.
+        """
+        configured = self._overrides_for(position).get(
+            'time_stop_minutes', self.time_stop_minutes)
+
+        published = (position.metadata or {}).get('time_stop_minutes')
+        try:
+            published = int(published) if published is not None else None
+        except (TypeError, ValueError):
+            published = None
+        if published is not None and published <= 0:
+            published = None
+
+        if published is None:
+            return configured
+        if configured is None:
+            return published
+        return min(published, configured)
 
     def _overrides_for(self, position: Position) -> dict:
         """Per-strategy trailing overrides for this position (live parity)."""

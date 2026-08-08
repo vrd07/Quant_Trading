@@ -264,10 +264,13 @@ risk:
     # london_breakout's validated exit is SL-or-time-stop, no BE/lock moves.
     strategy_overrides:
       wavelet_cycle:
-        # Static ceiling standing in for the spec's dynamic 1.5x-cycle time stop.
-        # 1.5 * max_period(48) * 15m = 1080 min. The per-trade value is published
-        # as metadata['time_stop_minutes']; honouring it dynamically needs a
-        # change in trailing_stop_manager and is NOT wired.
+        # CEILING for the spec's dynamic 1.5x-cycle time stop, not the stop
+        # itself: 1.5 * max_period(48) * 15m = 1080 min. The strategy publishes
+        # its per-trade value as metadata['time_stop_minutes'] and that value
+        # is honoured live (TrailingStopManager.register_time_stop) and in
+        # backtests (SimulatedBroker._resolve_time_stop) -- but only ever to
+        # HOLD SHORTER. A strategy cannot exceed the number below, and after a
+        # restart the position falls back to it.
         time_stop_minutes: 1080
         disable_be_lock: true
       london_breakout:
