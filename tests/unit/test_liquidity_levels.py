@@ -1415,12 +1415,31 @@ class TestScopeBoundary:
             for mod in forbidden:
                 assert mod not in src, f"{rel} must not reference {mod}"
 
+    # Deliberate, reviewed crossings of the research/trading boundary. Each entry is
+    # a strategy decision taken behind the full backtest.md 8-gate process, with the
+    # spec that authorised it. Adding a row here is not a formality — it means the
+    # research-only guarantee no longer holds for that file.
+    _ALLOWED_CROSSINGS = {
+        # 2026-08-07-liquidity-tp-overlay-design.md
+        "src/risk/risk_processor.py": {"tp_overlay"},
+    }
+
     def test_the_trading_path_does_not_import_the_liquidity_modules(self):
         root = Path(__file__).parent.parent.parent
         for sub in ("src/strategies", "src/risk", "src/execution"):
             for py in (root / sub).rglob("*.py"):
+                rel = py.relative_to(root).as_posix()
+                allowed = self._ALLOWED_CROSSINGS.get(rel, set())
                 text = py.read_text()
+                if "pool_gate" not in allowed:
+                    assert "pool_gate" not in text, (
+                        f"{rel} imports pool_gate — that is a strategy decision "
+                        f"behind the full backtest.md 8-gate process")
+                if "tp_overlay" not in allowed:
+                    assert "tp_overlay" not in text, (
+                        f"{rel} imports tp_overlay — that is a strategy decision "
+                        f"behind the full backtest.md 8-gate process")
                 assert "liquidity_levels" not in text or "monitoring" in text, (
-                    f"{py} imports the liquidity race marking tool — that is a "
-                    f"strategy decision behind the full backtest.md 8-gate process")
-                assert "liquidity_race" not in text, f"{py} imports liquidity_race"
+                    f"{rel} imports the liquidity race marking tool directly — use a "
+                    f"reviewed wrapper in src/microstructure instead")
+                assert "liquidity_race" not in text, f"{rel} imports liquidity_race"

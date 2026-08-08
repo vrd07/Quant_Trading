@@ -16,9 +16,13 @@ class RiskProcessor:
     Computes Stop Loss (SL) and Take Profit (TP) for pure strategy signals.
     """
 
-    def __init__(self, global_config: Dict[str, Any]):
+    def __init__(self, global_config: Dict[str, Any], bar_provider=None):
         self.config = global_config
         self.strategies_config = global_config.get('strategies', {})
+        # Optional callable (ticker, n_bars) -> DataFrame | None, supplying 15m bars
+        # for the liquidity TP overlay. None leaves the overlay inert, which is what
+        # every pre-existing call site gets.
+        self.bar_provider = bar_provider
 
         from ..monitoring.logger import get_logger
         self.logger = get_logger(__name__)
@@ -484,5 +488,54 @@ class RiskProcessor:
         signal.take_profit = tp
 
         self.logger.debug(f"RiskProcessor calculated stops for {strategy_name}: SL={sl}, TP={tp}")
+        signal = self._apply_liquidity_tp_overlay(signal, strategy_name)
+        return signal
+
+    def _apply_liquidity_tp_overlay(self, signal: Signal, strategy_name: str) -> Signal:
+        """Snap the target onto a nearby liquidity pool. Fails open, always.
+
+        Hooked here rather than in execution_engine because the backtest engines call
+        calculate_stops() directly and never run BudgetSL — an overlay in the
+        execution layer would exist live and be invisible to every backtest.
+        """
+        cfg = (self.config.get('risk', {}) or {}).get('liquidity_tp_overlay', {}) or {}
+        if not cfg.get('enabled', False) or self.bar_provider is None:
+            return signal
+        if strategy_name not in (cfg.get('strategies') or []):
+            return signal
+        ticker = getattr(signal.symbol, 'ticker', '') or ''
+        if not any(ticker.startswith(s) for s in (cfg.get('symbols') or [])):
+            return signal
+        if not signal.take_profit or not signal.stop_loss or not signal.entry_price:
+            return signal
+
+        from ..microstructure.tp_overlay import HISTORY_BARS, SnapConfig, snap_take_profit
+
+        try:
+            bars = self.bar_provider(ticker, int(cfg.get('history_bars', HISTORY_BARS)))
+            min_stops = float(getattr(signal.symbol, 'min_stops_distance', 0) or 0)
+            new_tp, reason = snap_take_profit(
+                entry=float(signal.entry_price),
+                side_is_buy=(signal.side == OrderSide.BUY),
+                stop_loss=float(signal.stop_loss),
+                take_profit=float(signal.take_profit),
+                bars=bars,
+                atr=float(signal.metadata.get('atr', 0) or 0),
+                cfg=SnapConfig(
+                    band_pct=float(cfg.get('band_pct', 0.25)),
+                    buffer_atr=float(cfg.get('buffer_atr', 0.05)),
+                    min_rr=float(cfg.get('min_rr', 1.2)),
+                    min_stops_distance=min_stops,
+                ),
+            )
+        except Exception as e:
+            self.logger.debug(f"liquidity TP overlay failed open: {e}")
+            signal.metadata['liquidity_tp_reason'] = 'error'
+            return signal
+
+        signal.metadata['liquidity_tp_reason'] = reason
+        if reason == 'snapped':
+            signal.metadata['liquidity_tp_original'] = float(signal.take_profit)
+            signal.take_profit = Decimal(str(new_tp))
         return signal
 
