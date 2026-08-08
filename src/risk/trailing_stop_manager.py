@@ -77,6 +77,56 @@ class TrailingStopManager:
         self._initial_sl: Dict[str, float] = {}
         self._initial_atr_dist: Dict[str, float] = {}  # abs(entry - initial_sl)
 
+        # Per-trade time stops published by a strategy as
+        # signal.metadata['time_stop_minutes'] and registered by the caller
+        # once MT5 hands back the ticket. The configured value stays a
+        # CEILING — see _resolve_time_stop.
+        self._dynamic_time_stop: Dict[str, int] = {}
+
+    def register_time_stop(self, ticket: str, minutes: Optional[int]) -> None:
+        """
+        Record a strategy's per-trade time stop for an open ticket.
+
+        Called from the composition root right after the order is placed, with
+        the value the strategy published in signal.metadata['time_stop_minutes']
+        (e.g. wavelet_cycle's 1.5 x detected cycle length). Non-positive and
+        missing values are ignored so an absent key never shortens a hold.
+
+        The registration is in-memory only: after a restart the position falls
+        back to the configured time stop, which is the safe direction.
+        """
+        if minutes is None:
+            return
+        try:
+            minutes = int(minutes)
+        except (TypeError, ValueError):
+            logger.warning(
+                f"[TimeStop] ticket={ticket}: ignoring non-numeric "
+                f"time_stop_minutes={minutes!r}"
+            )
+            return
+        if minutes <= 0:
+            return
+        self._dynamic_time_stop[str(ticket)] = minutes
+
+    def _resolve_time_stop(self, ticket_str: str, overrides: dict) -> Optional[int]:
+        """
+        Effective time stop for a ticket, in minutes, or None for no time stop.
+
+        The configured value (per-strategy override, else global) is a hard
+        ceiling: a strategy's published time stop can only tighten the hold.
+        A strategy asking to hold longer than the operator allows does not get
+        to; the worst case stays bounded by config.
+        """
+        configured = overrides.get('time_stop_minutes', self.time_stop_minutes)
+        dynamic = self._dynamic_time_stop.get(ticket_str)
+
+        if dynamic is None:
+            return configured
+        if configured is None:
+            return dynamic
+        return min(dynamic, configured)
+
     def update(self, positions: dict, connector) -> None:
         """
         Check all open positions and move SL to breakeven/trail if criteria met.
@@ -186,7 +236,7 @@ class TrailingStopManager:
         # ── Per-strategy overrides (strategy name from MT5 comment) ──
         pos_strategy = pos.metadata.get('strategy', 'manual') if hasattr(pos, 'metadata') else 'manual'
         overrides = self.strategy_overrides.get(pos_strategy, {})
-        time_stop_minutes = overrides.get('time_stop_minutes', self.time_stop_minutes)
+        time_stop_minutes = self._resolve_time_stop(ticket_str, overrides)
 
         # ── Time-based stop logic ──
         if time_stop_minutes is not None:
@@ -280,6 +330,12 @@ class TrailingStopManager:
 
     def cleanup_closed(self, open_tickets: set) -> None:
         """Remove tracking state for positions that are no longer open."""
+        # Dynamic time stops are registered at order time, before the ticket
+        # ever shows up in _stage, so they need their own sweep — otherwise a
+        # stale limit could outlive its trade and clip a later one.
+        for t in set(self._dynamic_time_stop.keys()) - open_tickets:
+            self._dynamic_time_stop.pop(t, None)
+
         closed = set(self._stage.keys()) - open_tickets
         for t in closed:
             self._stage.pop(t, None)
