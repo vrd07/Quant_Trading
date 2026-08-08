@@ -1166,6 +1166,24 @@ Independent of Phase A. Can be done first, or in parallel by a different worker,
 exception: both tasks modify `tests/unit/test_liquidity_levels.py`. If Phase A has not run,
 Task B2 Step 6 creates the `_ALLOWED_CROSSINGS` structure instead of adding a row to it.
 
+> ## ⛔ PHASE B IS CLOSED — 2026-08-08
+> **B1 ✅ · B2 ✅ · B3 ✅ · B4 ✅ (verdict: DOES NOT SHIP for any strategy).**
+>
+> The overlay fires (9.6% / 43.7% / 42.1% of trades) and is worse in **6 of 6
+> year-cells**. `enabled: false` in all 8 configs. Full results, mechanism and the
+> two plumbing defects that made the first A/B a false null:
+> `reports/liquidity_tp_overlay_ab.md`.
+>
+> **Do not re-run with a different `buffer_atr` or `band_pct`** — a knob that flips a
+> 6/6 result is fitted to the answer. Reopening needs a different question (pool-aware
+> entry or sizing), not a retune.
+>
+> Two deviations from this plan, both deliberate and both documented in the report:
+> B4's baseline runs on `config_live_25000.yaml` rather than the ACTIVE_CONFIG default
+> (otherwise the toggle is confounded with account size), and B2's hook needed
+> `RiskProcessor.apply_tp_overlay()` because `calculate_stops` is not on the backtest
+> path for any strategy this overlay targets.
+
 ---
 
 ### Task B1: Take-profit snap function
