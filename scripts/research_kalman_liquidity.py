@@ -76,43 +76,62 @@ def adverse_distances(bars: pd.DataFrame, trades: pd.DataFrame) -> pd.Series:
 
 
 def bucket_table(df: pd.DataFrame) -> pd.DataFrame:
+    """Outcome by adverse-pool distance. Metrics are R-multiples, not dollars.
+
+    Raw PnL is confounded here: position size is equity-proportional, so on a
+    declining account early trades carry far more dollar weight than late ones and a
+    dollar total partly measures WHEN a trade happened. R = pnl / r_dollars divides
+    that out. mean_R is the number that decides this diagnostic.
+    """
     lab = pd.cut(df["adverse_atr"], bins=BUCKETS, right=False)
-    g = df.groupby(lab, observed=False)["pnl"]
+    g = df.groupby(lab, observed=False)
     tbl = pd.DataFrame({
         "n": g.size(),
-        "win_rate": g.apply(lambda s: float((s > 0).mean()) if len(s) else np.nan),
-        "mean_pnl": g.mean(),
-        "total_pnl": g.sum(),
+        "win_rate": g["R"].apply(lambda s: float((s > 0).mean()) if len(s) else np.nan),
+        "mean_R": g["R"].mean(),
+        "total_R": g["R"].sum(),
     })
     none_rows = df[df["adverse_atr"].isna()]
     tbl.loc["no adverse pool"] = [
         len(none_rows),
-        float((none_rows["pnl"] > 0).mean()) if len(none_rows) else np.nan,
-        none_rows["pnl"].mean() if len(none_rows) else np.nan,
-        none_rows["pnl"].sum() if len(none_rows) else 0.0,
+        float((none_rows["R"] > 0).mean()) if len(none_rows) else np.nan,
+        none_rows["R"].mean() if len(none_rows) else np.nan,
+        none_rows["R"].sum() if len(none_rows) else 0.0,
     ]
     return tbl
 
 
 def veto_table(df: pd.DataFrame) -> pd.DataFrame:
-    """What a veto at each candidate threshold would remove and leave behind."""
+    """What a veto at each candidate threshold would remove and leave behind.
+
+    `kept_mean_R` and `kept_win_rate` are the columns that matter. A veto that only
+    raises total_R while leaving mean_R and win_rate flat is not selecting better
+    trades — it is just trading less of the same distribution, which lowers the loss
+    of a negative-expectancy system by arithmetic alone.
+    """
     rows = []
-    base_n, base_pnl = len(df), df["pnl"].sum()
-    base_wr = float((df["pnl"] > 0).mean()) if base_n else np.nan
+    base_n = len(df)
+    base_R, base_mean = df["R"].sum(), df["R"].mean()
+    base_wr = float((df["R"] > 0).mean()) if base_n else np.nan
     for x in CANDIDATE_THRESHOLDS:
         cut = df["adverse_atr"].notna() & (df["adverse_atr"] <= x)
         kept = df[~cut]
+        n_k = len(kept)
+        # s.e. of the kept win rate, so a move can be read against its own noise
+        wr_k = float((kept["R"] > 0).mean()) if n_k else np.nan
+        se = float(np.sqrt(wr_k * (1 - wr_k) / n_k)) if n_k and np.isfinite(wr_k) else np.nan
         rows.append({
             "threshold_atr": x,
             "vetoed_n": int(cut.sum()),
-            "vetoed_pnl": float(df.loc[cut, "pnl"].sum()),
-            "kept_n": len(kept),
-            "kept_pnl": float(kept["pnl"].sum()),
-            "kept_win_rate": float((kept["pnl"] > 0).mean()) if len(kept) else np.nan,
-            "pnl_delta": float(kept["pnl"].sum() - base_pnl),
+            "vetoed_mean_R": float(df.loc[cut, "R"].mean()) if int(cut.sum()) else np.nan,
+            "kept_n": n_k,
+            "kept_win_rate": wr_k,
+            "kept_wr_se": se,
+            "kept_mean_R": float(kept["R"].mean()) if n_k else np.nan,
+            "mean_R_delta": float(kept["R"].mean() - base_mean) if n_k else np.nan,
         })
     out = pd.DataFrame(rows)
-    out.attrs["base"] = (base_n, base_pnl, base_wr)
+    out.attrs["base"] = (base_n, base_R, base_mean, base_wr)
     return out
 
 
@@ -125,18 +144,30 @@ def section(fh, title, df_or_tbl):
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--bars", default="data/historical/XAUUSD_5m_real.csv")
-    ap.add_argument("--trades",
-                    default="data/backtests/kalman_liq_base_kalman_regime_trades.csv")
+    ap.add_argument("--trades-glob",
+                    default="data/backtests/kalman_liq_20*_kalman_regime_trades.csv",
+                    help="per-year trade logs; concatenated")
     ap.add_argument("--out", default="reports/kalman_liquidity_gate.md")
     args = ap.parse_args()
 
+    import glob
+    files = sorted(glob.glob(args.trades_glob))
+    if not files:
+        print(f"no trade logs matched {args.trades_glob}")
+        return 1
+    trades = pd.concat([pd.read_csv(f) for f in files], ignore_index=True)
+
     bars = load_15m(Path(args.bars))
-    trades = pd.read_csv(Path(args.trades))
     trades["timestamp"] = pd.to_datetime(trades["timestamp"], utc=True)
     trades = trades[trades["strategy"] == "kalman_regime"].reset_index(drop=True)
     if trades.empty:
-        print("no kalman trades in the log — nothing to diagnose")
+        print("no kalman trades in the logs — nothing to diagnose")
         return 1
+
+    # R-multiple. r_dollars is the trade's dollar risk at entry, so pnl / r_dollars is
+    # sizing-normalised and comparable across years run at different equity levels.
+    trades = trades[trades["r_dollars"] > 0].reset_index(drop=True)
+    trades["R"] = trades["pnl"] / trades["r_dollars"]
 
     # MarketRegime values are UPPERCASE ("TREND"/"RANGE"/"UNKNOWN"). Normalise once
     # here so a case mismatch cannot silently match zero rows and masquerade as
@@ -184,9 +215,9 @@ def main() -> int:
                 if not len(m):
                     continue
                 vt = veto_table(m)
-                bn, bp, bw = vt.attrs["base"]
-                fh.write(f"\n**{mode}** baseline: n={bn}, "
-                         f"pnl={bp:.2f}, win_rate={bw:.3f}\n\n")
+                bn, bR, bmean, bwr = vt.attrs["base"]
+                fh.write(f"\n**{mode}** baseline: n={bn}, total_R={bR:.2f}, "
+                         f"mean_R={bmean:.4f}, win_rate={bwr:.4f}\n\n")
                 fh.write(vt.to_markdown(index=False))
                 fh.write("\n")
 
