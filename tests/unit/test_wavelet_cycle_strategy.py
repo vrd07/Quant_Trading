@@ -124,6 +124,21 @@ class TestThreeConfirmations:
 
 
 class TestMeanRevertEntries:
+    """⚠️ These pass, and the path they cover is dead in production.
+
+    Every test here hands the strategy a hand-built CycleState that already
+    satisfies the branch's conditions, so the suite says nothing about whether
+    real data ever gets here. It does not: on the 2022-01..2024-01 gold train
+    slice the MEAN_REVERT regime (2.9% of bars) and a tradeable cycle (1.8%)
+    coincide on 0.04% of bars, and exactly one of those reached an entry before
+    the MTF gate removed it. Measured by
+    scripts/research_wavelet_meanrevert_funnel.py.
+
+    Keep the tests -- they pin the branch's logic, which is coherent. Just do
+    not read green here as evidence the feature works end to end; that is the
+    reachability gap these fixtures cannot see.
+    """
+
     def test_long_at_trough_when_oversold(self, strat):
         data = bars()
         sig = run(strat, consistent_cycle(0.50, -40.0, data),
