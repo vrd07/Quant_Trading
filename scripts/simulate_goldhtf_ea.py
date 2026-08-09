@@ -869,10 +869,20 @@ def replay(m5, sigs, balance0):
     hi_ = len(m5)
 
     trades, ev, pos, balance = [], [], None, balance0
-    for j in range(lo, hi_):
-        if pos is not None:
+    sig_bars = sorted(by_bar)
+    si, j = 0, lo
+    while j < hi_:
+        if pos is None:
+            # Idle: nothing happens on a bar with no signal, so jump to the next one.
+            while si < len(sig_bars) and sig_bars[si] < j:
+                si += 1
+            if si >= len(sig_bars):
+                break
+            j = max(j, sig_bars[si])
+        else:
             res = manage_position(pos, j, o, hh, ll, ev)
             if res is None:
+                j += 1
                 continue
             sign = 1.0 if pos["side"] == 1 else -1.0
             pnl = (res[0] - pos["entry"]) * pos["lot"] * VALUE_PER_LOT * sign
@@ -890,6 +900,7 @@ def replay(m5, sigs, balance0):
             pos = open_position(side, entry, sg["stop"], sg["rr"], j, ts[j], lot,
                                 sg.get("path", "CTL"), sg.get("regime", "NA"))
             break
+        j += 1
     if pos is not None:
         fill = cc[hi_ - 1] - COST if pos["side"] == 1 else cc[hi_ - 1] + COST
         sign = 1.0 if pos["side"] == 1 else -1.0
@@ -898,6 +909,25 @@ def replay(m5, sigs, balance0):
         trades.append(dict(pnl=pnl, r=pnl / pos["risk_usd"] if pos["risk_usd"] else 0.0,
                            reason="open_at_window_end", entry_ts=pos["entry_ts"]))
     return pd.DataFrame(trades)
+
+
+def control_stats(real_pf, null_pf):
+    """Score a real PF against its matched null.
+
+    `z` is primary: it uses the whole null distribution rather than a rank, so it
+    has more power than the percentile at the same trial count. At 200 trials the
+    standard error on a percentile near 70% is ~3pp, which is why 500 is the floor
+    for a comparison between cells.
+    """
+    null_pf = np.asarray(null_pf, dtype=float)
+    mean = float(np.mean(null_pf))
+    sd = float(np.std(null_pf, ddof=1)) if null_pf.size > 1 else 0.0
+    return dict(
+        z=float((real_pf - mean) / sd) if sd > 0 else float("nan"),
+        percentile=float(100.0 * np.mean(null_pf < real_pf)),
+        null_mean=mean,
+        null_sd=sd,
+    )
 
 
 def random_control(m5, real, taken, trials, t0, t1, seed=11):
@@ -1191,19 +1221,18 @@ def main():
         else:
             gl = -trades[trades.pnl < 0].pnl.sum()
             rpf = trades[trades.pnl > 0].pnl.sum() / gl if gl > 0 else float("inf")
-            beat_pf = 100.0 * (ctl["pf"] < (rpf if np.isfinite(rpf) else 10)).mean()
             beat_net = 100.0 * (ctl["net"] < trades.pnl.sum()).mean()
             say(f"Same trade count ({len(trades)}), same side mix, stop distances and "
                 f"RRs resampled from the real trades, entry bars drawn uniformly from "
                 f"the same window, executed by the same engine.")
             say()
+            cs = control_stats(rpf if np.isfinite(rpf) else 10.0, ctl["pf"])
             say(f"* real: PF **{rpf:.2f}**, net **${trades.pnl.sum():+,.2f}**")
-            say(f"* null over {ARGS.control} trials: PF median {np.median(ctl['pf']):.2f}, "
-                f"p95 {np.percentile(ctl['pf'], 95):.2f}; "
-                f"net median ${np.median(ctl['net']):+,.2f}, "
-                f"p95 ${np.percentile(ctl['net'], 95):+,.2f}")
-            say(f"* real beats **{beat_pf:.0f}%** of draws on PF, "
-                f"**{beat_net:.0f}%** on net")
+            say(f"* null over {ARGS.control} trials: PF mean {cs['null_mean']:.3f}, "
+                f"sd {cs['null_sd']:.3f}, median {np.median(ctl['pf']):.2f}, "
+                f"p95 {np.percentile(ctl['pf'], 95):.2f}")
+            say(f"* **z = {cs['z']:+.2f}**, percentile **{cs['percentile']:.1f}%**")
+            say(f"* net: real beats {beat_net:.0f}% of draws")
         say()
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
