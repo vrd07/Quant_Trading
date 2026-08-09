@@ -15,15 +15,17 @@ Thresholds pre-committed in the design doc: load-bearing needs dz <= -0.5 AND dp
 | A5 | -M5 pattern+confirm | 599 | 1.37 | 1.139 | +0.86 | 83.0% | +0.44 | +12.4 | 0.0% | decoration |
 | A6 | +RANGING gate | 362 | 1.34 | 1.169 | +0.54 | 77.0% | +0.12 | +6.4 | 0.0% | decoration |
 
-All cells: null censoring < 1%, z is well-behaved.
+All cells: null censoring 0.0%, z is well-behaved. The verdict column above is voided by Guard 1 immediately below — see that section before reading it.
 
 ## GUARD 1 TRIPPED — A0 z = +0.42 < 1.0
 
 The full chain is not distinguishable from its own null, so differences between its legs are noise being ranked. **Leg-level verdicts above are not to be acted on.** Verdict: decoration end to end.
 
+Per the pre-committed stopping rule, the forward-return cross-check named in the design doc was NOT run: Guard 1 tripping routes past it entirely, so there is no cross-check result to report here.
+
 ## What this means
 
-The chain as a whole beats only 70.6% of matched random-entry draws, z = +0.42. This independently reproduces an earlier, separately-run measurement of the same EA at 73% of 200 draws — two runs, different trial counts, same conclusion.
+The chain as a whole beats only 70.6% of matched random-entry draws, z = +0.42. This is a second measurement, in a different configuration, that reaches the same conclusion as an earlier one: that earlier run measured 73% of 200 draws with both entry paths live (556 trades, 498 of them legacy), while this run isolates the legacy path via `--no-dfvg` (475 trades). Same data, same harness family, different configuration — not an independent reproduction, but two runs with different trial counts and different path configurations landing on the same verdict.
 
 Because the whole is indistinguishable from noise, the per-leg columns rank differences that have no established signal to differentiate. They are recorded for completeness only.
 
@@ -44,6 +46,8 @@ These are stated as observations, explicitly labelled not-actionable under Guard
 Null censoring was 0.0% in every cell. A code review had flagged that `random_control` assigns a sentinel PF of 10.0 to zero-loss draws, which would inflate the null's standard deviation and bias z toward zero. At ~500 trades per draw it never fired, so z is well-behaved here and the concern does not apply to these numbers.
 
 The pre-committed thresholds were fixed in the design document before any cell was run and were not adjusted afterwards.
+
+Guard 2 did not trip: the largest trade-count ratio against baseline was A4 at 607/475 = 1.28x, well inside the 3x bar, so no cell is flagged qualitative.
 
 ## Limitations
 
