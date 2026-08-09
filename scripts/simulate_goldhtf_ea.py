@@ -58,6 +58,11 @@ INP = dict(
     # been TOUCHED since it formed instead of testing only the last closed bar.
     ZoneV2=False, FVGLookback=20, ZoneATR=False, ZoneATR_DFVG=False,
     ZoneATRMult=1.0,
+    # Entry-chain ablation switches. Each removes exactly ONE leg; all default off,
+    # so an unflagged run is byte-identical to the shipped config.
+    # See docs/superpowers/specs/2026-08-10-goldhtf-entry-ablation-design.md
+    NoTrendLeg=False, NoMTFLeg=False, NoPatternLeg=False, NoConfirm=False,
+    SkipRanging=False,
     UseEngulfing=True, UseHammer=True, UseInvHammer=True, UsePiercing=True,
     Use3Candle=True, UseWM=True,
     UseMAFilter=True, MAFast=9, MASlow=21, UseRSIFilter=True, RSIPeriod=14,
@@ -359,34 +364,38 @@ def check_entry_confirmation(o, h, l, c, j, trend, htf_signal):
     def L(m): return l[j - m - sh]
     def C(m): return c[j - m - sh]
 
-    pat = False
+    # Ablating the pattern leg makes the pattern vacuously true; the directional
+    # close-confirm (and, unless ablated too, nothing else) becomes the trigger.
+    pat = INP["NoPatternLeg"]
     if trend == 1:
-        if INP["UseHammer"] and _hammer(O(1), H(1), L(1), C(1), True): pat = True
-        if INP["UseInvHammer"] and _inv_hammer(O(1), H(1), L(1), C(1), True): pat = True
-        if INP["UseEngulfing"] and (C(2) < O(2) and C(1) > O(1)
-                                    and O(1) < C(2) and C(1) > O(2)): pat = True
-        if INP["UsePiercing"] and (C(2) < O(2) and C(1) > O(1)
-                                   and C(1) > (O(2) + C(2)) / 2 and O(1) < C(2)): pat = True
-        if INP["Use3Candle"] and (C(3) < O(3)
-                                  and abs(C(2) - O(2)) < abs(C(3) - O(3)) * 0.3
-                                  and C(1) > O(1) and C(1) > (O(3) + C(3)) / 2): pat = True
-        if INP["UseWM"] and (L(5) < L(4) and L(5) < L(3) and L(1) < L(2) and L(1) < L(3)
-                             and L(3) > L(5) and L(3) > L(1) and C(1) > H(3)): pat = True
-        if pat and C(0) > O(0):
+        if not INP["NoPatternLeg"]:
+            if INP["UseHammer"] and _hammer(O(1), H(1), L(1), C(1), True): pat = True
+            if INP["UseInvHammer"] and _inv_hammer(O(1), H(1), L(1), C(1), True): pat = True
+            if INP["UseEngulfing"] and (C(2) < O(2) and C(1) > O(1)
+                                        and O(1) < C(2) and C(1) > O(2)): pat = True
+            if INP["UsePiercing"] and (C(2) < O(2) and C(1) > O(1)
+                                       and C(1) > (O(2) + C(2)) / 2 and O(1) < C(2)): pat = True
+            if INP["Use3Candle"] and (C(3) < O(3)
+                                      and abs(C(2) - O(2)) < abs(C(3) - O(3)) * 0.3
+                                      and C(1) > O(1) and C(1) > (O(3) + C(3)) / 2): pat = True
+            if INP["UseWM"] and (L(5) < L(4) and L(5) < L(3) and L(1) < L(2) and L(1) < L(3)
+                                 and L(3) > L(5) and L(3) > L(1) and C(1) > H(3)): pat = True
+        if pat and (INP["NoConfirm"] or C(0) > O(0)):
             return 1, "fired"
     else:
-        if INP["UseHammer"] and _hammer(O(1), H(1), L(1), C(1), False): pat = True
-        if INP["UseInvHammer"] and _inv_hammer(O(1), H(1), L(1), C(1), False): pat = True
-        if INP["UseEngulfing"] and (C(2) > O(2) and C(1) < O(1)
-                                    and O(1) > C(2) and C(1) < O(2)): pat = True
-        if INP["UsePiercing"] and (C(2) > O(2) and C(1) < O(1)
-                                   and C(1) < (O(2) + C(2)) / 2 and O(1) > C(2)): pat = True
-        if INP["Use3Candle"] and (C(3) > O(3)
-                                  and abs(C(2) - O(2)) < abs(C(3) - O(3)) * 0.3
-                                  and C(1) < O(1) and C(1) < (O(3) + C(3)) / 2): pat = True
-        if INP["UseWM"] and (H(5) > H(4) and H(5) > H(3) and H(1) > H(2) and H(1) > H(3)
-                             and H(3) < H(5) and H(3) < H(1) and C(1) < L(3)): pat = True
-        if pat and C(0) < O(0):
+        if not INP["NoPatternLeg"]:
+            if INP["UseHammer"] and _hammer(O(1), H(1), L(1), C(1), False): pat = True
+            if INP["UseInvHammer"] and _inv_hammer(O(1), H(1), L(1), C(1), False): pat = True
+            if INP["UseEngulfing"] and (C(2) > O(2) and C(1) < O(1)
+                                        and O(1) > C(2) and C(1) < O(2)): pat = True
+            if INP["UsePiercing"] and (C(2) > O(2) and C(1) < O(1)
+                                       and C(1) < (O(2) + C(2)) / 2 and O(1) > C(2)): pat = True
+            if INP["Use3Candle"] and (C(3) > O(3)
+                                      and abs(C(2) - O(2)) < abs(C(3) - O(3)) * 0.3
+                                      and C(1) < O(1) and C(1) < (O(3) + C(3)) / 2): pat = True
+            if INP["UseWM"] and (H(5) > H(4) and H(5) > H(3) and H(1) > H(2) and H(1) > H(3)
+                                 and H(3) < H(5) and H(3) < H(1) and C(1) < L(3)): pat = True
+        if pat and (INP["NoConfirm"] or C(0) < O(0)):
             return -1, "fired"
     return 0, ("no_close_confirm" if pat else "no_pattern")
 
@@ -622,6 +631,9 @@ def run(m5, start, end):
             continue
         rr = INP["DefaultRR"] if INP["UseFixedRR"] else reg["rr"]
         funnel["regime_" + reg["regime"]] += 1
+        if INP["SkipRanging"] and reg["regime"] == "RANGING":
+            funnel["blocked_ranging"] += 1
+            continue
 
         # ---- double-FVG rescan on a new H4 close ---------------------------
         k = h4.closed_idx[j]
@@ -694,16 +706,20 @@ def run(m5, start, end):
 
         # ---- PATH B: legacy chain ------------------------------------------
         if signal == 0 and not INP["DFVG_Only"]:
-            trend, why = get_htf_trend(h4, j, st)
-            if trend == 0:
-                funnel["legacy_trend_flat"] += 1
+            # With the trend leg ablated the chain has no direction of its own; the
+            # zone supplies it, and the trend/zone agreement check becomes vacuous.
+            if INP["NoTrendLeg"]:
+                trend = 0
             else:
-                funnel["legacy_trend_ok"] += 1
+                trend, why = get_htf_trend(h4, j, st)
+                if trend == 0:
+                    funnel["legacy_trend_flat"] += 1
+            if INP["NoTrendLeg"] or trend != 0:
+                if not INP["NoTrendLeg"]:
+                    funnel["legacy_trend_ok"] += 1
                 min_gap = reg["fvg_pips"] * 10 * POINT
                 htf_signal, zone_valid = 0, False
                 if INP["ZoneV2"]:
-                    # v2 detectors return a zone only when it is unfilled AND
-                    # already touched, so there is no separate mitigation gate.
                     if INP["UseFVG"]:
                         htf_signal = detect_fvg_v2(h1, j, min_gap, zone)
                         if htf_signal != 0:
@@ -731,9 +747,13 @@ def run(m5, start, end):
                             if is_zone_mitigated(h1, j, htf_signal, zone):
                                 zone_valid = True
                                 funnel["legacy_ob_mitigated"] += 1
+
+                if INP["NoTrendLeg"]:
+                    trend = htf_signal          # direction now comes from the zone
+
                 if not zone_valid:
                     funnel["legacy_no_zone"] += 1
-                elif not check_mtf_structure(m15, j, trend):
+                elif not INP["NoMTFLeg"] and not check_mtf_structure(m15, j, trend):
                     funnel["legacy_mtf_fail"] += 1
                 else:
                     funnel["legacy_mtf_ok"] += 1
@@ -920,6 +940,16 @@ def main():
     ap.add_argument("--tap-max", type=float, default=None)
     ap.add_argument("--zone-v2", action="store_true",
                     help="legacy zone leg: full-lookback scan + unfilled + touched")
+    ap.add_argument("--no-trend-leg", action="store_true",
+                    help="ablation A1: drop the H4 trend leg, take direction from the zone")
+    ap.add_argument("--no-mtf-leg", action="store_true",
+                    help="ablation A3: drop the M15 structure leg")
+    ap.add_argument("--no-pattern-leg", action="store_true",
+                    help="ablation A4: drop the M5 candlestick pattern")
+    ap.add_argument("--no-confirm", action="store_true",
+                    help="ablation A5 (with --no-pattern-leg): drop the close-direction confirm")
+    ap.add_argument("--skip-ranging", action="store_true",
+                    help="ablation A6: block entries while the regime is RANGING")
     ap.add_argument("--fvg-lookback", type=int, default=None,
                     help="H1 bars scanned by the v2 FVG detector")
     ap.add_argument("--zone-atr", action="store_true",
@@ -971,6 +1001,11 @@ def main():
             INP[key] = v
     if ARGS.zone_v2:
         INP["ZoneV2"] = True
+    for flag, key in (("no_trend_leg", "NoTrendLeg"), ("no_mtf_leg", "NoMTFLeg"),
+                      ("no_pattern_leg", "NoPatternLeg"), ("no_confirm", "NoConfirm"),
+                      ("skip_ranging", "SkipRanging")):
+        if getattr(ARGS, flag):
+            INP[key] = True
     if ARGS.fvg_lookback is not None:
         INP["FVGLookback"] = ARGS.fvg_lookback
     if ARGS.zone_atr:
