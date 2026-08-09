@@ -36,6 +36,10 @@ class WaveletCycleStrategy(BaseStrategy):
         self.asset_preset = config.get("asset_preset", "gold")
         self.allowed_symbols = config.get("allowed_symbols", ["XAUUSD"])
         self.atr_period = int(config.get("atr_period", 14))
+        # Read ONLY by the MEAN_REVERT branch of _side(), which is a measured
+        # dead path (see the comment there). Tuning this knob changes nothing;
+        # the published research swept it over [0.5, 1.0] and got byte-identical
+        # rows, which is how the dead path was found.
         self.entry_dev_atr = float(config.get("entry_dev_atr", 0.5))
         self.rr = float(config.get("rr", 2.0))
         self.min_strength = float(config.get("min_strength", 0.3))
@@ -95,6 +99,25 @@ class WaveletCycleStrategy(BaseStrategy):
                 return OrderSide.SELL
             return None
         if reg.regime is CycleRegime.MEAN_REVERT:
+            # DEAD PATH IN PRODUCTION -- measured, not suspected. Over the
+            # 2022-01..2024-01 gold train slice (15,598 bars sampled,
+            # scripts/research_wavelet_meanrevert_funnel.py):
+            #   MEAN_REVERT regime      2.9% of bars
+            #   cycle tradeable         1.8% of bars
+            #   BOTH at once            6 bars = 0.04%   <-- the binding gate
+            #   ...reaching an entry    1 bar, killed by MTF alignment
+            # The conditions below are NOT the problem: applied to every
+            # tradeable bar they fire on 19 of 283 (6.7%). Two independently
+            # rare gates multiplied together are.
+            #
+            # Do not "fix" this by loosening the regime gate. Phase position
+            # and deviation sign are INDEPENDENT on real gold --
+            # P(dev<0 | at_trough) = 0.47 vs P(dev>0) = 0.53 -- so the entries
+            # this would unlock carry no information. That is the same null the
+            # scale-invariance test reached by another route
+            # (reports/wavelet_scale_invariance.md): no real cycle means phase
+            # predicts nothing, so a phase-timed entry is a coin flip paying a
+            # spread. Unblocking it manufactures trades, not edge.
             threshold = self.entry_dev_atr * atr
             at_trough = 0.40 <= pos <= 0.60
             at_peak = pos >= 0.90 or pos <= 0.10

@@ -338,6 +338,9 @@ strategies:
     asset_preset: gold
     allowed_symbols: ["XAUUSD"]
     atr_period: 14
+    # INERT -- read only by the MEAN_REVERT branch, which is a measured
+    # dead path (0.04% of bars reach it; see wavelet_cycle_strategy._side).
+    # Changing this value changes nothing.
     entry_dev_atr: 0.5
     rr: 2.0
     # 4.0, NOT the spec's 2.0. At 2.0 the §8.1 hallucination gate fails outright
