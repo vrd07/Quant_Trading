@@ -63,6 +63,7 @@ INP = dict(
     # See docs/superpowers/specs/2026-08-10-goldhtf-entry-ablation-design.md
     NoTrendLeg=False, NoMTFLeg=False, NoPatternLeg=False, NoConfirm=False,
     SkipRanging=False,
+    NoZoneLeg=False, ZoneStopATRMult=0.0,
     UseEngulfing=True, UseHammer=True, UseInvHammer=True, UsePiercing=True,
     Use3Candle=True, UseWM=True,
     UseMAFilter=True, MAFast=9, MASlow=21, UseRSIFilter=True, RSIPeriod=14,
@@ -529,6 +530,19 @@ def open_position(side, entry_px, stop, rr, j, ts_j, lot, path, regime):
                 risk_usd=abs(entry_px - stop) * lot * VALUE_PER_LOT)
 
 
+def zone_free_stop(price, side, atr, mult):
+    """Stop for the A2 ablation, where no zone exists to place one behind.
+
+    Symmetric by construction so the ablation cannot smuggle in a directional
+    bias, and `mult` is calibrated once against A0's median structural stop width
+    so only entry TIMING differs between the cells.
+    """
+    if mult <= 0:
+        raise ValueError("ZoneStopATRMult must be > 0 for the zone-leg ablation")
+    half = mult * atr
+    return price - half if side == 1 else price + half
+
+
 def run(m5, start, end):
     h4 = TF(m5, "4h", 240)
     h1 = TF(m5, "1h", 60)
@@ -719,7 +733,12 @@ def run(m5, start, end):
                     funnel["legacy_trend_ok"] += 1
                 min_gap = reg["fvg_pips"] * 10 * POINT
                 htf_signal, zone_valid = 0, False
-                if INP["ZoneV2"]:
+                if INP["NoZoneLeg"]:
+                    # No zone: direction stays with the trend, and the agreement
+                    # check in check_entry_confirmation is vacuous at htf_signal == 0.
+                    htf_signal, zone_valid = 0, True
+                    funnel["legacy_zone_ablated"] += 1
+                elif INP["ZoneV2"]:
                     if INP["UseFVG"]:
                         htf_signal = detect_fvg_v2(h1, j, min_gap, zone)
                         if htf_signal != 0:
@@ -749,6 +768,8 @@ def run(m5, start, end):
                                 funnel["legacy_ob_mitigated"] += 1
 
                 if INP["NoTrendLeg"]:
+                    if INP["NoZoneLeg"]:
+                        raise ValueError("NoTrendLeg and NoZoneLeg leaves no direction source")
                     trend = htf_signal          # direction now comes from the zone
 
                 if not zone_valid:
@@ -793,7 +814,13 @@ def run(m5, start, end):
             buf = buf_atr * reg["atr_mult"] * INP["ZoneATRMult"]
         else:
             buf = atr_v * reg["atr_mult"] if INP["UseATR"] else 50 * POINT
-        if signal == 1:
+        if INP["NoZoneLeg"]:
+            zatr = st["h1_atr"][h1.closed_idx[j] - 1]
+            if not np.isfinite(zatr) or zatr <= 0:
+                continue
+            sl = zone_free_stop(price, signal, zatr, INP["ZoneStopATRMult"])
+            tp = price + (price - sl) * rr if signal == 1 else price - (sl - price) * rr
+        elif signal == 1:
             sl = zone["low"] - buf
             tp = price + (price - sl) * rr
         else:
@@ -942,6 +969,10 @@ def main():
                     help="legacy zone leg: full-lookback scan + unfilled + touched")
     ap.add_argument("--no-trend-leg", action="store_true",
                     help="ablation A1: drop the H4 trend leg, take direction from the zone")
+    ap.add_argument("--no-zone-leg", action="store_true",
+                    help="ablation A2: drop the H1 zone leg; stop comes from --zone-stop-atr-mult")
+    ap.add_argument("--zone-stop-atr-mult", type=float, default=0.0,
+                    help="H1-ATR multiple for the A2 stop, calibrated from A0")
     ap.add_argument("--no-mtf-leg", action="store_true",
                     help="ablation A3: drop the M15 structure leg")
     ap.add_argument("--no-pattern-leg", action="store_true",
@@ -1006,6 +1037,9 @@ def main():
                       ("skip_ranging", "SkipRanging")):
         if getattr(ARGS, flag):
             INP[key] = True
+    if ARGS.no_zone_leg:
+        INP["NoZoneLeg"] = True
+    INP["ZoneStopATRMult"] = ARGS.zone_stop_atr_mult
     if ARGS.fvg_lookback is not None:
         INP["FVGLookback"] = ARGS.fvg_lookback
     if ARGS.zone_atr:
