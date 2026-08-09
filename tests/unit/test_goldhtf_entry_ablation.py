@@ -30,6 +30,16 @@ def test_removing_a_leg_and_improving_marks_it_harmful():
     assert classify(0.7, 15.0, inverted=False) == "harmful"
 
 
+def test_classify_reports_no_trades_instead_of_decoration_when_deltas_are_nan():
+    """A zero-trade cell yields NaN stats, so both deltas are NaN and every
+    threshold comparison is False -- that must not silently read as 'decoration',
+    which is a measured verdict this cell never earned."""
+    assert classify(float("nan"), float("nan"), inverted=False) == "no trades"
+    assert classify(float("nan"), -12.0, inverted=False) == "no trades"
+    assert classify(-0.6, float("nan"), inverted=False) == "no trades"
+    assert classify(float("nan"), float("nan"), inverted=True) == "no trades"
+
+
 def test_inverted_cell_earns_its_place_by_raising_z():
     """A6 ADDS a gate, so a rise is the pass condition."""
     assert classify(0.6, 12.0, inverted=True) == "load-bearing"

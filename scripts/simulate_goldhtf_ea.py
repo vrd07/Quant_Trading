@@ -879,6 +879,8 @@ def replay(m5, sigs, balance0):
             if si >= len(sig_bars):
                 break
             j = max(j, sig_bars[si])
+            if j >= hi_:
+                break
         else:
             res = manage_position(pos, j, o, hh, ll, ev)
             if res is None:

@@ -35,6 +35,13 @@ PCT_THRESHOLD = 10.0
 A0_Z_GUARD = 1.0
 COUNT_FLAG_RATIO = 3.0
 
+# Emitted as the LAST line this script writes (see main()). Everything below it in
+# reports/goldhtf_entry_ablation.md is hand-written analysis that this script does not
+# generate and cannot regenerate -- REPORT.write_text() below replaces the whole file
+# on every run, so a re-run silently deletes anything a human added past this point
+# unless it is saved elsewhere first and pasted back in below the marker.
+END_MARKER = "<!-- END GENERATED SECTION - hand-written analysis below is NOT regenerated -->"
+
 CELLS = [
     dict(name="A0", label="baseline", inverted=False, overrides={}),
     dict(name="A1", label="-H4 trend", inverted=False,
@@ -54,6 +61,12 @@ CELLS = [
 
 def classify(delta_z, delta_pct, inverted):
     """Apply the pre-committed thresholds to one cell's deltas against A0."""
+    if not (np.isfinite(delta_z) and np.isfinite(delta_pct)):
+        # A cell with zero trades has NaN stats, so both deltas are NaN and every
+        # comparison below is False -- that silently fell through to "decoration",
+        # making a cell with no data read as a measured null result. Catch it before
+        # the (pre-committed, unchanged) threshold comparisons run.
+        return "no trades"
     if inverted:
         delta_z, delta_pct = -delta_z, -delta_pct
     if delta_z <= -Z_THRESHOLD and delta_pct <= -PCT_THRESHOLD:
@@ -218,7 +231,13 @@ def main():
     else:
         say(f"A0 z = {a0z:+.2f} clears the {A0_Z_GUARD} guard; leg verdicts stand.")
     say()
+    say(END_MARKER)
+    say()
 
+    # This OVERWRITES the entire report file, including any hand-written analysis
+    # that a human added below END_MARKER on a previous pass -- it does not merge.
+    # Save that narrative elsewhere before re-running and paste it back in below the
+    # marker afterward, or it is gone.
     REPORT.parent.mkdir(parents=True, exist_ok=True)
     REPORT.write_text("\n".join(L) + "\n")
     for name, r in results.items():
