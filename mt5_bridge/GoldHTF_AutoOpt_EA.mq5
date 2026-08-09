@@ -12,6 +12,8 @@ input double   InpRiskPercent    = 1.0;        // Risk % per trade (>0 overrides
 input int      InpMaxSpread     = 50;          // Max Spread (points)
 input int      InpSlippage      = 30;          // Max Slippage
 input int      InpMaxOpenTrades = 1;           // Max concurrent positions (1 = one at a time)
+input double   InpMinLot        = 0.02;        // Lot floor (raised above broker minimum)
+input double   InpMaxLot        = 1.00;        // Lot ceiling (lowered below broker maximum)
 
 input group "=== TIMEFRAME SETTINGS ==="
 input ENUM_TIMEFRAMES InpTF_HTF1  = PERIOD_H4;  // HTF1 - Direction (4H)
@@ -67,8 +69,21 @@ input int      InpATRPeriod     = 14;
 
 input group "=== PROFIT LADDER (SL/TP management) ==="
 input bool     InpUseProfitLadder = true;      // Ladder owns SL when ON (disables legacy BE/trail)
+// 0 = OFF. Measured 2026-08-09 over 2022-2026: a BE stop at 25% of target cost
+// 34pp with fixed 1:2 and 24pp with the regime RR table, by scratching the
+// trail-stage runners that carry all of this system's profit. Matches the repo's
+// earlier kalman exit-tuning result (tightening breakeven is harmful on gold).
+input double   InpBETriggerPct    = 0.0;       // At this % of target -> SL to breakeven (0 = off)
 input double   InpLockTriggerPct  = 50.0;      // At this % of target ...
-input double   InpLockPct         = 25.0;      // ... park SL at this % of target
+// Swept 0/5/10/15/20/25/30/35/40/45 over 2022-2026 on 2026-08-09.
+//   full EA net:  0 -5.03% | 5 -4.17% | 10 -2.30% | 25 -1.35% | 35 -14.7% | 40 -17.3%
+//   DFVG-only PF: 0  1.30  | 5  1.31  | 10  1.28  | 25  1.21  | 40  1.18
+// Above 25 is monotonically harmful on both paths. Below 25 the DFVG path improves
+// slightly but 0/5/10 are within noise of each other (118 trades), and 0 is the WORST
+// full-EA value (DD -27.7%) plus it parks the stop exactly where the spread oscillates.
+// Set to 10 by user decision -- DFVG-optimum end of the range, clear of the spread.
+// This parameter does not decide the outcome; the entry still fails its random control.
+input double   InpLockPct         = 10.0;      // ... park SL at this % of target
 input double   InpTrailStartPct   = 80.0;      // At this % of target: remove TP, start ratchet
 input double   InpTrailGapPct     = 20.0;      // SL stays this many % behind the peak
 input double   InpTrailStepPct    = 5.0;       // Min SL improvement (%) before sending a modify
@@ -82,8 +97,10 @@ input double   InpTrailDist     = 2.0;
 
 input group "=== AUTO-OPTIMIZER ==="
 input bool     InpUseAutoOpt    = true;        // Enable Auto-Optimization
-input bool     InpUseFixedRR    = true;        // Force RR to InpDefaultRR (ignore regime RR)
-input double   InpDefaultRR     = 2.0;         // Default R:R = 1:2
+// OFF by user decision 2026-08-09: restores the v2 regime R:R table below
+// (2.5 strong trend / 1.5 weak / 1.0 ranging / 0.8 dry).
+input bool     InpUseFixedRR    = false;       // Force RR to InpDefaultRR (ignore regime RR)
+input double   InpDefaultRR     = 2.0;         // Fallback RR when AutoOpt is OFF
 input double   InpMaxRR         = 2.5;         // Max R:R (Strong Trend)
 input double   InpMinRR         = 0.8;         // Min R:R (Dry Market)
 input double   InpMaxATRMult    = 3.0;         // Max ATR Multiplier
@@ -908,6 +925,11 @@ double CalculateLotSize(double sl)
    double maxLot =SymbolInfoDouble(_Symbol,SYMBOL_VOLUME_MAX);
    double lots;
 
+   // Operator lot band, clamped inside what the broker actually permits.
+   if(InpMinLot>0) minLot=MathMax(minLot,InpMinLot);
+   if(InpMaxLot>0) maxLot=MathMin(maxLot,InpMaxLot);
+   if(minLot>maxLot) minLot=maxLot;               // nonsense band -> ceiling wins
+
    if(InpRiskPercent<=0) lots=InpLotSize;
    else
    {
@@ -1100,10 +1122,13 @@ void ManageOpenPositions()
 //+------------------------------------------------------------------+
 //| PROFIT LADDER                                                    |
 //| All percentages are of the ORIGINAL take-profit distance.         |
+//|   >= 25% of target  -> SL to BREAKEVEN (entry price)              |
 //|   >= 50% of target  -> SL parked at 25% of target                 |
 //|   >= 80% of target  -> TP deleted, SL ratchets 20% behind peak    |
 //|                        (80->60, 100->80, 120->100, ...)           |
 //| SL only ever moves in the profitable direction.                   |
+//| NB: breakeven means the ENTRY PRICE, so a trade stopped there     |
+//| still gives back the spread and commission.                       |
 //+------------------------------------------------------------------+
 void ApplyProfitLadder(ulong ticket)
 {
@@ -1137,6 +1162,10 @@ void ApplyProfitLadder(ulong ticket)
    else if(progress>=InpLockTriggerPct)
    {
       newSLpct=InpLockPct;
+   }
+   else if(InpBETriggerPct>0.0 && progress>=InpBETriggerPct)
+   {
+      newSLpct=0.0;                          // breakeven = the entry price
    }
 
    bool tpChanged=(newTP!=tp);
