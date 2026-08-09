@@ -66,6 +66,10 @@ def classify(delta_z, delta_pct, inverted):
 def calibrate_zone_stop_mult(a0_trades, h1_atr):
     """H1-ATR multiple that reproduces A0's median structural stop width."""
     med_stop = float(np.median(a0_trades["stop_pts"].to_numpy(float)))
+    if not np.isfinite(med_stop) or med_stop <= 0:
+        raise ValueError(
+            "cannot calibrate the A2 stop: A0 median structural stop is not "
+            "positive (A0 likely produced zero trades)")
     med_atr = float(np.nanmedian(np.asarray(h1_atr, dtype=float)))
     if not np.isfinite(med_atr) or med_atr <= 0:
         raise ValueError("cannot calibrate the A2 stop: H1 ATR median is not positive")
@@ -81,11 +85,35 @@ def censored_fraction(null_pf):
     dispersion, which biases `z` toward zero. This does not change the
     pre-committed thresholds -- it only measures whether that failure mode is
     present so the percentile column can be trusted as a cross-check.
+
+    Compares for EXACT equality with the 10.0 sentinel, not `>= 10.0`: a
+    legitimate null draw that happens to score a genuine PF above 10 (small
+    but nonzero losses) is a different phenomenon from the zero-loss ceiling
+    and must not be counted as censored.
     """
     null_pf = np.asarray(null_pf, dtype=float)
     if null_pf.size == 0:
         return float("nan")
-    return float(np.mean(null_pf >= 10.0))
+    return float(np.mean(null_pf == 10.0))
+
+
+def censoring_summary_line(censored_values):
+    """Build the post-table censoring summary line.
+
+    `censored_values` is the per-cell censored fraction for every cell in the
+    report, which may contain NaN for any cell that produced zero trades. An
+    all-NaN column means censoring could not be assessed for ANY cell -- that
+    is a "we don't know", not a "clean", and must not print the all-clear.
+    """
+    finite = [c for c in censored_values if np.isfinite(c)]
+    if not finite:
+        return ("Censoring undefined for every cell (no cell produced trades); "
+                "z cannot be assessed as well-behaved.")
+    worst = max(finite)
+    if worst < 0.01:
+        return "All cells: null censoring < 1%, z is well-behaved."
+    return (f"**WARNING: null PF censoring is material (max {100*worst:.1f}%); "
+            "read the percentile column, not z.**")
 
 
 def _base_inp():
@@ -116,7 +144,7 @@ def run_cell(m5, overrides, trials, zone_stop_mult):
         t1 = pd.Timestamp(END, tz="UTC") + pd.Timedelta(days=1)
         ctl = sim.random_control(m5, trades, None, trials, t0, t1, seed=SEED)
         stats = sim.control_stats(pf if np.isfinite(pf) else 10.0, ctl["pf"])
-        censored = float(np.mean(ctl["pf"] >= 10.0))
+        censored = censored_fraction(ctl["pf"])
         return dict(trades=trades, funnel=funnel, pf=pf, stats=stats,
                     censored=censored)
     finally:
@@ -163,13 +191,10 @@ def main():
     say()
     say("| cell | leg removed | trades | PF | null mean | z | pct | dz | dpct | censored | verdict |")
     say("|---|---|---|---|---|---|---|---|---|---|---|")
-    max_censored = 0.0
     for cell in CELLS:
         r = results[cell["name"]]
         s, n = r["stats"], len(r["trades"])
         c = r["censored"]
-        if np.isfinite(c):
-            max_censored = max(max_censored, c)
         if cell["name"] == "A0":
             verdict = "reference"
             dz = dp = 0.0
@@ -182,11 +207,7 @@ def main():
             f"{s['null_mean']:.3f} | {s['z']:+.2f} | {s['percentile']:.1f}% | "
             f"{dz:+.2f} | {dp:+.1f} | {100*c:.1f}% | {verdict} |")
     say()
-    if max_censored < 0.01:
-        say("All cells: null censoring < 1%, z is well-behaved.")
-    else:
-        say(f"**WARNING: null PF censoring is material (max {100*max_censored:.1f}%); "
-            "read the percentile column, not z.**")
+    say(censoring_summary_line([results[c["name"]]["censored"] for c in CELLS]))
     say()
     if not np.isfinite(a0z) or a0z < A0_Z_GUARD:
         say(f"## GUARD 1 TRIPPED — A0 z = {a0z:+.2f} < {A0_Z_GUARD}")
