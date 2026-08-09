@@ -23,10 +23,17 @@ def forward_returns(close, atr, bars, dirs, horizon):
     dirs = np.asarray(dirs, dtype=float)
 
     out = np.full(bars.shape, np.nan, dtype=float)
+    if atr.size == 0:
+        return out
+
     end = bars + horizon
-    ok = (end < close.size) & (bars >= 0)
-    a = atr[bars]
-    ok &= np.isfinite(a) & (a > 0)
+    # `bars < atr.size` must be checked BEFORE indexing atr[bars] -- atr can be
+    # shorter than close (e.g. warmup-trimmed), and an out-of-range bar index
+    # must degrade to NaN, not raise IndexError.
+    in_bounds = (bars >= 0) & (end < close.size) & (bars < atr.size)
+    safe_bars = np.where(in_bounds, bars, 0)
+    a = atr[safe_bars]
+    ok = in_bounds & np.isfinite(a) & (a > 0)
     out[ok] = (close[end[ok]] - close[bars[ok]]) / a[ok] * dirs[ok]
     return out
 
@@ -62,3 +69,49 @@ def day_blocked_ci(values, days, n_boot=2000, seed=7, alpha=0.05):
         means[b] = np.concatenate([by_day[d] for d in pick]).mean()
     return (float(np.percentile(means, 100 * alpha / 2)),
             float(np.percentile(means, 100 * (1 - alpha / 2))))
+
+
+def paired_day_difference_ci(a_values, a_days, b_values, b_days,
+                              n_boot=2000, seed=7, alpha=0.05):
+    """Percentile CI for mean(a) - mean(b), resampling whole DAYS once for BOTH samples.
+
+    Drawing each day once and taking that day's rows from both samples preserves
+    within-day pairing; bootstrapping the two samples independently would destroy it
+    and understate the uncertainty on the difference.
+
+    Days present in only one sample contribute to that sample alone on the draws where
+    they appear. A draw in which either side ends up empty contributes NaN, and NaN
+    draws are dropped before taking percentiles.
+    """
+    a_values = np.asarray(a_values, dtype=float)
+    a_days = np.asarray(a_days)
+    b_values = np.asarray(b_values, dtype=float)
+    b_days = np.asarray(b_days)
+
+    a_keep = np.isfinite(a_values)
+    a_values, a_days = a_values[a_keep], a_days[a_keep]
+    b_keep = np.isfinite(b_values)
+    b_values, b_days = b_values[b_keep], b_days[b_keep]
+
+    if a_values.size == 0 or b_values.size == 0:
+        return (float("nan"), float("nan"))
+
+    union = np.unique(np.concatenate([a_days, b_days]))
+    a_by_day = {d: a_values[a_days == d] for d in np.unique(a_days)}
+    b_by_day = {d: b_values[b_days == d] for d in np.unique(b_days)}
+
+    rng = np.random.default_rng(seed)
+    diffs = np.full(n_boot, np.nan, dtype=float)
+    for b in range(n_boot):
+        pick = rng.choice(union, size=union.size, replace=True)
+        a_parts = [a_by_day[d] for d in pick if d in a_by_day]
+        b_parts = [b_by_day[d] for d in pick if d in b_by_day]
+        if not a_parts or not b_parts:
+            continue
+        diffs[b] = np.concatenate(a_parts).mean() - np.concatenate(b_parts).mean()
+
+    valid = diffs[np.isfinite(diffs)]
+    if valid.size == 0:
+        return (float("nan"), float("nan"))
+    return (float(np.percentile(valid, 100 * alpha / 2)),
+            float(np.percentile(valid, 100 * (1 - alpha / 2))))
