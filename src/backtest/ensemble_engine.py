@@ -44,8 +44,7 @@ from ..core.types import Order, Symbol
 from ..risk.risk_engine import RiskEngine
 from ..risk.risk_processor import RiskProcessor
 from ..strategies.strategy_manager import StrategyManager
-from ..strategies.confluence_gate import ConfluenceGate
-from ..core.constants import MarketRegime
+from ..strategies.strategy_allowlist import StrategyAllowlist
 
 log = logging.getLogger(__name__)
 
@@ -107,8 +106,7 @@ class EnsembleBacktestEngine:
 
         # Live components — same code as production.
         self.strategy_manager = StrategyManager([symbol], cfg)
-        gate_cfg = cfg.get('strategies', {}).get('confluence_gate', {})
-        self.confluence_gate = ConfluenceGate(gate_cfg)
+        self.strategy_allowlist = StrategyAllowlist()
         self.risk_engine = RiskEngine(cfg)
         self.risk_engine.equity_high_water_mark = initial_capital
         self.risk_engine.daily_start_equity = initial_capital
@@ -235,10 +233,6 @@ class EnsembleBacktestEngine:
         # each tick instead of resampling 1k+ times per backtest.
         self._bars_by_tf = {}
         tfs_needed = set(self._strategy_tfs.values())
-        # Exhaustion filter scans its own TF (default 15m) — ensure it's cached
-        # too, even if no strategy uses that TF, so the gate sees real bars.
-        if self.confluence_gate.exhaustion_enabled:
-            tfs_needed.add(self.confluence_gate.exhaustion_timeframe)
         for tf in tfs_needed:
             self._bars_by_tf[tf] = self._resample_bars(bars, src_tf_min, tf)
             log.info(f"  TF '{tf}': {len(self._bars_by_tf[tf])} bars after resample")
@@ -323,42 +317,9 @@ class EnsembleBacktestEngine:
             if signal is not None:
                 signals.append((strategy_name, signal))
 
-        # ConfluenceGate filter — mirrors live `_process_strategies` path.
-        # Backtest has no nightly ML regime override, so derive regime from
-        # whichever incoming signal carries one (each strategy's RegimeFilter
-        # tags its own signals).
-        regime = MarketRegime.UNKNOWN
-        for _, sig in signals:
-            sig_regime = getattr(sig, 'regime', None)
-            if sig_regime and sig_regime != MarketRegime.UNKNOWN:
-                regime = sig_regime
-                break
-
-        bar_ts = pd.to_datetime(current_bar.name).to_pydatetime()
-        if bar_ts.tzinfo is None:
-            from datetime import timezone as _tz
-            bar_ts = bar_ts.replace(tzinfo=_tz.utc)
-
-        # Momentum-divergence (§8 exhaustion) read — mirrors live main.py path
-        # so backtest validates the actual filter, not passthrough.
-        exhaustion = None
-        if self.confluence_gate.exhaustion_enabled:
-            from ..data.indicators import Indicators
-            ex_tf = self.confluence_gate.exhaustion_timeframe
-            ex_tf_bars = self._bars_by_tf.get(ex_tf)
-            if ex_tf_bars is not None and not ex_tf_bars.empty:
-                ex_view = self._view_at(ex_tf_bars, self._src_tf_min, ex_tf,
-                                        current_ts, self._max_window)
-                if len(ex_view) >= 60:
-                    div = Indicators.detect_divergence(ex_view)
-                    exhaustion = div.kind if div.kind != "none" else None
-
-        executable = self.confluence_gate.filter(
+        executable = self.strategy_allowlist.filter(
             symbol=self.symbol.ticker,
             signals=signals,
-            regime=regime,
-            now=bar_ts,
-            exhaustion=exhaustion,
         )
         for signal in executable:
             self._execute(signal, signal.strategy_name, current_bar)

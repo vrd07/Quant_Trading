@@ -1,16 +1,21 @@
 """
-Combo backtest — drives EnsembleBacktestEngine with ConfluenceGate active and
+Combo backtest — drives EnsembleBacktestEngine with StrategyAllowlist and
 fixed-lot 0.05 sizing.
 
 Forces ``risk.position_sizing.method = 'fixed_lot'`` and ``fixed_lot = 0.05``
 on top of the active config so every order opens with 0.05 lots regardless of
-risk %. ConfluenceGate is enabled (default in the YAMLs) and exercises the
-COMBO A / B / C policy from combine_startegy.md (2026-05-14).
+risk %.
+
+Historical note: this script originally exercised the old confluence gate's
+COMBO A / B / C policy from combine_startegy.md (2026-05-14). That gate
+was deleted 2026-08-13 in favour of StrategyAllowlist, a plain default-deny
+net with no combo assembly and no config-driven enable toggle — the
+``--gate-off`` / ``--relaxed`` flags this script used to expose no longer
+have anything to control and were removed.
 
 Usage:
     python3 scripts/backtest_combo.py
     python3 scripts/backtest_combo.py --start 2025-10-27 --end 2026-04-27
-    python3 scripts/backtest_combo.py --gate-off       # baseline: gate disabled
 """
 
 from __future__ import annotations
@@ -97,15 +102,11 @@ def _load_bars(symbol: str, start: str | None, end: str | None) -> pd.DataFrame:
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Combo backtest (ConfluenceGate + fixed 0.05 lot)")
+    ap = argparse.ArgumentParser(description="Combo backtest (StrategyAllowlist + fixed 0.05 lot)")
     ap.add_argument("--symbol", default="XAUUSD")
     ap.add_argument("--start", default="2025-10-27")
     ap.add_argument("--end", default="2026-04-27")
     ap.add_argument("--lot", type=str, default="0.05")
-    ap.add_argument("--gate-off", action="store_true",
-                    help="Disable ConfluenceGate (baseline run). Kill-list still applies.")
-    ap.add_argument("--relaxed", action="store_true",
-                    help="Enable 2-of-3 confluence relaxation (primary + ≥1 leg; sniper ≥2 of 3).")
     ap.add_argument("--capital", type=str, default=None,
                     help="Override initial_balance (keeps the account solvent so "
                          "combo signals aren't starved by an early blow-up).")
@@ -121,19 +122,7 @@ def main():
     print(f"[combo-backtest] active config = {cfg_path.relative_to(ROOT)}")
 
     cfg = _force_fixed_lot(cfg, Decimal(args.lot), args.symbol)
-    if args.gate_off:
-        cfg.setdefault("strategies", {}).setdefault("confluence_gate", {})["enabled"] = False
-        print("[combo-backtest] ConfluenceGate DISABLED (baseline run — kill-list still drops)")
-    else:
-        if args.relaxed:
-            cfg.setdefault("strategies", {}).setdefault("confluence_gate", {})["relaxed_2of3"] = True
-        gate_cfg = (cfg.get("strategies") or {}).get("confluence_gate", {}) or {}
-        print(
-            f"[combo-backtest] ConfluenceGate ENABLED "
-            f"(window={gate_cfg.get('window_minutes', 25)}min, "
-            f"sniper={gate_cfg.get('sniper_lot_multiplier', 1.5)}×, "
-            f"relaxed_2of3={bool(gate_cfg.get('relaxed_2of3', False))})"
-        )
+    print("[combo-backtest] StrategyAllowlist active (default-deny, no config toggle)")
 
     symbol = _build_symbol(cfg, args.symbol)
     bars = _load_bars(args.symbol, args.start, args.end)
@@ -157,46 +146,34 @@ def main():
         bypass_risk_limits=True,
     )
 
-    # Instrument ConfluenceGate with a thin counter wrapper so we can verify
-    # the gate is exercised and report combo throughput in the summary.
-    gate = engine.confluence_gate
-    counters = {"calls": 0, "kalman_pass": 0, "combo_A": 0, "combo_B": 0,
-                "combo_C": 0, "suppressed": 0}
-    original_filter = gate.filter
+    # Instrument StrategyAllowlist with a thin counter wrapper so we can
+    # verify it is exercised and report throughput in the summary. No more
+    # combo breakdown to report — the allowlist is pass/drop only.
+    allowlist = engine.strategy_allowlist
+    counters = {"calls": 0, "passed": 0, "suppressed": 0}
+    original_filter = allowlist.filter
 
-    def counting_filter(symbol, signals, regime=None, now=None, **kwargs):
+    def counting_filter(symbol, signals):
         counters["calls"] += 1
         signals = list(signals)
         n_in = len(signals)
-        out = original_filter(symbol=symbol, signals=signals, regime=regime, now=now, **kwargs)
-        for s in out:
-            combo = s.metadata.get("combo") if s.metadata else None
-            if combo == "A":
-                counters["combo_A"] += 1
-            elif combo == "B":
-                counters["combo_B"] += 1
-            elif combo == "C":
-                counters["combo_C"] += 1
-            elif s.strategy_name == "kalman_regime":
-                counters["kalman_pass"] += 1
+        out = original_filter(symbol=symbol, signals=signals)
+        counters["passed"] += len(out)
         counters["suppressed"] += max(0, n_in - len(out))
         return out
 
-    gate.filter = counting_filter
+    allowlist.filter = counting_filter
 
     result = engine.run(bars=bars)
     print_ensemble_report(result)
 
     print()
     print("=" * 60)
-    print("CONFLUENCEGATE THROUGHPUT")
+    print("STRATEGYALLOWLIST THROUGHPUT")
     print("=" * 60)
     print(f"  filter calls           : {counters['calls']}")
+    print(f"  signals passed         : {counters['passed']}")
     print(f"  signals suppressed     : {counters['suppressed']}")
-    print(f"  kalman_regime (solo)   : {counters['kalman_pass']}")
-    print(f"  COMBO A (TREND surge)  : {counters['combo_A']}")
-    print(f"  COMBO B (RANGE fade)   : {counters['combo_B']}")
-    print(f"  COMBO C (sniper 1.5×)  : {counters['combo_C']}")
 
     print()
     print("=" * 60)

@@ -113,19 +113,23 @@ def test_backtest_engine_trade_row_includes_regime(xauusd, bars):
 def test_ensemble_engine_trade_row_includes_regime(xauusd, bars, monkeypatch):
     # Inject the stub into the live strategy registry for the duration of
     # this test only — monkeypatch restores the dict afterward. This drives
-    # the real StrategyManager -> ConfluenceGate -> RiskEngine -> broker
+    # the real StrategyManager -> StrategyAllowlist -> RiskEngine -> broker
     # pipeline instead of reaching into engine internals.
     monkeypatch.setitem(
         StrategyManager.STRATEGY_REGISTRY, "stub_regime_test", _RangeOnceStrategy
+    )
+    # StrategyAllowlist is a hard default-deny with no config-driven bypass
+    # (by design — see its module docstring). The allowlist policy itself is
+    # irrelevant to this test, so widen it for the duration of the test only,
+    # the same way STRATEGY_REGISTRY is widened above.
+    monkeypatch.setattr(
+        "src.strategies.strategy_allowlist.SOLO_ALLOWED",
+        frozenset({"stub_regime_test"}),
     )
 
     cfg = _minimal_risk_config()
     cfg["strategies"] = {
         "stub_regime_test": {"enabled": True, "timeframe": "5m"},
-        # Passthrough mode: the gate's combo/solo-allowlist policy is
-        # irrelevant to this test and would otherwise drop a strategy name
-        # it doesn't recognise.
-        "confluence_gate": {"enabled": False},
     }
     cfg["symbols"] = {
         "XAUUSD": {

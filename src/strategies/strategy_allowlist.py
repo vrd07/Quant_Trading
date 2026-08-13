@@ -1,7 +1,7 @@
 """
-StrategyAllowlist — the safety net extracted from ConfluenceGate.
+StrategyAllowlist — the safety net extracted from the old confluence gate.
 
-ConfluenceGate (deleted 2026-08-13) carried two separable jobs: combo
+The old gate (deleted 2026-08-13) carried two separable jobs: combo
 assembly (COMBO A/B/C, ``combo_sniper``, the exhaustion modifier) and a
 default-deny allowlist. Every input to the combo half was deleted along with
 it — the six confluence-only legs never once produced a combo, across a

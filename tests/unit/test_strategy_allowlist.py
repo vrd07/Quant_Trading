@@ -1,4 +1,4 @@
-"""StrategyAllowlist — the safety net extracted from ConfluenceGate."""
+"""StrategyAllowlist — the safety net extracted from the old confluence gate."""
 import pytest
 
 from src.core.types import Signal
