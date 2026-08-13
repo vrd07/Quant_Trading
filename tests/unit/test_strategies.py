@@ -1,9 +1,5 @@
 """
-Unit tests for Breakout and Momentum strategies.
-
-Tests cover the new filtering improvements:
-- Breakout: close-confirmation, volume filter, RSI guard, ATR stops, ADX strength
-- Momentum: RSI bounds, ADX threshold, volume filter, MACD acceleration
+Unit tests for the Kalman Regime strategy.
 """
 
 import pytest
@@ -111,98 +107,6 @@ def _make_breakout_bars_bullish(close_beyond=True, volume_spike=True, rsi_overbo
         'volume': volumes,
     }
     return pd.DataFrame(data)
-
-
-# ── Momentum Strategy Tests ──────────────────────────────────────────
-
-class TestMomentumStrategy:
-    """Tests for the improved momentum strategy."""
-    
-    def _make_strategy(self, symbol, **overrides):
-        """Create momentum strategy with test-friendly config."""
-        from src.strategies.momentum_strategy import MomentumStrategy
-        config = {
-            'enabled': True,
-            'rsi_period': 14,
-            'ema_period': 20,
-            'rr_ratio': 2.0,
-            'atr_stop_multiplier': 1.2,
-            'only_in_regime': 'TREND',
-            'rsi_bull_threshold': 50,
-            'rsi_bear_threshold': 50,
-            'rsi_overbought': 75,
-            'rsi_oversold': 25,
-            'adx_min_threshold': 20,
-            'macd_fast': 12,
-            'macd_slow': 26,
-            'macd_signal': 9,
-            'volume_confirmation': True,
-            'volume_ratio_min': 1.0,
-        }
-        config.update(overrides)
-        return MomentumStrategy(symbol=symbol, config=config)
-    
-    def test_no_signal_insufficient_data(self, symbol):
-        """Strategy returns None with insufficient bars."""
-        strategy = self._make_strategy(symbol)
-        bars = _make_bars(n=10)
-        signal = strategy.on_bar(bars)
-        assert signal is None
-    
-    def test_adx_filter_rejects_low_trend(self, symbol):
-        """When ADX is below threshold, no signal should be generated."""
-        strategy = self._make_strategy(symbol, adx_min_threshold=90)  # Very high threshold
-        
-        # Use range-bound data (low ADX)
-        bars = _make_bars(n=100, trend=0.0, volatility=1.0)
-        signal = strategy.on_bar(bars)
-        assert signal is None
-    
-    def test_volume_filter_can_be_disabled(self, symbol):
-        """When volume_confirmation=False, volume is not checked."""
-        strategy = self._make_strategy(symbol, volume_confirmation=False)
-        bars = _make_bars(n=100)
-        signal = strategy.on_bar(bars)
-        # Should not crash
-        assert signal is None or signal.side in (OrderSide.BUY, OrderSide.SELL)
-    
-
-    
-    def test_rsi_overbought_guard_default(self, symbol):
-        """RSI overbought guard should default to 75."""
-        strategy = self._make_strategy(symbol)
-        assert strategy.rsi_overbought == 75
-    
-    def test_rsi_oversold_guard_default(self, symbol):
-        """RSI oversold guard should default to 25."""
-        strategy = self._make_strategy(symbol)
-        assert strategy.rsi_oversold == 25
-    
-    def test_strategy_returns_correct_name(self, symbol):
-        """Strategy name should be 'momentum_scalp'."""
-        strategy = self._make_strategy(symbol)
-        assert strategy.get_name() == "momentum_scalp"
-    
-    def test_disabled_strategy_returns_none(self, symbol):
-        """Disabled strategy should always return None."""
-        strategy = self._make_strategy(symbol, enabled=False)
-        bars = _make_bars(n=100)
-        assert strategy.on_bar(bars) is None
-    
-    def test_signal_metadata_includes_new_fields(self, symbol):
-        """If a signal is generated, metadata should include ADX and volume_ratio."""
-        strategy = self._make_strategy(symbol, volume_confirmation=False, adx_min_threshold=0)
-        
-        # Create strongly trending data
-        bars = _make_bars(n=100, trend=1.0, volatility=2.0)
-        signal = strategy.on_bar(bars)
-        
-        if signal is not None:
-            assert 'adx' in signal.metadata
-            assert 'volume_ratio' in signal.metadata
-            assert 'macd_accelerating' in signal.metadata
-            # Key was renamed from 'macd_turning' to 'macd_positive' / 'macd_negative'
-            assert 'macd_positive' in signal.metadata or 'macd_negative' in signal.metadata
 
 
 # ── Kalman Regime Strategy Tests ────────────────────────────────────

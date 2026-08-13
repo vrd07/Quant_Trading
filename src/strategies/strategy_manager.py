@@ -16,13 +16,7 @@ from datetime import datetime, timezone, timedelta
 
 from .base_strategy import BaseStrategy
 from ..core.constants import MarketRegime
-from .vwap_strategy import VWAPStrategy
-from .momentum_strategy import MomentumStrategy
 from .kalman_regime_strategy import KalmanRegimeStrategy
-from .structure_break_retest import StructureBreakRetestStrategy
-from .asia_range_fade_strategy import AsiaRangeFadeStrategy
-from .smc_ob_strategy import SMCOrderBlockStrategy
-from .fibonacci_retracement_strategy import FibonacciRetracementStrategy
 from .london_breakout_strategy import LondonBreakoutStrategy
 from .monday_drift_strategy import MondayDriftStrategy
 from .squeeze_breakout_strategy import SqueezeBreakoutStrategy
@@ -30,8 +24,6 @@ from .stoch_pullback_strategy import StochPullbackStrategy
 from .index_overnight_strategy import IndexOvernightStrategy
 from .wednesday_drift_strategy import WednesdayDriftStrategy
 from .bos_structure_strategy import BOSStructureStrategy
-from .ema200_nasdaq_strategy import EMA200NasdaqStrategy
-from .wavelet_cycle_strategy import WaveletCycleStrategy
 from ..core.types import Symbol, Signal
 
 
@@ -40,13 +32,7 @@ class StrategyManager:
 
     # Torvalds: registry eliminates special cases — add new strategies here.
     STRATEGY_REGISTRY: Dict[str, type] = {
-        'vwap':           VWAPStrategy,
-        'momentum':       MomentumStrategy,
         'kalman_regime':  KalmanRegimeStrategy,
-        'sbr':            StructureBreakRetestStrategy,
-        'asia_range_fade': AsiaRangeFadeStrategy,
-        'smc_ob':         SMCOrderBlockStrategy,
-        'fibonacci_retracement': FibonacciRetracementStrategy,
         'london_breakout': LondonBreakoutStrategy,   # USDJPY-only (self-gated on symbol)
         'monday_drift':   MondayDriftStrategy,       # GBPUSD/AUDUSD-only (self-gated on symbol)
         'squeeze_breakout': SqueezeBreakoutStrategy, # XAUUSD-only (self-gated on symbol)
@@ -54,8 +40,6 @@ class StrategyManager:
         'index_overnight': IndexOvernightStrategy,   # US30/NAS100-only (self-gated on symbol)
         'wednesday_drift': WednesdayDriftStrategy,    # AUDJPY-only (self-gated on symbol)
         'bos_structure':  BOSStructureStrategy,      # XAUUSD-only (self-gated on symbol)
-        'ema200_nasdaq':  EMA200NasdaqStrategy,      # NASDAQ-100 only (configurable ticker)
-        'wavelet_cycle':  WaveletCycleStrategy,      # XAUUSD-only (self-gated on symbol); DISABLED
     }
 
     def __init__(self, symbols: List[Symbol], config: dict):

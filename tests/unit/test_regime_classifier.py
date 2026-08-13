@@ -239,29 +239,21 @@ class TestMarkovSmoothing:
 class TestDynamicWeighting:
     """Tests for resolve_strategy_overrides."""
 
-    def test_trend_regime_enables_momentum_kalman(self):
-        """TREND regime should enable momentum and kalman_regime."""
+    def test_trend_regime_enables_kalman(self):
+        """TREND regime should enable kalman_regime."""
         overrides = resolve_strategy_overrides("TREND", 0.80, {})
-        assert overrides["momentum"] is True
         assert overrides["kalman_regime"] is True
 
     def test_range_regime_enables_all_profitable(self):
         """RANGE regime should enable every live strategy (all weights ≥ threshold)."""
         overrides = resolve_strategy_overrides("RANGE", 0.80, {})
-        for strat in ("momentum", "kalman_regime", "vwap", "sbr",
-                      "asia_range_fade", "smc_ob", "fibonacci_retracement"):
+        for strat in STRATEGY_WEIGHTS["RANGE"]:
             assert overrides[strat] is True, strat
 
     def test_volatile_regime_enables_kalman(self):
         """VOLATILE regime should enable kalman_regime."""
         overrides = resolve_strategy_overrides("VOLATILE", 0.80, {})
         assert overrides["kalman_regime"] is True
-
-    def test_unprofitable_strategies_disabled_by_default(self):
-        """vwap disabled only in TREND (0.00); enabled in RANGE/VOLATILE."""
-        assert resolve_strategy_overrides("TREND", 0.80, {})["vwap"] is False
-        assert resolve_strategy_overrides("RANGE", 0.80, {})["vwap"] is True
-        assert resolve_strategy_overrides("VOLATILE", 0.80, {})["vwap"] is True
 
     def test_low_confidence_enables_more_strategies(self):
         """Low confidence (< 0.55) should lower threshold, enabling more strategies."""
@@ -277,26 +269,23 @@ class TestDynamicWeighting:
         )
 
     def test_all_regimes_enable_core_profitable_strategies(self):
-        """All regimes enable the core profitable strategies; RANGE/VOLATILE also enable vwap."""
-        core = {"momentum", "kalman_regime", "sbr", "smc_ob", "fibonacci_retracement"}
+        """All regimes enable the core profitable (surviving) strategies."""
+        core = {
+            "kalman_regime", "london_breakout", "monday_drift", "squeeze_breakout",
+            "stoch_pullback", "index_overnight", "wednesday_drift", "bos_structure",
+        }
         for regime in REGIMES:
             overrides = resolve_strategy_overrides(regime, 0.80, {})
             enabled = {s for s, v in overrides.items() if v}
             assert core.issubset(enabled), f"{regime} missing core strategies: got {enabled}"
-            if regime == "TREND":
-                assert "vwap" not in enabled
-            else:
-                assert "vwap" in enabled
 
     def test_weights_table_completeness(self):
         """Every regime in STRATEGY_WEIGHTS must cover every enabled strategy
         so new strategies get regime-adaptive weighting and analytics coverage."""
         required_core = {
-            "momentum", "kalman_regime", "vwap", "sbr",
-            "asia_range_fade", "smc_ob", "fibonacci_retracement",
-            "london_breakout", "monday_drift", "squeeze_breakout",
-            "stoch_pullback", "index_overnight", "wednesday_drift",
-            "bos_structure", "ema200_nasdaq", "wavelet_cycle",
+            "kalman_regime", "london_breakout", "monday_drift",
+            "squeeze_breakout", "stoch_pullback", "index_overnight",
+            "wednesday_drift", "bos_structure",
         }
         for regime in REGIMES:
             keys = set(STRATEGY_WEIGHTS[regime].keys())

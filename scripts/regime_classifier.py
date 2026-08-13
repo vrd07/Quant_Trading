@@ -252,13 +252,7 @@ def compute_labels(daily: pd.DataFrame, feat: pd.DataFrame) -> pd.Series:
 # Strategies with weight >= CONFIDENCE_THRESHOLD get enabled.
 STRATEGY_WEIGHTS = {
     "TREND": {
-        "momentum":       0.80,
         "kalman_regime":  0.90,
-        "vwap":           0.00,  # disabled: -0.98%, PF 0.77 — loses money on trending gold
-        "sbr":            0.80,  # v2 backtest: PF 1.88, DD 1.61% — strong trend performer
-        "asia_range_fade": 0.15, # range-focused; trend regime = not its edge
-        "smc_ob":         0.70,
-        "fibonacci_retracement": 0.70,  # big_trend sweep: PF 1.75, DD 9.2% (6mo)
         "london_breakout": 0.70,  # session-structural (Tokyo range → London break); regime-agnostic by design
         "monday_drift":   0.70,  # calendar-structural (Monday anti-USD drift); regime-agnostic — own SMA(50) gate governs
         "squeeze_breakout": 0.70,  # volatility-coil → expansion breakout; regime-agnostic (own ATR-pctile + Donchian gate governs)
@@ -266,17 +260,9 @@ STRATEGY_WEIGHTS = {
         "index_overnight": 0.70,  # calendar-structural (Tuesday index night drift); regime-agnostic — fires once/week on its own latch
         "wednesday_drift": 0.70,  # calendar-structural (AUDJPY mid-week risk-on drift); regime-agnostic — fires once/week on its own latch
         "bos_structure":  0.70,  # SMC CHOCH→BOS×2→pullback (2026-07-07 research: PF 1.56/1.64 both yrs); regime-agnostic — own structure machine governs
-        "ema200_nasdaq":  0.70,  # NASDAQ 13:40 UTC EMA200 anchor break; regime-agnostic — own anchor/window gate governs (user-shipped, research PF 1.04)
-        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
     "RANGE": {
-        "momentum":       0.55,  # raised: still captures pullback momentum entries in range
         "kalman_regime":  0.75,  # raised: range-mode OU mean-reversion is Kalman's strength
-        "vwap":           0.45,  # 2026-04-15 refresh: PF 1.67, +1.54%, DD 1.3% over 2yr (30 trades, thin sample) — small clean edge
-        "sbr":            0.40,
-        "asia_range_fade": 0.70, # PF 1.31, WR 45.3%, DD 1.6% — range-optimised
-        "smc_ob":         0.50,
-        "fibonacci_retracement": 0.50,  # 2026-04-22: enabled in RANGE — golden-zone pullbacks still fire in sideways markets
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
@@ -284,17 +270,9 @@ STRATEGY_WEIGHTS = {
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
         "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
-        "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
-        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
     "VOLATILE": {
-        "momentum":       0.50,  # raised: momentum rides vol-driven trends
         "kalman_regime":  0.90,
-        "vwap":           0.45,  # 2026-04-15: re-enabled alongside RANGE (same backtest evidence)
-        "sbr":            0.55,
-        "asia_range_fade": 0.30, # wide ranges hurt fade logic
-        "smc_ob":         0.60,
-        "fibonacci_retracement": 0.55,  # strong trends with pullbacks = fib's edge
         "london_breakout": 0.70,  # same in all regimes — edge is the session structure, not the regime
         "monday_drift":   0.70,  # same in all regimes — edge is the calendar structure, not the regime
         "squeeze_breakout": 0.70,  # same in all regimes — edge is the volatility expansion, not the regime
@@ -302,8 +280,6 @@ STRATEGY_WEIGHTS = {
         "index_overnight": 0.70,  # same in all regimes — edge is the calendar night drift, not the regime
         "wednesday_drift": 0.70,  # same in all regimes — edge is the mid-week carry drift, not the regime
         "bos_structure":  0.70,  # same in all regimes — edge is the structure sequence, not the regime
-        "ema200_nasdaq":  0.70,  # same in all regimes — edge is the anchor/session structure, not the regime
-        "wavelet_cycle":  0.00,  # DISABLED + unvalidated (research: no edge). Zero in every regime so flipping `enabled` alone cannot give it influence.
     },
 }
 
