@@ -711,6 +711,15 @@ Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>"
 
 This is the task the whole change is judged on.
 
+> ⚠️ **Run every command in this task in the REAL working tree — never in a
+> `git worktree`.** Discovered during Task 3: this repo's historical price data
+> is gitignored and untracked (`data/historical/XAUUSD_5m_real.csv`, 25MB).
+> `git worktree add` materialises only tracked content, so a worktree silently
+> lacks the data every backtest reads, and
+> `test_sentiment_engine.py::test_technical_feed_is_real_and_bounded` skips
+> instead of running. A worktree-based comparison would produce confidently
+> wrong numbers, not an obvious error.
+
 - [ ] **Step 1: Full test suite**
 
 ```bash
@@ -719,20 +728,55 @@ This is the task the whole change is judged on.
 
 Expected: **zero failures**. The total will be below the Task 1 baseline (four test files removed, one added). Write down the exact number.
 
-- [ ] **Step 2: Re-run the backtest, identical invocation to Task 1**
+> **REVISED 2026-08-13 after Task 1.** The original design compared a plain
+> `run_backtest.py` run before and after. Task 1 proved that invocation is the
+> wrong instrument: without `--ensemble` the script runs each strategy
+> **standalone** and prints per-strategy rows, never constructing
+> `EnsembleBacktestEngine` and therefore **never calling `ConfluenceGate` at
+> all**. Six of the seven strategies it resolved are being deleted, so that diff
+> would show a large *expected* difference and prove nothing about the gate
+> swap. The comparison below replaces it.
+
+- [ ] **Step 2: Ensemble run — the real identity test**
+
+This is the only path that exercises the gate (`run_backtest.py:544` →
+`EnsembleBacktestEngine` → `StrategyAllowlist`). Use the identical bounded
+window Task 1 captured:
 
 ```bash
 ./venv/bin/python scripts/run_backtest.py --symbols XAUUSD --timeframe 15m \
-  2>&1 | tee /tmp/baseline/backtest_after.txt
+  --ensemble --start 2026-01-01 --end 2026-07-01 \
+  2>&1 | tee /tmp/baseline/ensemble_after.txt
+diff /tmp/baseline/ensemble_before.txt /tmp/baseline/ensemble_after.txt && echo "IDENTICAL"
 ```
 
-- [ ] **Step 3: Diff the results**
+Expected: `IDENTICAL` apart from timestamps/paths/runtime.
+
+**Guard against a vacuous pass.** Before reading the diff, confirm the ensemble
+baseline's trade count is non-trivial. Two empty result sets diff clean no
+matter how badly the change broke things — this repo has a documented history of
+exactly that failure (`project_plumbing_null_trap`). If the ensemble run
+produces ~0 trades, the identity check carries no information: say so plainly
+and fall back to Step 3 as the primary evidence rather than claiming a pass.
+
+- [ ] **Step 3: Survivor check — `kalman_regime` standalone**
+
+`kalman_regime` is the only strategy that both survives this change and trades
+live. Its standalone row must be untouched:
 
 ```bash
-diff /tmp/baseline/backtest_before.txt /tmp/baseline/backtest_after.txt && echo "IDENTICAL"
+./venv/bin/python scripts/run_backtest.py --symbols XAUUSD --timeframe 15m \
+  --strategy kalman_regime 2>&1 | tee /tmp/baseline/kalman_after.txt
 ```
 
-Expected: `IDENTICAL`, or differences confined to timestamps/paths/runtime. **Trade count, trade list, and net PnL must match exactly.**
+Compare trade count and net PnL against the `kalman_regime` row Task 1 recorded.
+**Both must match exactly.**
+
+- [ ] **Step 3b: Confirm the deleted strategies are gone, not silently broken**
+
+A plain `--strategy all` run should now resolve to the survivors only. Confirm
+none of the eight deleted names appears, and that the run does not error — a
+traceback here means a dangling reference Task 4 missed.
 
 - [ ] **Step 4: If they diverge — stop**
 

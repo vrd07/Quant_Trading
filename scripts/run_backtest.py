@@ -603,8 +603,11 @@ def main():
         print("\nGrid search complete!")
         return
 
+    # "all" means every registered strategy. Each one carries its own in-code
+    # symbol gate, so running the full list against one symbol is safe — the
+    # strategies that do not trade it simply emit no signals.
     strategies_to_run = (
-        ['momentum', 'kalman_regime', 'vwap', 'sbr', 'smc_ob', 'fibonacci_retracement', 'asia_range_fade']
+        [s for s in STRATEGY_CHOICES if s != 'all']
         if args.strategy == 'all'
         else [args.strategy]
     )
