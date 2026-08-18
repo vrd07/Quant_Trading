@@ -34,7 +34,8 @@ The design follows the methodology taught in the World Class Edge masterclasses
 (Tom Vorwald's PBD framework, Fabio Valentini's profile framing, Serge
 Hoffmann's balance-day scalping). Source material was lesson-level course
 descriptions; the videos carry no transcripts, so **spoken numeric thresholds
-were not recoverable** — see §9.3.
+were not recoverable**. They also do not exist in the published literature —
+see §9.0.
 
 What ports to an MT5 gold CFD and what does not:
 
@@ -270,55 +271,115 @@ This guarantees the band genuinely *contains* its ≥70% of volume.
 The central object of the methodology. Shape drives regime, and regime decides
 whether mean-reversion or directional logic is even appropriate.
 
-### 9.1 Continuous measures
+### 9.0 Why this is calibrated rather than looked up
 
-Computed for every profile and **always displayed alongside the letter**, so a
-marginal call is visible as marginal:
+**No published numeric cutoffs for P / b / D exist.** NinjaTrader's own
+reference, QuantVue, Optimus Futures and the TradingView educational material
+all teach the shapes as visual pattern recognition — "POC typically located in
+the centre", "long and thin lower section". The only number the field
+quantifies is the value area at 70%. The World Class Edge lessons are no
+exception.
+
+So the constants cannot be sourced; they can only be *chosen*. This section
+reduces the choice to a single constant and grounds that one against a
+published frequency rather than against taste.
+
+### 9.1 Primary statistic — volume-distribution skewness
 
 ```
-poc_position   = (VPOC - low) / (high - low)          # 0 = at low, 1 = at high
-va_width_frac  = (VAH - VAL) / (high - low)           # how much of the range is value
+weight_i = vol_i / total_volume
+mean     = Σ weight_i · row_mid_i
+var      = Σ weight_i · (row_mid_i − mean)²
+sd       = √var
+skew     = Σ weight_i · (row_mid_i − mean)³ / sd³
+```
+
+Chosen over POC position because it is **dimensionless** (comparable across
+sessions, volatility regimes and instruments), uses the **whole distribution**
+rather than a single argmax row that a few ticks can move, and has a **natural
+zero** — a symmetric profile is exactly a D.
+
+Sign convention, stated because it is easy to invert:
+
+- **negative skew** → mass at high prices, thin tail below → **P**
+- **positive skew** → mass at low prices, thin tail above → **b**
+
+⚠️ **A published implementation disagrees on the meaning.** BackQuant's
+*Volume Profile Skew* labels positive skew (bottom-heavy) as "ACCUMULATION",
+i.e. bullish. Vorwald's b-model is bottom-heavy and **bearish** — same
+geometry, opposite reading. This spec follows the course. Do not import that
+script's semantics on the assumption that identical geometry implies identical
+meaning.
+
+Degenerate guard: if `sd == 0`, or the profile has fewer than
+`InpMinRowsForShape` (default 5) non-empty rows, shape is `UNCLASSIFIED` and
+skew is not reported.
+
+### 9.2 Corroborating measures — displayed, never classifying
+
+Always shown next to the letter so the geometry behind it stays visible:
+
+```
+poc_position    = (VPOC − low) / (high − low)      # 0 = at low, 1 = at high
+va_width_frac   = (VAH − VAL) / (high − low)
 upper_tail_frac = volume_above(VAH) / total_volume
 lower_tail_frac = volume_below(VAL) / total_volume
 ```
 
-### 9.2 Classification
+### 9.3 Classification — one constant
 
 ```
-D  (balance):  |poc_position - 0.5| <= InpDPocBand
-               AND va_width_frac    >= InpBalanceVAWidth
-
-P  (bullish):  poc_position    >= InpPPocMin
-               AND lower_tail_frac <= InpTailMaxFrac      # thin "root" below
-
-b  (bearish):  poc_position    <= InpBPocMax
-               AND upper_tail_frac <= InpTailMaxFrac      # thin tail above
-
-otherwise: UNCLASSIFIED
+P              skew <= −InpSkewThreshold
+b              skew >= +InpSkewThreshold
+D              |skew| <  InpSkewThreshold
+UNCLASSIFIED   degenerate profile only (§9.1 guard)
 ```
 
-⚠️ **`UNCLASSIFIED` is a first-class outcome, not a failure.** Not every
-session is a P, b or D, and forcing a letter onto an ambiguous profile is how a
-context tool starts lying. Ambiguous sessions say so.
+`InpSkewThreshold` is the **only** constant the classification turns on. The
+value-area-width term from an earlier draft was removed: it added a second free
+parameter without adding information the skew did not already carry, and
+`va_width_frac` remains visible as a corroborator.
 
-### 9.3 The cutoff constants are PENDING
+Every non-degenerate session therefore receives a letter. That is safe
+*because the skew value is always displayed* — a session at `skew −0.02` is
+visibly marginal and a session at `skew −1.40` visibly is not. Marginality is
+read from the number, not encoded in a fuzzy middle band.
 
-`InpDPocBand`, `InpBalanceVAWidth`, `InpPPocMin`, `InpBPocMax` and
-`InpTailMaxFrac` are the five thresholds the classifier turns on. The course
-lesson descriptions define the *concepts* precisely but state no numbers, and
-the videos have no transcripts.
+### 9.4 Calibrating `InpSkewThreshold`
 
-**The user will supply these from the PBD lessons.** Until then the code ships
-provisional values (`0.10 / 0.55 / 0.60 / 0.40 / 0.15`) and:
+`scripts/calibrate_profile_shape.py` builds profiles over the 151 sessions of
+XAUUSD tick data in `data/ticks/XAUUSD/` and sweeps the threshold.
 
-- the panel renders `⚠ PROVISIONAL CUTOFFS` on every frame,
-- the `.mq5` header, the Python docstring and the README all record that these
-  five numbers are unsourced.
+**Objective:** choose the threshold whose resulting **D (balanced) frequency is
+closest to 50%** — Dalton's base rate for normal/rotational days in *Mind Over
+Markets*, and the most-cited and most robust number in that taxonomy.
 
-The mechanism is fully specified; only the constants are open. Swapping them is
-a one-line change per threshold in one place per language.
+Why this objective and not another:
 
-### 9.4 Developing-profile guard
+- It targets a **published frequency**, not a preference.
+- It is **outcome-free.** No trade results enter the calibration, so it is
+  structurally incapable of overfitting to profit — the failure mode recorded
+  in `project_rsi_reversal_m1`.
+- It is calibrated **on gold**, not inherited from index futures.
+
+⚠️ **Stated limits of the anchor.** Dalton's day types are a *different
+taxonomy* from P/b/D — his Normal Day is defined by initial-balance extension,
+not by profile skew — and his base rates come from **equity-index RTH
+sessions**, not 23-hour gold. The 50% target is therefore a defensible prior,
+not ground truth. The resulting P / b / UNCLASSIFIED split is **reported as an
+output, never targeted**, and the calibration is judged on whether the sweep is
+stable (a broad plateau) rather than on hitting 50% exactly.
+
+Output: `reports/volume_profile_shape_calibration.md`, recording the sweep, the
+chosen threshold, target vs achieved D frequency, the full class distribution,
+and the plateau width. Re-run if `InpRowSize` or the session definition changes,
+since both alter the histogram the skew is computed from.
+
+Until the calibration has been run, the code ships an uncalibrated placeholder
+and the panel renders `⚠ UNCALIBRATED` on every frame. That marker is not
+suppressible.
+
+### 9.5 Developing-profile guard
 
 A two-hour-old profile always looks like something it isn't — every session
 starts life looking like a P or a b simply because it has only travelled one
@@ -354,7 +415,7 @@ ENGULFING           today's VA contains prior VA
 ```
 
 Evaluated on completed sessions; shown as `FORMING` for the developing one per
-§9.4.
+§9.5.
 
 ## 11. Balance / imbalance regime
 
@@ -365,7 +426,7 @@ BALANCED             shape == D
 OUT_OF_BALANCE_UP    shape == P
 OUT_OF_BALANCE_DOWN  shape == b
 UNCLEAR              shape == UNCLASSIFIED
-FORMING              developing profile below the §9.4 elapsed threshold
+FORMING              developing profile below the §9.5 elapsed threshold
 ```
 
 Displayed as the panel's headline line. It is a **description of the completed
@@ -406,9 +467,11 @@ Prominence-based, not a bare threshold:
   of POC volume, and ≥ `InpNodeMinSeparationRows` (default 10 rows = $1.00)
   from any stronger HVN.
 
-⚠️ **These three thresholds are uncalibrated display heuristics**, in the same
-category as §9.3 and warned about in the same three places. `InpShowHVN` can be
-disabled independently of `InpShowLVN`.
+⚠️ **These three thresholds are uncalibrated display heuristics** — unlike
+`InpSkewThreshold`, which §9.4 grounds against a published frequency, these
+three are chosen. They are warned about in the `.mq5` header, the Python
+docstring and the README. `InpShowHVN` can be disabled independently of
+`InpShowLVN`.
 
 ## 15. Naked / virgin POC
 
@@ -465,25 +528,27 @@ All objects use prefix `GC_VP_` and are removed in `OnDeinit`.
 The consolidated read, one corner block:
 
 ```
-XAUUSD VOLUME PROFILE          src TICK   ⚠ PROVISIONAL CUTOFFS
+XAUUSD VOLUME PROFILE          src TICK   skewT 0.42
 ─ DEVELOPING ───────────────────────────
- shape    P   (poc .71  vaW .48  tailLo .06)
+ shape    P   skew −0.88  (poc .71  vaW .48  tailLo .06)
  regime   OUT OF BALANCE ↑
  open     ABOVE VA   (prior VAH 4501.20)
  VPOC 4508.40   VAH 4512.10   VAL 4496.30
  IB   4499.80 – 4507.60  (60m)
 ─ PRIOR SESSION ────────────────────────
- shape    D    value  OVERLAPPING HIGHER
+ shape    D   skew +0.11   value  OVERLAPPING HIGHER
  VPOC 4493.15   VAH 4501.20   VAL 4486.40
 ─ COMPOSITE 5d ─────────────────────────
- shape    D
+ shape    D   skew −0.07
  VPOC 4488.90   VAH 4515.60   VAL 4470.20
 ─ naked POC  4462.75 (11 Aug)  4441.20 (06 Aug)
  ticks 184,302   rejected 412   elapsed 63%
 ```
 
-`InpShowPanel` toggles it. The `src` and `⚠` fields are never suppressible —
-they are the honesty markers.
+`InpShowPanel` toggles it. The `src` field, the `skew` values and the
+`⚠ UNCALIBRATED` marker (shown in place of `skewT` until §9.4 has been run) are
+never suppressible — they are the honesty markers. The letter is never
+displayed without its skew value beside it.
 
 ## 18. Alerts
 
@@ -538,9 +603,15 @@ make it pass.**
 - POC tie-break, both stages.
 - Invariant: value area always contains ≥ `InpValueAreaPct` of total volume.
 - Edge cases: single-row profile, perfectly flat profile, empty session.
+- **Skew**: a symmetric histogram gives `skew == 0` exactly; a mirrored
+  histogram gives exactly negated skew; skew is **invariant to `row_size`** on
+  a resampled histogram and invariant to a uniform volume rescale (these are
+  the properties that justify choosing it over POC position, so they are
+  asserted, not assumed).
 - **Shape classifier**: hand-built P, b and D histograms classify correctly;
-  an ambiguous histogram returns `UNCLASSIFIED` rather than a letter; the
-  §9.4 elapsed guard returns `FORMING`.
+  the sign convention is pinned by an explicit test (mass-at-highs ⇒ `P`) so an
+  inversion cannot pass; a degenerate profile returns `UNCLASSIFIED`; the §9.5
+  elapsed guard returns `FORMING`.
 - **Open type**: all five branches, including open exactly on `prior_VAH` and
   exactly on `prior_low`.
 - **Value migration**: all six branches, including exact-edge equality.
@@ -562,7 +633,13 @@ zero and the assertion passes vacuously.
 - `src/microstructure/volume_profile.py`
 - `mt5_indicators/GoldenChart_VolumeProfile.mq5`
 - `scripts/check_volume_profile_parity.py`
+- `scripts/calibrate_profile_shape.py`
 - `tests/unit/test_volume_profile.py`
+
+**Generated (never hand-edit)**
+- `reports/volume_profile_shape_calibration.md` — written by
+  `calibrate_profile_shape.py`. Hand-tuning the threshold it reports turns a
+  calibrated constant back into a guess.
 
 **Updated**
 - `mt5_indicators/README.md`
