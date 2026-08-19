@@ -604,10 +604,12 @@ make it pass.**
 - Invariant: value area always contains ≥ `InpValueAreaPct` of total volume.
 - Edge cases: single-row profile, perfectly flat profile, empty session.
 - **Skew**: a symmetric histogram gives `skew == 0` exactly; a mirrored
-  histogram gives exactly negated skew; skew is **invariant to `row_size`** on
-  a resampled histogram and invariant to a uniform volume rescale (these are
-  the properties that justify choosing it over POC position, so they are
-  asserted, not assumed).
+  histogram gives exactly negated skew; skew is **invariant under a uniform
+  price rescale** (multiply every row price by k) and **invariant under a
+  uniform volume rescale** (multiply every row volume by c). These two
+  invariances are precisely what make the statistic comparable across
+  sessions and volatility regimes — the reason it was chosen over POC
+  position — so they are asserted, not assumed.
 - **Shape classifier**: hand-built P, b and D histograms classify correctly;
   the sign convention is pinned by an explicit test (mass-at-highs ⇒ `P`) so an
   inversion cannot pass; a degenerate profile returns `UNCLASSIFIED`; the §9.5
