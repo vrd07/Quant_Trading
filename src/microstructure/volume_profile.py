@@ -283,3 +283,39 @@ def build_profile(hist: Histogram, params: ProfileParams = ProfileParams()) -> P
         low=row_low(hist.min_row + int(occupied[0]), rs),
         high=row_high(hist.min_row + int(occupied[-1]), rs),
     )
+
+
+class TickCursor:
+    """Retain-and-replay cursor for incremental tick fetching.
+
+    Why this exists. `CopyTicksRange` is INCLUSIVE on both `from_msc` and
+    `to_msc`, and multiple DISTINCT ticks can share one millisecond. So the
+    obvious cursor -- `from_msc = last_seen_msc` -- re-returns every tick at
+    that millisecond on every refresh. On a 5s timer that is a compounding
+    double-count which drags VPOC toward whatever price was busiest at the last
+    refresh boundary. Skipping a single tick does not fix it, because the
+    duplicates are genuinely different ticks.
+
+    Invariant: nothing at or after `cursor_msc` has been processed.
+
+    Each cycle processes only ticks strictly BELOW the batch's maximum
+    millisecond and parks the cursor there, so the final partial millisecond is
+    deferred one cycle -- irrelevant at a 5s cadence.
+
+    Side benefit: this is inherently gap-healing. If the terminal disconnects
+    the cursor does not advance, and the next successful call backfills the
+    missed span with no special reconnect path.
+    """
+
+    def __init__(self, start_msc: int) -> None:
+        self.cursor_msc = int(start_msc)
+
+    def split(self, time_msc: np.ndarray) -> int:
+        """Given a batch sorted ascending, return how many leading ticks are
+        safe to process, and advance the cursor to the deferred boundary."""
+        if time_msc.size == 0:
+            return 0
+        boundary = int(time_msc[-1])
+        n_safe = int(np.searchsorted(time_msc, boundary, side="left"))
+        self.cursor_msc = boundary
+        return n_safe
