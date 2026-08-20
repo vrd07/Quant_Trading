@@ -1056,7 +1056,7 @@ def classify_shape(prof: Profile, params: ContextParams = ContextParams()) -> Sh
                      lower_tail_frac=lower_tail_frac)
 ```
 
-Note the ordering of the `elif` chain: with `skew_threshold == 0.0` (the uncalibrated sentinel) a negative skew still resolves to `P` and a positive to `b`, and only an exactly-zero skew reaches `D`. That is deliberate — the sentinel must not silently classify everything as balanced.
+Note the ordering of the `elif` chain. With `skew_threshold == 0.0` (the uncalibrated sentinel) a negative skew resolves to `P` and a positive to `b`, and **`D` is unreachable entirely** — not merely rare. `-0.0 == 0.0` in IEEE-754, so `skew <= -threshold` is `skew <= 0.0`, which swallows the exact-zero case as well. That is the safe direction and is deliberate: the sentinel must never silently classify sessions as balanced, and it over-satisfies that requirement rather than under-satisfying it. `D` becomes reachable as soon as Task 8 writes a real threshold. Preserve the ordering.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
