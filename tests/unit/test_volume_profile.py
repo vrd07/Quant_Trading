@@ -123,13 +123,35 @@ class TestValueArea:
         # start 10; above=2 below=8 -> take below (18 >= 15.4). stop.
         assert (lo, hi) == (1, 2)
 
-    def test_tie_goes_to_the_row_nearer_the_poc(self):
+    def test_equidistant_tie_then_further_expansion_continues(self):
+        # NOTE: this case is ALSO equidistant at the tie step (d_up == d_dn == 1,
+        # same branch as test_equidistant_tie_takes_the_higher_row below) -- it
+        # was previously misnamed "nearer the POC" but does not exercise that
+        # branch. Kept because it is still a valid case (equidistant tie
+        # followed by further asymmetric expansion); the genuine unequal-distance
+        # nearer-wins case is test_unequal_distance_tie_goes_to_the_nearer_row.
         #            0    1    2     3    4
         v = np.array([9.0, 3.0, 10.0, 3.0, 9.0])   # total 34, target 23.8
         lo, hi = vp.value_area(v, poc_i=2, target_frac=0.70, algorithm="single_row")
         # 10; above=3 below=3 tie, equidistant -> above (13); then above=9 below=3
         # -> above (22); then below=3 -> (25) >= 23.8
         assert (lo, hi) == (1, 4)
+
+    def test_unequal_distance_tie_goes_to_the_nearer_row(self):
+        # Genuine "exact volume tie, unequal POC-distance" case -- distinct from
+        # the equidistant branch above. The first step is a non-tie (asymmetric
+        # expansion widens the upper side first), so by the second step the
+        # candidate rows sit at DIFFERENT distances from the POC when their
+        # volumes tie exactly.
+        #            0    1    2    3     4    5    6
+        v = np.array([0.0, 5.0, 3.0, 10.0, 9.0, 3.0, 0.0])   # total 30, target 21
+        lo, hi = vp.value_area(v, poc_i=3, target_frac=0.70, algorithm="single_row")
+        # 10; above=v[4]=9 below=v[2]=3 -> take above (19); now above=v[5]=3
+        # below=v[2]=3 TIE, but d_up=(5-3)=2 != d_dn=(3-2)=1 -> nearer (below,
+        # dist 1) wins -> (22) >= 21, stop.
+        # Verified this fixture discriminates: flipping the comparison to
+        # `d_up >= d_dn` changes the result to (3, 5) instead of (2, 4).
+        assert (lo, hi) == (2, 4)
 
     def test_equidistant_tie_takes_the_higher_row(self):
         v = np.array([1.0, 4.0, 10.0, 4.0, 1.0])   # total 20, target 14
