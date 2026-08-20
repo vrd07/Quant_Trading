@@ -688,7 +688,6 @@ class TestTickCursor:
 
         cur = vp.TickCursor(start_msc=int(msc[0]))
         rows: list[np.ndarray] = []
-        start = 0
         for edge in np.array_split(np.arange(n), n_batches):
             if edge.size == 0:
                 continue
@@ -700,18 +699,62 @@ class TestTickCursor:
             take = cur.split(msc[sel])
             if take:
                 rows.append(sel[:take])
-            start = end
         # Flush: at the true end of the session there is no more data coming,
         # so the held-back tail is processed.
         sel = np.flatnonzero(msc >= cur.cursor_msc)
         if sel.size:
             rows.append(sel)
 
-        idx = np.unique(np.concatenate(rows)) if rows else np.array([], dtype=int)
-        incremental = vp.accumulate_ticks(bid[idx], ask[idx], params)
+        idx = np.concatenate(rows) if rows else np.array([], dtype=np.int64)
 
+        # DO NOT deduplicate `idx` before these assertions. A double-count is
+        # precisely a repeated index, so np.unique() here would delete the
+        # evidence of the only bug this test exists to catch and the test would
+        # pass against a broken cursor.
+        assert idx.size == np.unique(idx).size, "a tick was processed twice"
+        assert np.array_equal(np.sort(idx), np.arange(n)), "ticks lost or duplicated"
+
+        incremental = vp.accumulate_ticks(bid[idx], ask[idx], params)
         assert incremental.min_row == one_shot.min_row
         assert incremental.volumes == pytest.approx(one_shot.volumes, abs=0.0)
+
+    def test_the_batch_split_harness_can_actually_fail(self):
+        """Guard the guard.
+
+        A cursor that ignores the boundary millisecond double-counts. This
+        replays the same batching against such a cursor and requires the
+        exactly-once assertions to catch it. Without this, a harness bug that
+        silently passes everything would be indistinguishable from a correct
+        cursor.
+        """
+        class NaiveCursor:
+            """The obvious, wrong implementation: consume the whole batch."""
+            def __init__(self, start_msc):
+                self.cursor_msc = int(start_msc)
+
+            def split(self, time_msc):
+                self.cursor_msc = int(time_msc[-1])
+                return int(time_msc.size)
+
+        rng = np.random.default_rng(11)
+        n = 500
+        msc = np.sort(rng.integers(0, 40, n)).astype(np.int64)
+
+        cur = NaiveCursor(start_msc=int(msc[0]))
+        rows = []
+        for edge in np.array_split(np.arange(n), 7):
+            end = int(edge[-1]) + 1
+            sel = np.flatnonzero((msc >= cur.cursor_msc) & (np.arange(n) < end))
+            if sel.size == 0:
+                continue
+            take = cur.split(msc[sel])
+            if take:
+                rows.append(sel[:take])
+        idx = np.concatenate(rows)
+        assert idx.size > np.unique(idx).size, (
+            "the naive cursor must double-count; if it does not, this harness "
+            "cannot detect the bug it was written for"
+        )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
