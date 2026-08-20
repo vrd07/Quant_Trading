@@ -108,3 +108,62 @@ def classify_shape(prof: Profile, params: ContextParams = ContextParams()) -> Sh
                      va_width_frac=va_width_frac,
                      upper_tail_frac=upper_tail_frac,
                      lower_tail_frac=lower_tail_frac)
+
+
+REGIME_BY_SHAPE = {
+    SHAPE_D: "BALANCED",
+    SHAPE_P: "OUT_OF_BALANCE_UP",
+    SHAPE_B: "OUT_OF_BALANCE_DOWN",
+    SHAPE_UNKNOWN: "UNCLEAR",
+}
+
+
+def classify_open_type(open_price: float, prior: Profile) -> str:
+    """Where today opened relative to yesterday's value area.
+
+    Value-area boundaries are INCLUSIVE: an open exactly on VAH or VAL is
+    inside value. The range boundaries are exclusive, so an open exactly on the
+    prior high is above value but not above range.
+    """
+    if open_price > prior.high:
+        return "OPEN_ABOVE_RANGE"
+    if open_price < prior.low:
+        return "OPEN_BELOW_RANGE"
+    if open_price > prior.vah:
+        return "OPEN_ABOVE_VA"
+    if open_price < prior.val:
+        return "OPEN_BELOW_VA"
+    return "OPEN_INSIDE_VA"
+
+
+def classify_value_migration(today: Profile, prior: Profile) -> str:
+    """Today's value area against the prior session's.
+
+    Containment is checked BEFORE direction, so an inside or engulfing day is
+    never mislabelled as a drift.
+    """
+    if today.val >= prior.val and today.vah <= prior.vah:
+        return "INSIDE"
+    if today.val <= prior.val and today.vah >= prior.vah:
+        return "ENGULFING"
+    if today.val > prior.vah:
+        return "HIGHER"
+    if today.vah < prior.val:
+        return "LOWER"
+    return "OVERLAPPING_HIGHER" if today.vah > prior.vah else "OVERLAPPING_LOWER"
+
+
+def classify_regime(shape: str, elapsed_pct: float, params: ContextParams,
+                    is_developing: bool) -> str:
+    """Balance vs out-of-balance -- the word that gates strategy family.
+
+    A developing session reports FORMING until it is far enough along. Every
+    session looks like a P or a b for its first couple of hours purely because
+    it has only travelled one way so far; without this guard the live label
+    would be confidently wrong every morning.
+
+    This DESCRIBES the auction so far. It does not forecast.
+    """
+    if is_developing and elapsed_pct < params.regime_min_elapsed_pct:
+        return "FORMING"
+    return REGIME_BY_SHAPE.get(shape, "UNCLEAR")
