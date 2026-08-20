@@ -163,3 +163,123 @@ def accumulate_m1_bars(high: np.ndarray, low: np.ndarray, tick_volume: np.ndarra
     weights = np.concatenate(all_w)
     n = int(high.size)
     return _histogram_from_rows(rows, weights, params, accepted=n, rejected=0)
+
+
+@dataclass(frozen=True)
+class Profile:
+    hist: Histogram
+    poc_row: int
+    val_row: int
+    vah_row: int
+    vpoc: float
+    val: float
+    vah: float
+    low: float
+    high: float
+
+
+def poc_index(volumes: np.ndarray) -> int:
+    """Row of maximum volume. Ties resolve toward the middle of the occupied
+    range (CQG rule), then to the lower index. Fully deterministic.
+
+    Comparing indices is equivalent to comparing row mid prices, because rows
+    are uniformly spaced — so this needs no row_size.
+    """
+    vmax = volumes.max()
+    cands = np.flatnonzero(volumes == vmax)
+    if cands.size == 1:
+        return int(cands[0])
+    occupied = np.flatnonzero(volumes > 0)
+    mid = (occupied[0] + occupied[-1]) / 2.0
+    # argmin returns the FIRST minimum, i.e. the lower index on a tie.
+    return int(cands[int(np.argmin(np.abs(cands - mid)))])
+
+
+def value_area(volumes: np.ndarray, poc_i: int, target_frac: float = 0.70,
+               algorithm: str = "single_row") -> tuple[int, int]:
+    """Expand from the POC until the band holds `target_frac` of total volume.
+
+    "single_row" is the TradingView/CQG standard: absorb whichever adjacent row
+    is larger; on a tie take the row nearer the POC; if equidistant take the
+    higher row.
+
+    "two_row" is the classic Steidlmayer/CBOT method used by Sierra Chart and
+    ThinkOrSwim: compare the SUM of the two rows above against the two below and
+    absorb the winning pair. On a tie it takes the upper pair.
+    """
+    n = volumes.size
+    total = float(volumes.sum())
+    if n == 0 or total <= 0:
+        return poc_i, poc_i
+    target = total * target_frac
+    lo = hi = poc_i
+    acc = float(volumes[poc_i])
+
+    while acc < target:
+        up_avail = hi + 1 < n
+        dn_avail = lo - 1 >= 0
+        if not up_avail and not dn_avail:
+            break
+
+        if algorithm == "single_row":
+            if not dn_avail:
+                take_up = True
+            elif not up_avail:
+                take_up = False
+            else:
+                above, below = volumes[hi + 1], volumes[lo - 1]
+                if above != below:
+                    take_up = above > below
+                else:
+                    d_up = (hi + 1) - poc_i
+                    d_dn = poc_i - (lo - 1)
+                    take_up = d_up <= d_dn          # equidistant -> upper row
+            if take_up:
+                hi += 1
+                acc += float(volumes[hi])
+            else:
+                lo -= 1
+                acc += float(volumes[lo])
+
+        elif algorithm == "two_row":
+            up_sum = float(volumes[hi + 1:hi + 3].sum()) if up_avail else -1.0
+            dn_sum = float(volumes[max(lo - 2, 0):lo].sum()) if dn_avail else -1.0
+            if not dn_avail or (up_avail and up_sum >= dn_sum):
+                hi = min(hi + 2, n - 1)
+            else:
+                lo = max(lo - 2, 0)
+            acc = float(volumes[lo:hi + 1].sum())
+
+        else:
+            raise ValueError(f"unknown va_algorithm: {algorithm!r}")
+
+    return lo, hi
+
+
+def build_profile(hist: Histogram, params: ProfileParams = ProfileParams()) -> Profile | None:
+    """Resolve a histogram into levels. Returns None for an empty profile.
+
+    Level definitions are explicit because platforms disagree:
+      VPOC = mid of the POC row
+      VAH  = UPPER edge of the highest absorbed row
+      VAL  = LOWER edge of the lowest absorbed row
+    so the band genuinely contains its >= target_frac of volume.
+    """
+    if hist.volumes.size == 0 or hist.total <= 0:
+        return None
+    poc_i = poc_index(hist.volumes)
+    lo_i, hi_i = value_area(hist.volumes, poc_i, params.value_area_pct,
+                            params.va_algorithm)
+    rs = hist.row_size
+    occupied = np.flatnonzero(hist.volumes > 0)
+    return Profile(
+        hist=hist,
+        poc_row=hist.min_row + poc_i,
+        val_row=hist.min_row + lo_i,
+        vah_row=hist.min_row + hi_i,
+        vpoc=row_mid(hist.min_row + poc_i, rs),
+        val=row_low(hist.min_row + lo_i, rs),
+        vah=row_high(hist.min_row + hi_i, rs),
+        low=row_low(hist.min_row + int(occupied[0]), rs),
+        high=row_high(hist.min_row + int(occupied[-1]), rs),
+    )

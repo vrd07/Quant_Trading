@@ -94,6 +94,91 @@ class TestM1Fallback:
         assert h.volumes[0] == pytest.approx(42.0, abs=1e-9)
 
 
+def hist_from(volumes, min_row=1000, row_size=0.10):
+    v = np.asarray(volumes, dtype=float)
+    return vp.Histogram(min_row, v, row_size, accepted=int(v.sum()), rejected=0)
+
+
+class TestPOC:
+    def test_poc_is_the_max_volume_row(self):
+        assert vp.poc_index(np.array([1.0, 5.0, 2.0])) == 1
+
+    def test_poc_tie_goes_to_the_row_nearest_the_range_midpoint(self):
+        # rows 0..4 occupied; midpoint index is 2. Tie between 1 and 3 -> ...
+        # |1-2| == |3-2|, so the argmin picks the LOWER index per spec.
+        v = np.array([1.0, 5.0, 1.0, 5.0, 1.0])
+        assert vp.poc_index(v) == 1
+
+    def test_poc_tie_resolves_toward_the_midpoint_when_distances_differ(self):
+        # occupied 0..6, midpoint 3. Tie between 1 and 4 -> 4 is nearer.
+        v = np.array([1.0, 5.0, 1.0, 1.0, 5.0, 1.0, 1.0])
+        assert vp.poc_index(v) == 4
+
+
+class TestValueArea:
+    def test_single_row_expansion_absorbs_the_bigger_neighbour(self):
+        #            0    1    2    3    4
+        v = np.array([1.0, 8.0, 10.0, 2.0, 1.0])   # total 22, target 15.4
+        lo, hi = vp.value_area(v, poc_i=2, target_frac=0.70, algorithm="single_row")
+        # start 10; above=2 below=8 -> take below (18 >= 15.4). stop.
+        assert (lo, hi) == (1, 2)
+
+    def test_tie_goes_to_the_row_nearer_the_poc(self):
+        #            0    1    2     3    4
+        v = np.array([9.0, 3.0, 10.0, 3.0, 9.0])   # total 34, target 23.8
+        lo, hi = vp.value_area(v, poc_i=2, target_frac=0.70, algorithm="single_row")
+        # 10; above=3 below=3 tie, equidistant -> above (13); then above=9 below=3
+        # -> above (22); then below=3 -> (25) >= 23.8
+        assert (lo, hi) == (1, 4)
+
+    def test_equidistant_tie_takes_the_higher_row(self):
+        v = np.array([1.0, 4.0, 10.0, 4.0, 1.0])   # total 20, target 14
+        lo, hi = vp.value_area(v, poc_i=2, target_frac=0.70, algorithm="single_row")
+        # 10; above=4 below=4, both distance 1 -> take ABOVE -> 14 >= 14, stop
+        assert (lo, hi) == (2, 3)
+
+    def test_one_side_exhausted_keeps_taking_the_other(self):
+        v = np.array([10.0, 3.0, 3.0, 3.0])        # total 19, target 13.3
+        lo, hi = vp.value_area(v, poc_i=0, target_frac=0.70, algorithm="single_row")
+        assert (lo, hi) == (0, 2)
+
+    def test_two_row_algorithm_absorbs_a_pair(self):
+        v = np.array([1.0, 1.0, 10.0, 4.0, 4.0])   # total 20, target 14
+        lo, hi = vp.value_area(v, poc_i=2, target_frac=0.70, algorithm="two_row")
+        # above pair 4+4=8 vs below pair 1+1=2 -> take above -> 18 >= 14
+        assert (lo, hi) == (2, 4)
+
+    @pytest.mark.parametrize("seed", range(25))
+    def test_value_area_always_contains_at_least_the_target_fraction(self, seed):
+        rng = np.random.default_rng(seed)
+        v = rng.random(60) * 100
+        poc = vp.poc_index(v)
+        lo, hi = vp.value_area(v, poc, 0.70, "single_row")
+        assert v[lo:hi + 1].sum() >= 0.70 * v.sum() - 1e-9
+
+    def test_flat_profile_still_terminates(self):
+        v = np.full(10, 5.0)
+        lo, hi = vp.value_area(v, vp.poc_index(v), 0.70, "single_row")
+        assert v[lo:hi + 1].sum() >= 0.70 * v.sum() - 1e-9
+
+    def test_single_row_profile(self):
+        v = np.array([7.0])
+        assert vp.value_area(v, 0, 0.70, "single_row") == (0, 0)
+
+
+class TestBuildProfile:
+    def test_levels_use_row_edges_so_the_band_contains_its_volume(self):
+        prof = vp.build_profile(hist_from([1.0, 8.0, 10.0, 2.0, 1.0]), vp.ProfileParams())
+        assert prof.vpoc == pytest.approx(vp.row_mid(1002, 0.10), abs=1e-9)
+        assert prof.val == pytest.approx(vp.row_low(1001, 0.10), abs=1e-9)
+        assert prof.vah == pytest.approx(vp.row_high(1002, 0.10), abs=1e-9)
+        assert prof.low == pytest.approx(vp.row_low(1000, 0.10), abs=1e-9)
+        assert prof.high == pytest.approx(vp.row_high(1004, 0.10), abs=1e-9)
+
+    def test_empty_histogram_returns_none(self):
+        assert vp.build_profile(hist_from([]), vp.ProfileParams()) is None
+
+
 from pathlib import Path
 
 
