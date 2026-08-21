@@ -342,3 +342,53 @@ class TestTickCursor:
             "the naive cursor must double-count; if it does not, this harness "
             "cannot detect the bug it was written for"
         )
+
+
+class TestNodes:
+    def test_two_peaks_separated_by_a_valley_give_two_hvn_and_one_lvn(self):
+        v = np.array([1.0, 20.0, 10.0, 2.0, 1.0, 2.0, 10.0, 22.0, 3.0])
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        hvn, lvn = vp.find_nodes(prof, vp.NodeParams(min_separation_rows=2))
+        assert len(hvn) == 2
+        assert len(lvn) == 1
+        # the LVN sits in the valley around index 4
+        assert lvn[0] == pytest.approx(vp.row_mid(1004, 0.10), abs=1e-9)
+
+    def test_a_single_peak_yields_no_lvn(self):
+        v = np.array([1.0, 5.0, 20.0, 5.0, 1.0])
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        hvn, lvn = vp.find_nodes(prof, vp.NodeParams(min_separation_rows=2))
+        assert len(lvn) == 0
+
+    def test_node_detection_is_deterministic(self):
+        rng = np.random.default_rng(3)
+        v = rng.random(80) * 50
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        a = vp.find_nodes(prof, vp.NodeParams())
+        b = vp.find_nodes(prof, vp.NodeParams())
+        assert a == b
+
+
+class TestNakedPOC:
+    def test_a_poc_later_traded_through_is_tagged_and_dropped(self):
+        pocs = [("2026-08-10", 100.00, 0), ("2026-08-11", 200.00, 2)]
+        high = np.array([101.0, 101.0, 150.0, 150.0])
+        low = np.array([ 99.0,  99.0, 140.0, 140.0])
+        ends = {"2026-08-10": 0, "2026-08-11": 2}
+        naked = vp.naked_pocs(pocs, high, low, ends)
+        # 100.00 was traded through by bar 1 -> tagged. 200.00 never touched.
+        assert [p for _, p in naked] == [200.00]
+
+    def test_a_poc_touched_exactly_at_a_bar_extreme_is_tagged(self):
+        pocs = [("2026-08-10", 100.00, 0)]
+        high = np.array([99.0, 100.00])
+        low = np.array([98.0, 99.0])
+        naked = vp.naked_pocs(pocs, high, low, {"2026-08-10": 0})
+        assert naked == []
+
+    def test_bars_before_the_session_end_do_not_tag_it(self):
+        pocs = [("2026-08-11", 100.00, 5)]
+        high = np.array([100.0] * 5 + [90.0])
+        low = np.array([100.0] * 5 + [80.0])
+        naked = vp.naked_pocs(pocs, high, low, {"2026-08-11": 5})
+        assert [p for _, p in naked] == [100.00]

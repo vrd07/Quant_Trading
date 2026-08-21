@@ -319,3 +319,78 @@ class TickCursor:
         n_safe = int(np.searchsorted(time_msc, boundary, side="left"))
         self.cursor_msc = boundary
         return n_safe
+
+
+@dataclass(frozen=True)
+class NodeParams:
+    """WARNING: these three thresholds are UNCALIBRATED display heuristics.
+
+    Unlike the skew threshold in profile_context -- which is calibrated against
+    a published base rate -- nothing was fitted to produce these. They are a
+    reasonable default for reading a chart and nothing more. Do not treat them
+    as validated parameters, and do not build a trading rule on them without
+    taking it through the full backtest.md gate.
+    """
+    hvn_prominence_pct: float = 0.15
+    lvn_ratio: float = 0.50
+    min_separation_rows: int = 10
+
+
+def find_nodes(prof: Profile, params: NodeParams = NodeParams()) -> tuple[list[float], list[float]]:
+    """High- and low-volume nodes.
+
+    LVN is the load-bearing one: the course material treats low-volume nodes as
+    where absorption happens -- the thin gaps left in the auction. HVN is
+    secondary context.
+    """
+    v = prof.hist.volumes
+    rs = prof.hist.row_size
+    n = v.size
+    if n < 3:
+        return [], []
+    peak_floor = float(v.max()) * params.hvn_prominence_pct
+
+    # Local maxima above the prominence floor, greedily thinned by separation.
+    cands = [i for i in range(1, n - 1)
+             if v[i] >= v[i - 1] and v[i] > v[i + 1] and v[i] >= peak_floor]
+    cands.sort(key=lambda i: float(v[i]), reverse=True)
+    kept: list[int] = []
+    for i in cands:
+        if all(abs(i - j) >= params.min_separation_rows for j in kept):
+            kept.append(i)
+    kept.sort()
+
+    hvn = [row_mid(prof.hist.min_row + i, rs) for i in kept]
+
+    lvn: list[float] = []
+    for a, b in zip(kept, kept[1:]):
+        seg = v[a + 1:b]
+        if seg.size == 0:
+            continue
+        j = a + 1 + int(np.argmin(seg))
+        if float(v[j]) <= params.lvn_ratio * min(float(v[a]), float(v[b])):
+            lvn.append(row_mid(prof.hist.min_row + j, rs))
+
+    return hvn, lvn
+
+
+def naked_pocs(session_pocs: list[tuple[str, float, int]],
+               bar_high: np.ndarray, bar_low: np.ndarray,
+               bar_index_of_session_end: dict[str, int]) -> list[tuple[str, float]]:
+    """POCs that no LATER bar has traded through.
+
+    These are the "left-side levels" the methodology uses to judge whether a
+    setup's risk-to-reward is viable. A bar whose [low, high] contains the POC
+    price tags it -- touching an extreme exactly counts as a tag.
+    """
+    out: list[tuple[str, float]] = []
+    for label, price, _row in session_pocs:
+        start = bar_index_of_session_end.get(label, 0) + 1
+        if start >= bar_high.size:
+            out.append((label, price))
+            continue
+        hi = bar_high[start:]
+        lo = bar_low[start:]
+        if not np.any((lo <= price) & (hi >= price)):
+            out.append((label, price))
+    return out
