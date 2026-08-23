@@ -30,7 +30,12 @@ class ContextParams:
     # The ONLY constant the shape classification turns on. Calibrated by
     # scripts/calibrate_profile_shape.py against Dalton's ~50% base rate for
     # balanced days. 0.0 is the UNCALIBRATED sentinel -- callers must surface it.
-    skew_threshold: float = 0.0
+    #
+    # 0.35 from 146 XAUUSD sessions (D = 52.7%, P 23.3% / b 24.0%).
+    # See reports/volume_profile_shape_calibration.md. Re-run if row_size or
+    # the session definition changes -- both alter the histogram this is
+    # computed from.
+    skew_threshold: float = 0.35
     min_rows_for_shape: int = 5
     regime_min_elapsed_pct: float = 0.50
 
