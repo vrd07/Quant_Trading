@@ -361,12 +361,44 @@ class TestNodes:
         assert len(lvn) == 0
 
     def test_node_detection_is_deterministic(self):
+        # NOTE: find_nodes is a pure function, so this cannot fail for any
+        # deterministic implementation. Kept because spec 20 asks for it; the
+        # tie-break test below is what actually pins ordering behaviour.
         rng = np.random.default_rng(3)
         v = rng.random(80) * 50
         prof = vp.build_profile(hist_from(v), vp.ProfileParams())
         a = vp.find_nodes(prof, vp.NodeParams())
         b = vp.find_nodes(prof, vp.NodeParams())
         assert a == b
+
+    def test_a_weaker_peak_inside_the_separation_window_is_dropped(self):
+        # Two peaks 2 rows apart with min_separation_rows=3: only one survives,
+        # and it must be the STRONGER one (row 1003, volume 20) -- the thinning
+        # walks candidates in descending volume order.
+        v = np.array([1.0, 10.0, 3.0, 20.0, 2.0])
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        hvn, _ = vp.find_nodes(prof, vp.NodeParams(min_separation_rows=3))
+        assert len(hvn) == 1
+        assert hvn[0] == pytest.approx(vp.row_mid(1003, 0.10), abs=1e-9)
+
+    def test_a_peak_below_the_prominence_floor_is_not_an_hvn(self):
+        # peak_floor = 50 * 0.15 = 7.5, so the local max at row 1001 (vol 2)
+        # is rejected on prominence even though separation would allow it.
+        v = np.array([1.0, 2.0, 1.0, 50.0, 1.0])
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        hvn, _ = vp.find_nodes(prof, vp.NodeParams(min_separation_rows=1))
+        assert len(hvn) == 1
+        assert hvn[0] == pytest.approx(vp.row_mid(1003, 0.10), abs=1e-9)
+
+    def test_equal_volume_peaks_in_the_separation_window_take_the_lower_row(self):
+        # Parity-critical: the sort is STABLE, so equal-volume candidates keep
+        # ascending row order and the lower row wins the separation contest.
+        # An MQL5 port using an unstable sort would return row 1003 here.
+        v = np.array([1.0, 10.0, 3.0, 10.0, 1.0])
+        prof = vp.build_profile(hist_from(v), vp.ProfileParams())
+        hvn, _ = vp.find_nodes(prof, vp.NodeParams(min_separation_rows=3))
+        assert len(hvn) == 1
+        assert hvn[0] == pytest.approx(vp.row_mid(1001, 0.10), abs=1e-9)
 
 
 class TestNakedPOC:
@@ -379,10 +411,19 @@ class TestNakedPOC:
         # 100.00 was traded through by bar 1 -> tagged. 200.00 never touched.
         assert [p for _, p in naked] == [200.00]
 
-    def test_a_poc_touched_exactly_at_a_bar_extreme_is_tagged(self):
+    def test_a_poc_touched_exactly_at_a_bar_high_is_tagged(self):
         pocs = [("2026-08-10", 100.00, 0)]
         high = np.array([99.0, 100.00])
         low = np.array([98.0, 99.0])
+        naked = vp.naked_pocs(pocs, high, low, {"2026-08-10": 0})
+        assert naked == []
+
+    def test_a_poc_touched_exactly_at_a_bar_low_is_tagged(self):
+        # Mirror of the high-side case: the docstring promises that touching
+        # EITHER extreme exactly counts as a tag, so both sides need pinning.
+        pocs = [("2026-08-10", 100.00, 0)]
+        high = np.array([99.0, 110.00])
+        low = np.array([98.0, 100.00])
         naked = vp.naked_pocs(pocs, high, low, {"2026-08-10": 0})
         assert naked == []
 
@@ -391,4 +432,14 @@ class TestNakedPOC:
         high = np.array([100.0] * 5 + [90.0])
         low = np.array([100.0] * 5 + [80.0])
         naked = vp.naked_pocs(pocs, high, low, {"2026-08-11": 5})
+        assert [p for _, p in naked] == [100.00]
+
+    def test_the_session_end_bar_itself_does_not_tag_its_own_poc(self):
+        # The scan starts at end+1. Bar 0 is the session's OWN last bar and
+        # sits exactly on the POC; only bar 1, which does not reach it, may
+        # tag. Without the +1 a POC would be tagged by its own session.
+        pocs = [("2026-08-10", 100.00, 0)]
+        high = np.array([100.0, 90.0])
+        low = np.array([100.0, 80.0])
+        naked = vp.naked_pocs(pocs, high, low, {"2026-08-10": 0})
         assert [p for _, p in naked] == [100.00]
