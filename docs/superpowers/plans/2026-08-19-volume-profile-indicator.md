@@ -2539,7 +2539,42 @@ Alerts fire on tick-level bid crossings with a re-arm band."
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `data/parity/vp_histogram.csv` (columns `session,row,volume`), `data/parity/vp_levels.csv` (columns `session,vpoc,vah,val,low,high,skew,shape,open_type,value_migration,regime`), and a parity checker exiting non-zero on mismatch.
+- Produces: `data/parity/vp_histogram.csv` (columns `session,row,volume`), `data/parity/vp_levels.csv`, `data/parity/vp_nodes.csv` (columns `session,kind,price`), and a parity checker exiting non-zero on mismatch.
+
+> ⚠️ **REQUIREMENT — four spec-required comparisons are missing from the code
+> blocks below. Resolve before implementing; do not treat the blocks as complete.**
+>
+> Spec §19.1 requires Python to recompute "POC / VAH / VAL / shape / regime /
+> open type / value migration / HVN / LVN" from the exported histogram and assert
+> "exact equality on levels and classifications, **set equality on nodes**".
+> Step 1 and Step 2 as drafted cover only POC/VAH/VAL/low/high/skew/shape. The
+> Interfaces line above previously claimed `open_type,value_migration,regime`
+> columns that Step 1 never wrote and Step 2 never read — the prose promised
+> coverage the code did not deliver.
+>
+> All four missing outputs ARE ported to MQL5 by Task 10, so without this they
+> cross the language boundary untested. That is the exact silent-drift failure
+> `CLAUDE.md` calls non-optional to guard against.
+>
+> Add to `ExportParityCSV`, and to the checker:
+>
+> | Missing comparison | Extra field(s) the export must carry | Python call |
+> |---|---|---|
+> | `open_type` | session `open` price; prior session linkage | `pc.classify_open_type(open_price, prior)` |
+> | `value_migration` | prior session linkage only | `pc.classify_value_migration(today, prior)` |
+> | `regime` | `elapsed_pct`, `is_developing`, `regime_min_elapsed_pct` | `pc.classify_regime(shape, elapsed_pct, cparams, is_developing)` |
+> | HVN / LVN | new `vp_nodes.csv`: `session,kind,price` (kind ∈ `HVN`/`LVN`), plus the three `NodeParams` values | `vp.find_nodes(prof, vp.NodeParams(...))`, compared as a SET with `PRICE_TOL` |
+>
+> "Prior session linkage" is derivable inside the checker — sort sessions by tag
+> and pass session *n−1*'s rebuilt `Profile` as `prior`; the first session has no
+> prior and must be SKIPPED for `open_type`/`value_migration`, not defaulted.
+> Guard it: `classify_shape(None, ...)` raises `AttributeError` (Task 4 deferred
+> minor), and `build_profile` returns `None` on an empty histogram.
+>
+> Extend Step 4 ("verify the harness can actually fail") to cover the new
+> comparisons too — flip one node threshold in MQL5 and require `PARITY FAILED`
+> on `vp_nodes.csv`. A comparison that has never been observed to fail is not
+> known to work.
 
 - [ ] **Step 1: Add CSV export to the indicator**
 
