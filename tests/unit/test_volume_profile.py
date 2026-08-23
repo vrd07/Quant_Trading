@@ -443,3 +443,59 @@ class TestNakedPOC:
         low = np.array([100.0, 80.0])
         naked = vp.naked_pocs(pocs, high, low, {"2026-08-10": 0})
         assert [p for _, p in naked] == [100.00]
+
+
+class TestComposite:
+    def test_merge_equals_the_sum_of_its_parts(self):
+        a = hist_from([1.0, 2.0, 3.0], min_row=1000)
+        b = hist_from([4.0, 5.0], min_row=1002)
+        m = vp.merge_histograms([a, b])
+        assert m.min_row == 1000
+        # rows 1000,1001,1002,1003 -> 1, 2, 3+4, 5
+        assert m.volumes == pytest.approx([1.0, 2.0, 7.0, 5.0], abs=1e-9)
+        assert m.total == pytest.approx(a.total + b.total, abs=1e-9)
+
+    def test_merge_of_disjoint_histograms_fills_the_gap_with_zeros(self):
+        a = hist_from([1.0], min_row=1000)
+        b = hist_from([1.0], min_row=1004)
+        m = vp.merge_histograms([a, b])
+        assert m.volumes.size == 5
+        assert m.volumes == pytest.approx([1.0, 0.0, 0.0, 0.0, 1.0], abs=1e-9)
+
+    def test_merge_of_an_empty_list_is_empty(self):
+        assert vp.merge_histograms([]).volumes.size == 0
+
+    def test_merge_preserves_accepted_and_rejected_counts(self):
+        a = vp.Histogram(1000, np.array([2.0]), 0.10, accepted=2, rejected=1)
+        b = vp.Histogram(1000, np.array([3.0]), 0.10, accepted=3, rejected=4)
+        m = vp.merge_histograms([a, b])
+        assert (m.accepted, m.rejected) == (5, 5)
+
+    def test_a_fully_rejected_session_still_contributes_its_rejected_count(self):
+        # A session whose every tick was spread-filtered has volumes.size == 0
+        # and min_row == 0, so it MUST stay out of the grid maths -- letting it
+        # in would drag min_row to 0 and blow the array up. But its rejections
+        # are integrity data: dropping them makes the composite under-report
+        # how much of the feed it discarded, which is the one thing the
+        # accepted/rejected pair exists to be honest about.
+        good = vp.Histogram(1000, np.array([5.0]), 0.10, accepted=5, rejected=2)
+        empty = vp.Histogram(0, np.zeros(0), 0.10, accepted=0, rejected=9999)
+        m = vp.merge_histograms([good, empty])
+        assert m.min_row == 1000
+        assert m.volumes.size == 1
+        assert (m.accepted, m.rejected) == (5, 10001)
+
+
+class TestInitialBalance:
+    def test_ib_covers_only_the_first_n_minutes(self):
+        mins = np.array([0.0, 30.0, 59.9, 61.0, 120.0])
+        px = np.array([100.0, 105.0, 95.0, 200.0, 50.0])
+        assert vp.initial_balance(mins, px, 60) == (95.0, 105.0)
+
+    def test_ib_boundary_minute_is_exclusive(self):
+        mins = np.array([0.0, 60.0])
+        px = np.array([100.0, 999.0])
+        assert vp.initial_balance(mins, px, 60) == (100.0, 100.0)
+
+    def test_no_ticks_in_the_window_returns_none(self):
+        assert vp.initial_balance(np.array([90.0]), np.array([100.0]), 60) is None

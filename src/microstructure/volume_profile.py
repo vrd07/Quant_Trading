@@ -394,3 +394,51 @@ def naked_pocs(session_pocs: list[tuple[str, float, int]],
         if not np.any((lo <= price) & (hi >= price)):
             out.append((label, price))
     return out
+
+
+def merge_histograms(hists: list[Histogram]) -> Histogram:
+    """Sum session histograms onto the shared absolute grid.
+
+    This is what makes the composite nearly free: no tick data is re-read, the
+    cached per-session histograms are simply added. It works only because the
+    grid is absolute -- session-anchored bins could not be summed like this.
+
+    A session that accepted no ticks at all carries `min_row = 0`, so it must be
+    kept out of the grid maths or it drags the composite's floor down to row 0.
+    Its accepted/rejected counts are still summed: those are integrity data, and
+    a fully spread-filtered session is exactly the case the reader most needs to
+    see. Hence counts over `hists`, grid over `live`.
+    """
+    live = [h for h in hists if h.volumes.size > 0]
+    accepted = sum(h.accepted for h in hists)
+    rejected = sum(h.rejected for h in hists)
+    if not live:
+        return Histogram(0, np.zeros(0), hists[0].row_size if hists else 0.10,
+                         accepted, rejected)
+    row_size = live[0].row_size
+    lo = min(h.min_row for h in live)
+    hi = max(h.max_row for h in live)
+    out = np.zeros(hi - lo + 1, dtype=float)
+    for h in live:
+        off = h.min_row - lo
+        out[off:off + h.volumes.size] += h.volumes
+    return Histogram(lo, out, row_size, accepted, rejected)
+
+
+def initial_balance(minutes_from_open: np.ndarray, price: np.ndarray,
+                    ib_minutes: int = 60) -> tuple[float, float] | None:
+    """Range of the first `ib_minutes` of the session, returned as (LOW, HIGH).
+
+    The order is low-then-high. Callers and the MQL5 port must not assume
+    high-first; nothing else in the pipeline would catch a swap.
+
+    NOTE: this is standard range-based Initial Balance. It is NOT Fabio
+    Valentini's IVB (Initial Volume Breakout), whose rule incorporates volume
+    and is not recoverable from the available course material. Do not label it
+    as IVB anywhere in the UI or docs.
+    """
+    mask = minutes_from_open < ib_minutes
+    if not np.any(mask):
+        return None
+    window = price[mask]
+    return float(window.min()), float(window.max())
