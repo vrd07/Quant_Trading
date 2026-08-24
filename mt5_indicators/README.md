@@ -183,3 +183,23 @@ reasons unrelated to correctness.
 
 **Do not relax `PRICE_TOL` or `SKEW_TOL` to make it pass.** A mismatch means
 the two implementations genuinely disagree; fix whichever one is wrong.
+
+#### Driving the parity run without the GUI
+
+`VPParityAttach.mq5` is a one-line script that attaches the indicator with
+`InpExportCSV=true` via `ChartIndicatorAdd`, so the export can be produced
+headlessly. Compile it, then start the terminal against a config containing:
+
+```
+[StartUp]
+Symbol=XAUUSD
+Period=M15
+Script=VPParityAttach
+```
+
+A `Template=` line on its own attaches nothing — MT5 only creates the startup
+chart when there is an Expert or Script to run on it.
+
+⚠️ The script's `iCustom` arguments are **positional**. Adding an input to
+`GoldenChart_VolumeProfile.mq5` means updating that list in the same change, or
+every argument after the new one is silently read into the wrong parameter.
