@@ -150,6 +150,10 @@ is computed from. Read the report's plateau width, not whether it hit its
 target. The panel always prints the skew value beside the shape letter, so a
 marginal session is visible as a number rather than hidden inside the label.
 
+The current calibration, over 146 XAUUSD sessions, puts it at **`0.35`**.
+Type it into the input — it is deliberately not the shipped default, so that
+nobody reads a shape letter without having decided the threshold is current.
+
 **The node thresholds are NOT calibrated.** `InpHVNProminencePct`,
 `InpLVNRatio` and `InpNodeMinSepRows` are display heuristics — nothing was
 fitted to produce them. They are a reasonable default for reading a chart and

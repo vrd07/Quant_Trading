@@ -818,20 +818,26 @@ void DrawNodes(const SessionProfile &p, const datetime t1)
 //--- The panel's honesty markers -- source, skew values and the
 //    UNCALIBRATED warning -- are NOT suppressible. A letter is never shown
 //    without its skew value beside it.
+//    That claim is only true if the markers are VISIBLE: MT5's one-click
+//    trading widget is on by default and covers the top ~60px of the upper-left
+//    corner, which is exactly where the header and the UNCALIBRATED warning sit.
+//    So the origin drops below it while that widget is showing, and YDISTANCE is
+//    re-applied on every call so toggling one-click trading moves the panel.
 void PanelLine(const int idx, const string text, const color clr)
 {
+   int y0 = ChartGetInteger(0, CHART_SHOW_ONE_CLICK) ? 78 : 18;
    string name = StringFormat("%sPANEL_%d", PFX, idx);
    if(ObjectFind(0, name) < 0)
    {
       ObjectCreate(0, name, OBJ_LABEL, 0, 0, 0);
       ObjectSetInteger(0, name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
       ObjectSetInteger(0, name, OBJPROP_XDISTANCE, 10);
-      ObjectSetInteger(0, name, OBJPROP_YDISTANCE, 18 + idx * 13);
       ObjectSetString(0, name, OBJPROP_FONT, "Consolas");
       ObjectSetInteger(0, name, OBJPROP_FONTSIZE, 8);
       ObjectSetInteger(0, name, OBJPROP_SELECTABLE, false);
       g_objects++;
    }
+   ObjectSetInteger(0, name, OBJPROP_YDISTANCE, y0 + idx * 13);
    ObjectSetString(0, name, OBJPROP_TEXT, text);
    ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
 }
