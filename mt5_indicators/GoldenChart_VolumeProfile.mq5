@@ -646,7 +646,13 @@ datetime SessionStartFor(const datetime t)
 //--- Build one completed session. Ticks first; M1 only if the tick history
 //    genuinely is not there. A session that never cleared the minimum tick
 //    count is left invalid rather than drawn at reduced confidence.
-void BuildSession(SessionProfile &p, const datetime from, const datetime to)
+//
+//    Returns false when the tick history is still SYNCHRONISING, so the caller
+//    can retry instead of accepting M1. CopyTicksRange returning 0 is a real
+//    answer ("no ticks in this range" -- a weekend); returning -1 is not an
+//    answer at all, and treating the two alike would pin every completed
+//    session to M1 fidelity permanently, since history is built only once.
+bool BuildSession(SessionProfile &p, const datetime from, const datetime to, const bool allow_m1)
 {
    ArrayResize(p.volumes, 0);
    p.start = from; p.end = to;
@@ -659,6 +665,8 @@ void BuildSession(SessionProfile &p, const datetime from, const datetime to)
    MqlTick ticks[];
    int n = CopyTicksRange(_Symbol, ticks, COPY_TICKS_ALL,
                           (ulong)from * 1000, (ulong)to * 1000 - 1);
+   if(n < 0 && !allow_m1) return false;      // still syncing -- ask to be retried
+
    if(n > 0)
    {
       for(int i = 0; i < n; i++)
@@ -674,9 +682,10 @@ void BuildSession(SessionProfile &p, const datetime from, const datetime to)
       AccumulateM1Bars(p, from, to);
    }
 
-   if(p.accepted < InpMinSessionTicks) return;
+   if(p.accepted < InpMinSessionTicks) return true;   // built, just too thin to use
    ResolveProfile(p);
    p.shape = ClassifyShape(p);
+   return true;
 }
 
 //--- Naked POCs: session POCs no LATER bar has traded through. These are the
@@ -964,10 +973,13 @@ SessionProfile g_comp;
 double         g_naked[];
 bool           g_history_built = false;
 
+int g_history_retries = 0;
+
 void BuildHistory()
 {
    datetime today = SessionStartFor(TimeCurrent());
    int want = MathMax(InpProfileDays, InpCompositeDays);
+   bool allow_m1 = (g_history_retries >= InpTickRetryLimit);
    ArrayResize(g_done, 0);
 
    for(int back = want; back >= 1; back--)
@@ -975,12 +987,22 @@ void BuildHistory()
       datetime from = today - (datetime)back * 86400;
       datetime to   = from + 86400;
       SessionProfile p;
-      BuildSession(p, from, to);
+      if(!BuildSession(p, from, to, allow_m1))
+      {
+         g_history_retries++;
+         ArrayResize(g_done, 0);
+         PrintFormat("%s tick history still syncing, deferring history build "
+                     "(retry %d/%d)", PFX, g_history_retries, InpTickRetryLimit);
+         return;                       // leaves g_history_built false -- retried next timer
+      }
       if(!p.valid) continue;
       int m = ArraySize(g_done);
       ArrayResize(g_done, m + 1);
       g_done[m] = p;
    }
+   if(allow_m1)
+      PrintFormat("%s tick history unavailable after %d retries -- completed "
+                  "sessions built from M1 (reduced fidelity)", PFX, g_history_retries);
 
    ArrayResize(g_naked, 0);
    for(int i = 0; i < ArraySize(g_done); i++)
