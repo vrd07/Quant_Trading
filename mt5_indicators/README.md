@@ -113,3 +113,73 @@ the parity check:
 ```bash
 python scripts/check_liquidity_parity.py --dir data/parity
 ```
+
+## GoldenChart_VolumeProfile
+
+Draws the session volume profile for XAUUSD — VPOC, VAH and VAL per session, a
+histogram for the most recent sessions, a multi-day composite, the initial
+balance, HVN/LVN nodes, naked POCs, and a panel carrying the Auction Market
+Theory read (P/b/D shape, open type, value migration, balance regime).
+
+**It is tick density, not traded volume.** Gold trades as a broker CFD: there
+are no trade prints, and MT5's `volume`/`volume_real` are zero or synthetic for
+XAUUSD. Every "volume" here counts quote updates. The panel says so, and no
+label anywhere may imply otherwise. This is also why there is deliberately **no
+delta, CVD or footprint** — a gold CFD cannot support one honestly, and a
+fabricated one would be worse than none.
+
+**Source field.** The panel shows `TICK`, `M1` or `PENDING`. `PENDING` means
+tick history is still synchronising; it is not the same as "no ticks", and the
+indicator will not silently drop to M1 fidelity because of a slow sync. It
+falls back to `M1` only after `InpTickRetryLimit` *consecutive* failures, and
+says so in the log when it does.
+
+**The skew threshold is calibrated, not chosen.** `InpSkewThreshold` decides
+where a profile stops being a D and becomes a P or a b. It ships at `0.0`,
+which is the UNCALIBRATED sentinel — the panel warns in red until you set it.
+The calibrated value comes from:
+
+```bash
+python scripts/calibrate_profile_shape.py
+```
+
+which writes `reports/volume_profile_shape_calibration.md`. That report is
+**generated — never hand-edit it**, and re-run the calibration if `InpRowSize`
+or the session definition changes, since both alter the histogram the threshold
+is computed from. Read the report's plateau width, not whether it hit its
+target. The panel always prints the skew value beside the shape letter, so a
+marginal session is visible as a number rather than hidden inside the label.
+
+**The node thresholds are NOT calibrated.** `InpHVNProminencePct`,
+`InpLVNRatio` and `InpNodeMinSepRows` are display heuristics — nothing was
+fitted to produce them. They are a reasonable default for reading a chart and
+nothing more. Do not build a trading rule on them without taking it through the
+full `backtest.md` gate.
+
+**IB is standard range-based Initial Balance**, the range of the first
+`InpIBMinutes` of the session. It is **not** Fabio Valentini's IVB, whose rule
+incorporates volume and is not recoverable from the course material. Do not
+relabel it as IVB.
+
+### Parity — non-optional
+
+The definition lives in two languages: `src/microstructure/volume_profile.py`
+and `src/microstructure/profile_context.py` are authoritative, and the `.mq5`
+is a port of them. They can drift silently. After **any** change to either
+side, set `InpExportCSV = true`, let the indicator write `vp_histogram.csv`,
+`vp_levels.csv` and `vp_nodes.csv` to the MT5 `Files` directory, copy all three
+into `data/parity/`, and run:
+
+```bash
+python scripts/check_volume_profile_parity.py --dir data/parity
+```
+
+Parity is taken at the **algorithm layer**: the indicator exports its own
+histogram, and Python re-derives POC, value area, skew, shape, regime, open
+type, value migration and the node sets from that exact histogram. Cross-vendor
+volume comparison is impossible — Dukascopy ticks are not the broker's ticks —
+so comparing raw row counts would be a fake test that passes or fails for
+reasons unrelated to correctness.
+
+**Do not relax `PRICE_TOL` or `SKEW_TOL` to make it pass.** A mismatch means
+the two implementations genuinely disagree; fix whichever one is wrong.

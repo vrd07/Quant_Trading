@@ -1120,7 +1120,109 @@ void OnTimer()
    DrawPanel(g_dev, prior, g_comp, elapsed);
 
    RearmLevels(g_dev, prior, g_naked);
+
+   if(InpExportCSV)
+   {
+      SessionProfile all[];
+      ArrayResize(all, n_done + 1);
+      for(int i = 0; i < n_done; i++) all[i] = g_done[i];
+      all[n_done] = g_dev;
+      ExportParityCSV(all, n_done + 1, elapsed);
+   }
+
    ChartRedraw(0);
+}
+
+//--- Parity export ---------------------------------------------------
+//    Export the indicator's OWN histogram plus every value it derived from
+//    it. Python then recomputes those values from this exact histogram and
+//    requires an exact match. That is what pins the algorithm layer; the raw
+//    tick feeds differ between broker and Dukascopy and can never be
+//    compared, so a cross-vendor test would pass or fail for reasons that
+//    have nothing to do with correctness.
+//
+//    Everything Task 10 ported must appear here. A classifier that crosses
+//    the language boundary untested is exactly the silent drift CLAUDE.md
+//    calls non-optional to guard against.
+void ExportParityCSV(const SessionProfile &profiles[], const int count,
+                     const double dev_elapsed)
+{
+   int fh = FileOpen("vp_histogram.csv", FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   if(fh == INVALID_HANDLE) { PrintFormat("%s export failed: %d", PFX, GetLastError()); return; }
+   FileWrite(fh, "session", "row", "volume");
+   for(int s = 0; s < count; s++)
+   {
+      if(!profiles[s].valid) continue;
+      string tag = TimeToString(profiles[s].start, TIME_DATE);
+      for(int i = 0; i < ArraySize(profiles[s].volumes); i++)
+         if(profiles[s].volumes[i] > 0.0)
+            FileWrite(fh, tag, profiles[s].min_row + i,
+                      DoubleToString(profiles[s].volumes[i], 8));
+   }
+   FileClose(fh);
+
+   fh = FileOpen("vp_levels.csv", FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   if(fh == INVALID_HANDLE) return;
+   FileWrite(fh, "session", "row_size", "value_area_pct", "va_algorithm",
+             "skew_threshold", "min_rows_for_shape", "regime_min_elapsed_pct",
+             "hvn_prominence_pct", "lvn_ratio", "node_min_sep_rows",
+             "vpoc", "vah", "val", "low", "high", "skew", "shape",
+             "open", "elapsed_pct", "is_developing",
+             "open_type", "value_migration", "regime");
+   int prev = -1;
+   for(int s = 0; s < count; s++)
+   {
+      if(!profiles[s].valid) continue;
+      bool developing = (s == count - 1);
+      double elapsed = developing ? dev_elapsed : 1.0;
+
+      // No prior session means open type and value migration are UNDEFINED,
+      // not neutral. Export them empty so the checker skips rather than
+      // compares against a default nobody computed.
+      string otype = "", mig = "";
+      if(prev >= 0)
+      {
+         otype = ClassifyOpenType(profiles[s].open_price, profiles[prev]);
+         mig   = ClassifyValueMigration(profiles[s], profiles[prev]);
+      }
+
+      FileWrite(fh, TimeToString(profiles[s].start, TIME_DATE),
+                DoubleToString(InpRowSize, 8), DoubleToString(InpValueAreaPct, 8),
+                IntegerToString(InpVAAlgorithm), DoubleToString(InpSkewThreshold, 8),
+                IntegerToString(InpMinRowsForShape),
+                DoubleToString(InpRegimeMinElapsed, 8),
+                DoubleToString(InpHVNProminencePct, 8), DoubleToString(InpLVNRatio, 8),
+                IntegerToString(InpNodeMinSepRows),
+                DoubleToString(profiles[s].vpoc, 8), DoubleToString(profiles[s].vah, 8),
+                DoubleToString(profiles[s].val, 8), DoubleToString(profiles[s].low, 8),
+                DoubleToString(profiles[s].high, 8),
+                profiles[s].has_skew ? DoubleToString(profiles[s].skew, 8) : "",
+                ShapeName(profiles[s].shape),
+                DoubleToString(profiles[s].open_price, 8),
+                DoubleToString(elapsed, 8),
+                developing ? "1" : "0",
+                otype, mig,
+                ClassifyRegime(profiles[s].shape, elapsed, developing));
+      prev = s;
+   }
+   FileClose(fh);
+
+   fh = FileOpen("vp_nodes.csv", FILE_WRITE | FILE_CSV | FILE_ANSI, ',');
+   if(fh == INVALID_HANDLE) return;
+   FileWrite(fh, "session", "kind", "price");
+   for(int s = 0; s < count; s++)
+   {
+      if(!profiles[s].valid) continue;
+      string tag = TimeToString(profiles[s].start, TIME_DATE);
+      double hvn[], lvn[];
+      FindNodes(profiles[s], hvn, lvn);
+      for(int i = 0; i < ArraySize(hvn); i++)
+         FileWrite(fh, tag, "HVN", DoubleToString(hvn[i], 8));
+      for(int i = 0; i < ArraySize(lvn); i++)
+         FileWrite(fh, tag, "LVN", DoubleToString(lvn[i], 8));
+   }
+   FileClose(fh);
+   PrintFormat("%s parity CSVs written to the Files directory (%d sessions)", PFX, count);
 }
 
 //--- Alerts run on the tick stream, not the timer: a level tagged and left
