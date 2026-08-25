@@ -10,10 +10,7 @@ environment: live
 
 account:
   initial_balance: 5000.0
-  currency: USD
-  leverage: 100  # Default (FX). Symbol-specific leverage handled below.
-
-symbols:
+  
   AUDJPY:
     enabled: true
     # wednesday_drift ONLY — the rest of the roster is gold/FX-validated; the
@@ -553,7 +550,7 @@ trading_hours:
 
   news_filter:
     enabled: true
-    csv_path: news/2026-08-20_news.csv
+    csv_path: news/2026-08-25_news.csv
     # USD covers XAU/BTC/ETH (USD-quoted), EUR covers EURUSD-specific events
     # like ECB rate decisions, German CPI, Eurozone PMI. The fetcher pulls
     # both currencies into the CSV; the loader filters to this list.
