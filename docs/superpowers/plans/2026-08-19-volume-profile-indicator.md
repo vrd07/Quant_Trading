@@ -63,6 +63,23 @@ class TestGrid:
         assert vp.row_index(4493.20, 0.10) == 44932
         assert vp.row_low(44932, 0.10) == pytest.approx(4493.20, abs=1e-9)
 
+    def test_boundary_prices_survive_floating_point(self):
+        """4493.20 / 0.10 == 44931.99999999999 in IEEE754.
+
+        A plain floor() puts these prices one row too low, and does so exactly
+        at the round numbers traders care about. Worse, it would drift silently
+        against the MQL5 port. The snap tolerance is what prevents both.
+        """
+        for price, expected in [(4493.20, 44932), (1234.60, 12346),
+                                (100.30, 1003), (2000.70, 20007),
+                                (4493.10, 44931), (4493.30, 44933)]:
+            assert vp.row_index(price, 0.10) == expected, price
+
+    def test_snap_tolerance_does_not_swallow_real_within_row_prices(self):
+        # 4493.19 is genuinely inside row 44931 and must stay there.
+        assert vp.row_index(4493.19, 0.10) == 44931
+        assert vp.row_index(4493.15, 0.10) == 44931
+
     def test_row_edges_and_mid(self):
         assert vp.row_low(44931, 0.10) == pytest.approx(4493.10, abs=1e-9)
         assert vp.row_mid(44931, 0.10) == pytest.approx(4493.15, abs=1e-9)
@@ -194,6 +211,25 @@ class Histogram:
         return self.min_row + self.volumes.size - 1
 
 
+# Rows are snapped to the integer when price/row_size lands within this many
+# rows of it. In price terms that is 1e-6 * row_size = 1e-7 USD at the default
+# -- orders of magnitude below any real gold quote granularity.
+_SNAP = 1e-6
+
+
+def _rows_from_quotients(q):
+    """Floor, but snap to the integer when we are within _SNAP of one.
+
+    Why this is not a plain floor: 4493.20 / 0.10 evaluates to
+    44931.99999999999 in IEEE754, so floor() drops the price a whole row --
+    and it does so precisely at the round numbers price gravitates to. The
+    MQL5 port must apply the identical rule or the two silently disagree at
+    exactly those prices.
+    """
+    r = np.round(q)
+    return np.where(np.abs(q - r) < _SNAP, r, np.floor(q)).astype(np.int64)
+
+
 def row_index(price: float, row_size: float) -> int:
     """Absolute grid: a price maps to the same row in every session, forever.
 
@@ -201,7 +237,7 @@ def row_index(price: float, row_size: float) -> int:
     grid by a random sub-cent offset each day, so the same price falls in a
     different row on different days and VPOCs stop being comparable.
     """
-    return int(np.floor(price / row_size))
+    return int(_rows_from_quotients(np.asarray(price, dtype=float)))
 
 
 def row_low(row: int, row_size: float) -> float:
@@ -251,7 +287,7 @@ def accumulate_ticks(bid: np.ndarray, ask: np.ndarray,
     accepted = int(valid.sum())
     rejected = int(bid.size - accepted)
     prices = _tick_prices(bid[valid], ask[valid], params.tick_price_mode)
-    rows = np.floor(prices / params.row_size).astype(np.int64)
+    rows = _rows_from_quotients(prices / params.row_size)
     return _histogram_from_rows(rows, np.ones(rows.size), params, accepted, rejected)
 
 
@@ -606,7 +642,7 @@ This is the live-correctness core. `CopyTicksRange` is inclusive on both bounds 
 - Modify: `tests/unit/test_volume_profile.py`
 
 **Interfaces:**
-- Consumes: `ProfileParams` from Task 1.
+- Consumes: nothing from earlier tasks — `TickCursor` is self-contained (the Task 1 accumulation functions are used only by this task's *test*, to compare incremental against one-shot).
 - Produces: `TickCursor` class with `__init__(self, start_msc: int)`, attribute `cursor_msc: int`, and method `split(self, time_msc: np.ndarray) -> int` returning the count of leading ticks in the batch that are safe to process.
 
 - [ ] **Step 1: Write the failing tests**
@@ -652,7 +688,6 @@ class TestTickCursor:
 
         cur = vp.TickCursor(start_msc=int(msc[0]))
         rows: list[np.ndarray] = []
-        start = 0
         for edge in np.array_split(np.arange(n), n_batches):
             if edge.size == 0:
                 continue
@@ -664,18 +699,62 @@ class TestTickCursor:
             take = cur.split(msc[sel])
             if take:
                 rows.append(sel[:take])
-            start = end
         # Flush: at the true end of the session there is no more data coming,
         # so the held-back tail is processed.
         sel = np.flatnonzero(msc >= cur.cursor_msc)
         if sel.size:
             rows.append(sel)
 
-        idx = np.unique(np.concatenate(rows)) if rows else np.array([], dtype=int)
-        incremental = vp.accumulate_ticks(bid[idx], ask[idx], params)
+        idx = np.concatenate(rows) if rows else np.array([], dtype=np.int64)
 
+        # DO NOT deduplicate `idx` before these assertions. A double-count is
+        # precisely a repeated index, so np.unique() here would delete the
+        # evidence of the only bug this test exists to catch and the test would
+        # pass against a broken cursor.
+        assert idx.size == np.unique(idx).size, "a tick was processed twice"
+        assert np.array_equal(np.sort(idx), np.arange(n)), "ticks lost or duplicated"
+
+        incremental = vp.accumulate_ticks(bid[idx], ask[idx], params)
         assert incremental.min_row == one_shot.min_row
         assert incremental.volumes == pytest.approx(one_shot.volumes, abs=0.0)
+
+    def test_the_batch_split_harness_can_actually_fail(self):
+        """Guard the guard.
+
+        A cursor that ignores the boundary millisecond double-counts. This
+        replays the same batching against such a cursor and requires the
+        exactly-once assertions to catch it. Without this, a harness bug that
+        silently passes everything would be indistinguishable from a correct
+        cursor.
+        """
+        class NaiveCursor:
+            """The obvious, wrong implementation: consume the whole batch."""
+            def __init__(self, start_msc):
+                self.cursor_msc = int(start_msc)
+
+            def split(self, time_msc):
+                self.cursor_msc = int(time_msc[-1])
+                return int(time_msc.size)
+
+        rng = np.random.default_rng(11)
+        n = 500
+        msc = np.sort(rng.integers(0, 40, n)).astype(np.int64)
+
+        cur = NaiveCursor(start_msc=int(msc[0]))
+        rows = []
+        for edge in np.array_split(np.arange(n), 7):
+            end = int(edge[-1]) + 1
+            sel = np.flatnonzero((msc >= cur.cursor_msc) & (np.arange(n) < end))
+            if sel.size == 0:
+                continue
+            take = cur.split(msc[sel])
+            if take:
+                rows.append(sel[:take])
+        idx = np.concatenate(rows)
+        assert idx.size > np.unique(idx).size, (
+            "the naive cursor must double-count; if it does not, this harness "
+            "cannot detect the bug it was written for"
+        )
 ```
 
 - [ ] **Step 2: Run tests to verify they fail**
@@ -884,7 +963,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from .volume_profile import Histogram, Profile, row_mid
+from .volume_profile import Histogram, Profile
 
 SHAPE_P = "P"
 SHAPE_B = "b"
@@ -977,7 +1056,7 @@ def classify_shape(prof: Profile, params: ContextParams = ContextParams()) -> Sh
                      lower_tail_frac=lower_tail_frac)
 ```
 
-Note the ordering of the `elif` chain: with `skew_threshold == 0.0` (the uncalibrated sentinel) a negative skew still resolves to `P` and a positive to `b`, and only an exactly-zero skew reaches `D`. That is deliberate — the sentinel must not silently classify everything as balanced.
+Note the ordering of the `elif` chain. With `skew_threshold == 0.0` (the uncalibrated sentinel) a negative skew resolves to `P` and a positive to `b`, and **`D` is unreachable entirely** — not merely rare. `-0.0 == 0.0` in IEEE-754, so `skew <= -threshold` is `skew <= 0.0`, which swallows the exact-zero case as well. That is the safe direction and is deliberate: the sentinel must never silently classify sessions as balanced, and it over-satisfies that requirement rather than under-satisfying it. `D` becomes reachable as soon as Task 8 writes a real threshold. Preserve the ordering.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1018,15 +1097,39 @@ geometry with the opposite meaning."
 Append to `tests/unit/test_profile_context.py`:
 
 ```python
+def make_profile(val, vah, low=None, high=None, row_size=0.10):
+    """Construct a Profile with EXACT levels, bypassing build_profile.
+
+    These tests exercise the classifiers, not the value-area search. Trying to
+    synthesise a histogram whose 70% value area lands on chosen rows does not
+    work -- expansion stops as soon as it clears the target, so a uniform block
+    yields a value area narrower than the block -- and it would silently be
+    re-testing value_area instead of the classifier under test.
+
+    Row indices are derived from the prices so the dataclass stays coherent:
+    val is a row's LOWER edge and vah is a row's UPPER edge (spec section 8.3).
+    """
+    low = val - 0.5 if low is None else low
+    high = vah + 0.5 if high is None else high
+    lo_row = vp.row_index(low, row_size)
+    hi_row = vp.row_index(high, row_size)
+    hist = vp.Histogram(lo_row, np.ones(hi_row - lo_row + 1), row_size,
+                        accepted=hi_row - lo_row + 1, rejected=0)
+    return vp.Profile(
+        hist=hist,
+        poc_row=vp.row_index((val + vah) / 2.0, row_size),
+        val_row=vp.row_index(val, row_size),
+        vah_row=vp.row_index(vah, row_size) - 1,
+        vpoc=(val + vah) / 2.0,
+        val=val, vah=vah, low=low, high=high,
+    )
+
+
 class TestOpenType:
     """Prior session: low 1000.0, VAL 1001.0, VAH 1003.0, high 1004.0."""
 
     def prior(self):
-        # rows 10000..10039 at row_size 0.10 -> 1000.00 .. 1004.00
-        v = np.ones(40)
-        v[10:30] = 50.0            # value area sits in the middle
-        return vp.build_profile(vp.Histogram(10000, v, 0.10, int(v.sum()), 0),
-                                vp.ProfileParams(row_size=0.10))
+        return make_profile(val=1001.0, vah=1003.0, low=1000.0, high=1004.0)
 
     def test_open_above_the_prior_range(self):
         p = self.prior()
@@ -1061,49 +1164,40 @@ class TestOpenType:
         assert pc.classify_open_type(p.high, p) == "OPEN_ABOVE_VA"
 
 
-def va_profile(val_row, vah_row):
-    """Build a profile whose value area spans exactly [val_row, vah_row]."""
-    lo, hi = val_row - 2, vah_row + 2
-    v = np.ones(hi - lo + 1)
-    v[(val_row - lo):(vah_row - lo + 1)] = 100.0
-    return vp.build_profile(vp.Histogram(lo, v, 0.10, int(v.sum()), 0),
-                            vp.ProfileParams(row_size=0.10))
-
-
 class TestValueMigration:
     def test_higher_when_there_is_no_overlap(self):
-        prior = va_profile(10000, 10010)
-        today = va_profile(10020, 10030)
+        prior = make_profile(val=1000.0, vah=1001.0)
+        today = make_profile(val=1002.0, vah=1003.0)
         assert pc.classify_value_migration(today, prior) == "HIGHER"
 
     def test_lower_when_there_is_no_overlap(self):
-        prior = va_profile(10020, 10030)
-        today = va_profile(10000, 10010)
+        prior = make_profile(val=1002.0, vah=1003.0)
+        today = make_profile(val=1000.0, vah=1001.0)
         assert pc.classify_value_migration(today, prior) == "LOWER"
 
     def test_overlapping_higher(self):
-        prior = va_profile(10000, 10010)
-        today = va_profile(10005, 10015)
+        prior = make_profile(val=1000.0, vah=1001.0)
+        today = make_profile(val=1000.5, vah=1001.5)
         assert pc.classify_value_migration(today, prior) == "OVERLAPPING_HIGHER"
 
     def test_overlapping_lower(self):
-        prior = va_profile(10005, 10015)
-        today = va_profile(10000, 10010)
+        prior = make_profile(val=1000.5, vah=1001.5)
+        today = make_profile(val=1000.0, vah=1001.0)
         assert pc.classify_value_migration(today, prior) == "OVERLAPPING_LOWER"
 
     def test_inside(self):
-        prior = va_profile(10000, 10020)
-        today = va_profile(10005, 10015)
+        prior = make_profile(val=1000.0, vah=1002.0)
+        today = make_profile(val=1000.5, vah=1001.5)
         assert pc.classify_value_migration(today, prior) == "INSIDE"
 
     def test_engulfing(self):
-        prior = va_profile(10005, 10015)
-        today = va_profile(10000, 10020)
+        prior = make_profile(val=1000.5, vah=1001.5)
+        today = make_profile(val=1000.0, vah=1002.0)
         assert pc.classify_value_migration(today, prior) == "ENGULFING"
 
     def test_identical_value_areas_are_inside(self):
-        prior = va_profile(10000, 10010)
-        today = va_profile(10000, 10010)
+        prior = make_profile(val=1000.0, vah=1001.0)
+        today = make_profile(val=1000.0, vah=1001.0)
         assert pc.classify_value_migration(today, prior) == "INSIDE"
 
 
@@ -1861,7 +1955,22 @@ Append to `mt5_indicators/GoldenChart_VolumeProfile.mq5`:
 ```cpp
 //--- Grid. Absolute, never session-anchored: a price maps to the same
 //    row in every session, so VPOCs stay comparable across days.
-int    RowIndex(const double price) { return (int)MathFloor(price / InpRowSize); }
+//
+//    NOT a plain floor. 4493.20 / 0.10 evaluates to 44931.99999999999 in
+//    IEEE754, so floor() drops the price a whole row -- precisely at the
+//    round numbers price gravitates to. This snap rule is byte-identical to
+//    _rows_from_quotients() in volume_profile.py; if you change one, change
+//    both or the parity harness will start failing at round prices.
+#define VP_SNAP 1e-6
+
+int RowIndex(const double price)
+{
+   double q = price / InpRowSize;
+   double r = MathRound(q);
+   if(MathAbs(q - r) < VP_SNAP) return (int)r;
+   return (int)MathFloor(q);
+}
+
 double RowLow (const int row)       { return row * InpRowSize; }
 double RowMid (const int row)       { return (row + 0.5) * InpRowSize; }
 double RowHigh(const int row)       { return (row + 1) * InpRowSize; }
@@ -2430,7 +2539,42 @@ Alerts fire on tick-level bid crossings with a re-arm band."
 
 **Interfaces:**
 - Consumes: everything above.
-- Produces: `data/parity/vp_histogram.csv` (columns `session,row,volume`), `data/parity/vp_levels.csv` (columns `session,vpoc,vah,val,low,high,skew,shape,open_type,value_migration,regime`), and a parity checker exiting non-zero on mismatch.
+- Produces: `data/parity/vp_histogram.csv` (columns `session,row,volume`), `data/parity/vp_levels.csv`, `data/parity/vp_nodes.csv` (columns `session,kind,price`), and a parity checker exiting non-zero on mismatch.
+
+> ⚠️ **REQUIREMENT — four spec-required comparisons are missing from the code
+> blocks below. Resolve before implementing; do not treat the blocks as complete.**
+>
+> Spec §19.1 requires Python to recompute "POC / VAH / VAL / shape / regime /
+> open type / value migration / HVN / LVN" from the exported histogram and assert
+> "exact equality on levels and classifications, **set equality on nodes**".
+> Step 1 and Step 2 as drafted cover only POC/VAH/VAL/low/high/skew/shape. The
+> Interfaces line above previously claimed `open_type,value_migration,regime`
+> columns that Step 1 never wrote and Step 2 never read — the prose promised
+> coverage the code did not deliver.
+>
+> All four missing outputs ARE ported to MQL5 by Task 10, so without this they
+> cross the language boundary untested. That is the exact silent-drift failure
+> `CLAUDE.md` calls non-optional to guard against.
+>
+> Add to `ExportParityCSV`, and to the checker:
+>
+> | Missing comparison | Extra field(s) the export must carry | Python call |
+> |---|---|---|
+> | `open_type` | session `open` price; prior session linkage | `pc.classify_open_type(open_price, prior)` |
+> | `value_migration` | prior session linkage only | `pc.classify_value_migration(today, prior)` |
+> | `regime` | `elapsed_pct`, `is_developing`, `regime_min_elapsed_pct` | `pc.classify_regime(shape, elapsed_pct, cparams, is_developing)` |
+> | HVN / LVN | new `vp_nodes.csv`: `session,kind,price` (kind ∈ `HVN`/`LVN`), plus the three `NodeParams` values | `vp.find_nodes(prof, vp.NodeParams(...))`, compared as a SET with `PRICE_TOL` |
+>
+> "Prior session linkage" is derivable inside the checker — sort sessions by tag
+> and pass session *n−1*'s rebuilt `Profile` as `prior`; the first session has no
+> prior and must be SKIPPED for `open_type`/`value_migration`, not defaulted.
+> Guard it: `classify_shape(None, ...)` raises `AttributeError` (Task 4 deferred
+> minor), and `build_profile` returns `None` on an empty histogram.
+>
+> Extend Step 4 ("verify the harness can actually fail") to cover the new
+> comparisons too — flip one node threshold in MQL5 and require `PARITY FAILED`
+> on `vp_nodes.csv`. A comparison that has never been observed to fail is not
+> known to work.
 
 - [ ] **Step 1: Add CSV export to the indicator**
 
