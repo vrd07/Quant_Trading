@@ -119,7 +119,8 @@ class LocalTrendKalman:
         self.measurement_scale = float(measurement_scale)
 
     def filter(self, prices: Union[pd.Series, np.ndarray],
-               atr: Union[pd.Series, np.ndarray]) -> dict:
+               atr: Union[pd.Series, np.ndarray],
+               dt: Union[pd.Series, np.ndarray, None] = None) -> dict:
         """
         Run the two-state filter.
 
@@ -128,6 +129,42 @@ class LocalTrendKalman:
             atr:    per-bar ATR (same length) used to scale Q and R. Non-positive
                     or NaN ATR falls back to a tiny floor so the filter never divides
                     by zero on warm-up bars.
+            dt:     elapsed time before each bar, IN BAR WIDTHS (same length;
+                    dt[0] unused). ``None`` means 1.0 everywhere, which is the
+                    original behaviour and is bit-identical to it.
+
+                    WHY THIS EXISTS. A bar index is not a clock. XAUUSD stops
+                    quoting from Friday 21:00 UTC to Sunday 22:00 UTC — on 15m
+                    bars that is ~193 bars of absent time between two adjacent
+                    rows. With dt fixed at 1 the filter carries Friday's velocity
+                    into Monday at Friday's confidence, which is a claim about a
+                    market that was shut.
+
+                    ⚠️ AND THE OBVIOUS FIX IS WRONG, WHICH IS WHY THIS IS SPELT
+                    OUT. Putting the elapsed gap into F as well as Q makes the
+                    filter predict 193 bars of ACCUMULATED DRIFT across the
+                    weekend. That move does not happen — nothing traded — so the
+                    innovation is enormous and, with P inflated to match, the
+                    filter charges it to velocity. Measured on an unbroken
+                    ramp, the trend estimate flips sign across the gap:
+                    +0.572 -> -0.566. It would invert the trend gate every
+                    Monday.
+
+                    So time enters in TWO different roles and only one of them
+                    is calendar time:
+
+                      F  advances the level by ONE BAR of velocity. Trading
+                         time. No drift accrues while the market is shut, and
+                         Monday's first bar is one trading bar after Friday's
+                         last one.
+                      Q  grows with the CALENDAR gap. Uncertainty does accrue
+                         while the market is shut — the world moved even though
+                         the tape did not.
+
+                    The effect is that the velocity posterior widens across the
+                    break, the gain re-opens, and Monday's bars re-establish the
+                    trend instead of inheriting it — with no reset rule, no
+                    session table and no threshold.
 
         Returns:
             dict with numpy arrays: ``level``, ``velocity``, ``innov_z``.
@@ -135,6 +172,12 @@ class LocalTrendKalman:
         y = (prices.values if isinstance(prices, pd.Series) else np.asarray(prices)).astype(float)
         a = (atr.values if isinstance(atr, pd.Series) else np.asarray(atr)).astype(float)
         n = len(y)
+        if dt is None:
+            d_arr = np.ones(n)
+        else:
+            d_arr = (dt.values if isinstance(dt, pd.Series) else np.asarray(dt)).astype(float)
+            # A non-positive or NaN gap is a broken index, not a market event.
+            d_arr = np.where(np.isfinite(d_arr) & (d_arr > 0), d_arr, 1.0)
         level = np.full(n, np.nan)
         velocity = np.full(n, np.nan)
         innov_z = np.zeros(n)
@@ -145,7 +188,11 @@ class LocalTrendKalman:
         # The 2-state local-linear-trend filter is unrolled into plain scalars so
         # the hot loop has ZERO per-step numpy allocation — this matters because
         # the backtest re-runs the whole filter on a rolling window every bar.
-        # Model:  F=[[1,1],[0,1]]  H=[1,0]  Q=σ²·[[.25,.5],[.5,1]]  R=σ²·meas
+        # Model:  F=[[1,1],[0,1]]  H=[1,0]  R=σ²·meas
+        # Q is the discrete white-noise-acceleration covariance over the CALENDAR
+        # gap d:  Q = σ²·[[d⁴/4, d³/2], [d³/2, d²]], which at d=1 is the original
+        # [[.25,.5],[.5,1]]. F stays at one bar — see `filter`'s docstring for
+        # why the gap belongs in Q and not in F.
         x0, x1 = y[0], 0.0
         p00, p01, p11 = 1.0, 0.0, 1.0
         qs = self.process_scale
@@ -155,13 +202,16 @@ class LocalTrendKalman:
         for k in range(1, n):
             ak = a[k]
             var = ak * ak if (ak > 0 and ak == ak) else 1e-12  # ak==ak filters NaN
-            q00 = qs * var * 0.25
-            q01 = qs * var * 0.5
-            q11 = qs * var
+            d = d_arr[k]
+            d2 = d * d
+            qv = qs * var
+            q00 = qv * d2 * d2 * 0.25
+            q01 = qv * d2 * d * 0.5
+            q11 = qv * d2
             r = ms * var
 
-            # Predict:  x = F x ;  P = F P Fᵀ + Q
-            x0 = x0 + x1                      # level += velocity
+            # Predict:  x = F x ;  P = F P Fᵀ + Q(d)
+            x0 = x0 + x1                      # level += ONE bar of velocity
             # F P Fᵀ for F=[[1,1],[0,1]]:
             #   p00' = p00 + 2 p01 + p11 ; p01' = p01 + p11 ; p11' = p11
             p00 = p00 + 2.0 * p01 + p11 + q00
@@ -186,7 +236,21 @@ class LocalTrendKalman:
 
         return {"level": level, "velocity": velocity, "innov_z": innov_z}
 
-    def filter_frame(self, prices: pd.Series, atr: pd.Series) -> pd.DataFrame:
+    def filter_frame(self, prices: pd.Series, atr: pd.Series,
+                     dt: Union[pd.Series, np.ndarray, None] = None) -> pd.DataFrame:
         """Convenience wrapper returning a DataFrame aligned to ``prices.index``."""
-        out = self.filter(prices, atr)
+        out = self.filter(prices, atr, dt)
         return pd.DataFrame(out, index=prices.index)
+
+    @staticmethod
+    def bar_widths(index: pd.DatetimeIndex, bar: pd.Timedelta) -> np.ndarray:
+        """Elapsed bars before each row, from the index. ``dt`` for ``filter``.
+
+        The first element is 1.0 (nothing precedes it). A row that is exactly one
+        bar after its predecessor gives 1.0, so a gapless frame reproduces the
+        dt=None path exactly.
+        """
+        d = np.ones(len(index))
+        if len(index) > 1:
+            d[1:] = np.diff(index.to_numpy()) / bar
+        return d

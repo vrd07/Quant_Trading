@@ -684,6 +684,7 @@ class Indicators:
         atr: pd.Series,
         process_scale: float = 1e-3,
         measurement_scale: float = 1.0,
+        bar: Optional[pd.Timedelta] = None,
     ) -> pd.DataFrame:
         """
         Two-state (level + velocity) local-linear-trend Kalman filter.
@@ -692,10 +693,16 @@ class Indicators:
         aligned to ``close.index``. ATR scales the process/measurement noise so
         the filter is scale-invariant across gold's price range. See
         ``src.indicators.kalman.LocalTrendKalman`` for the full model.
+
+        ``bar`` is the frame's bar width. Given one, the elapsed time before each
+        row is read off the index and the weekend stops being invisible to the
+        filter; omitted, every step is one bar and the result is bit-identical to
+        the original behaviour.
         """
         from src.indicators.kalman import LocalTrendKalman
         kf = LocalTrendKalman(process_scale=process_scale, measurement_scale=measurement_scale)
-        return kf.filter_frame(close, atr)
+        dt = None if bar is None else kf.bar_widths(close.index, bar)
+        return kf.filter_frame(close, atr, dt)
 
     @staticmethod
     def realized_vol(close: pd.Series, window: int = 20) -> pd.Series:
