@@ -54,6 +54,33 @@ class KalmanRegimeStrategy(BaseStrategy):
         self.kalman_q = config.get('kalman_q', 1e-5)
         self.kalman_r = config.get('kalman_r', 0.01)
 
+        # ── Two-state local-linear-trend Kalman (2026-09-22) ───────────────
+        # DEFAULT OFF, same convention as htf_buy_filter_enabled: shipped so it
+        # can be A/B'd from config without a code change, not enabled until a
+        # walk-forward says so.
+        #
+        # WHAT IT REPLACES AND WHY. `kalman_q`/`kalman_r` above drive the SCALAR
+        # random-walk filter, whose gain converges to a constant: for q=1e-5,
+        # r=0.01 the steady-state K is 0.031127, so from bar ~85 onward that
+        # filter is EXACTLY an EMA with alpha 0.031127 (span 63 bars) -- measured
+        # agreement to 4.5e-12 against ewm(alpha=K, adjust=False). min_bars is
+        # 130, so it is always past that point here. It therefore has no adaptive
+        # gain, no uncertainty, and NO NOTION OF DIRECTION: the slope the trend
+        # gate reads is a 2-bar difference of a fixed-span EMA.
+        #
+        # LocalTrendKalman estimates the slope as a STATE, with ATR-scaled
+        # process/measurement noise, and now with the elapsed time between bars
+        # read off the index -- so the weekend no longer arrives as one ordinary
+        # 15-minute step.
+        self.ltk_enabled = config.get('local_trend_kalman_enabled', False)
+        self.ltk_process_scale = float(config.get('ltk_process_scale', 1e-3))
+        self.ltk_measurement_scale = float(config.get('ltk_measurement_scale', 1.0))
+        self.ltk_use_index_dt = config.get('ltk_use_index_dt', True)
+        # Attribution switch: off = keep the old 2-bar finite-difference slope
+        # while still using the two-state level, so an A/B can say WHICH half
+        # of the swap moved the number.
+        self.ltk_use_velocity = config.get('ltk_use_velocity', True)
+
         # Realized volatility regime
         self.rv_window = config.get('rv_window', 20)
         self.rv_ma_window = config.get('rv_ma_window', 100)
@@ -202,6 +229,17 @@ class KalmanRegimeStrategy(BaseStrategy):
             self.min_bars = max(self.min_bars, self.range_poc_bars + 5)
         if self.range_divergence_enabled:
             self.min_bars = max(self.min_bars, self.range_divergence_lookback + 5)
+
+    @staticmethod
+    def _bar_width(bars: pd.DataFrame) -> pd.Timedelta:
+        """The frame's bar width, taken from the frame rather than from config.
+
+        The MEDIAN index difference, not the first one: a 1000-bar 15-minute
+        window holds two or three weekends, and the first gap could be one of
+        them. The median is the bar width for any frame where the sessions
+        outnumber the breaks, which is every frame this strategy sees.
+        """
+        return pd.Timedelta(pd.Series(bars.index).diff().median())
 
     def get_name(self) -> str:
         return "kalman_regime"
@@ -374,8 +412,29 @@ class KalmanRegimeStrategy(BaseStrategy):
             self._log_no_signal("Outside allowed session hours")
             return None
 
+        # ── 0c. ATR for stop/take-profit ───────────────────────────────────
+        # Hoisted above the filter: LocalTrendKalman scales its noise by ATR, so
+        # ATR has to exist before it runs. Nothing between here and its old home
+        # at step 5 depended on ordering.
+        atr = Indicators.atr(bars, period=self.atr_period)
+        current_atr = float(atr.iloc[-1])
+        if current_atr <= 0 or pd.isna(current_atr):
+            self._log_no_signal("ATR unavailable")
+            return None
+
         # ── 1. Kalman filter trend ──────────────────────────────────────────
-        kalman = Indicators.kalman_filter(close, q=self.kalman_q, r=self.kalman_r)
+        ltk_velocity = None
+        if self.ltk_enabled:
+            ltk = Indicators.local_trend_kalman(
+                close, atr,
+                process_scale=self.ltk_process_scale,
+                measurement_scale=self.ltk_measurement_scale,
+                bar=self._bar_width(bars) if self.ltk_use_index_dt else None)
+            kalman = ltk['level']
+            ltk_velocity = (float(ltk['velocity'].iloc[-1])
+                            if self.ltk_use_velocity else None)
+        else:
+            kalman = Indicators.kalman_filter(close, q=self.kalman_q, r=self.kalman_r)
         current_kalman = float(kalman.iloc[-1])
 
         # ── 2. Realized volatility regime ──────────────────────────────────
@@ -401,12 +460,7 @@ class KalmanRegimeStrategy(BaseStrategy):
         current_rsi = float(rsi.iloc[-1]) if not pd.isna(rsi.iloc[-1]) else 50.0
         current_adx = float(adx.iloc[-1]) if not pd.isna(adx.iloc[-1]) else 0.0
 
-        # ── 5. ATR for stop/take-profit ─────────────────────────────────────
-        atr = Indicators.atr(bars, period=self.atr_period)
-        current_atr = float(atr.iloc[-1])
-        if current_atr <= 0 or pd.isna(current_atr):
-            self._log_no_signal("ATR unavailable")
-            return None
+        # ── 5. ATR — computed at step 0c, above (LocalTrendKalman needs it) ──
 
         # ── 5b. EMA trend confirmation ──────────────────────────────────────
         ema_fast_val = None
@@ -461,8 +515,13 @@ class KalmanRegimeStrategy(BaseStrategy):
             price_above_kalman = current_close > current_kalman
             price_below_kalman = current_close < current_kalman
 
-            # Kalman slope (1st derivative)
-            kalman_slope = float(kalman.iloc[-1] - kalman.iloc[-3])
+            # Kalman slope (1st derivative).
+            # With the two-state filter the slope is a STATE the filter already
+            # estimates, not a finite difference of a smoothed level -- that is
+            # the entire point of the second state, so read it rather than
+            # re-derive it two bars late.
+            kalman_slope = (ltk_velocity if ltk_velocity is not None
+                            else float(kalman.iloc[-1] - kalman.iloc[-3]))
 
             # Kalman acceleration (2nd derivative) — trend strengthening
             kalman_accel_ok = True
