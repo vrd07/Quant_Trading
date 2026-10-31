@@ -8,24 +8,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      name: Checkout Code
-      uses: actions/checkout@v4
+      - name: Checkout Code
+        uses: actions/checkout@v4
 
-      name: Set Python
-      uses: actions/checkout@v5
-      with:
-        python-version: 3.12
-        cache: "pip"
+      - name: Set Python
+        uses: actions/checkout@v5
+        with:
+          python-version: 3.12
+          cache: "pip"
 
-      name: Run PyTest
-      uses: pytest tests/unit  -v
+      - name: Run PyTest
+        run: pytest tests/unit -v
 
-      name: Build Docker Image And Initiate Container
-      uses: docker compose up -d
+      - name: Install dependencies
+        run: pip install -r requirements.txt -r requirements-tests.txt
+          
+      - name: Build Docker Image And Initiate Container
+        run: docker compose up -d
 
-      name: Stop Compose Service
-      if: always()
-      uses: docker compose down -v 
+      - name: Stop Compose Service
+        if: always()
+        run: docker compose down -v 
  
 
       
